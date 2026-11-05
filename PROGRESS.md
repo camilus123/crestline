@@ -1,36 +1,36 @@
 # CRESTLINE: Maximum Drive — progress log
 
-Single-file browser racer in the style of a 1992 16-bit classic. Build: `npm install` once, then `npm run build` → `dist/crestline.html`.
+Playable file: `dist/crestline.html` (double-click; works from `file://`, no server, no network).
+Rebuild: `npm install` once, then `npm run build`.
 
 ## Decisions (approved defaults)
 - Title **CRESTLINE: Maximum Drive**; cars **Vantor Stiletto GT** (wedge supercar), **Kestrel Sprite R** (roadster), **Axiom Halo X** (concept).
-- Custom WebGL2 renderer (no three.js), TypeScript, esbuild-wasm, single inlined HTML.
-- Two-player: top/bottom split, full width, horizontal FOV capped at ~112°.
-- Music: four live Web Audio sequencer tracks (Euro-house, synth-rock, breakbeat, synthwave) + FX only.
-- Arcade has all 19 rivals on track; only the clock decides. Points 25-18-15-12-10-8-6-4-2-1. A full tank ≈ 15 km.
+- Custom WebGL2 renderer (no three.js), TypeScript, esbuild-wasm, single inlined HTML (fonts decoded from inlined data, no requests).
+- Two players: top/bottom split, full width, horizontal FOV capped at ~112°; one pad + 2 players → pad goes to player 2.
+- Music: four live Web Audio sequencer tracks + effects-only. Points 25-18-15-12-10-8-6-4-2-1. A full tank ≈ 15 km.
 
 ## Architecture
 - `src/core` deterministic maths (`dmath.ts`: sin/cos from + − × ÷ only) and seeded sfc32 RNG.
-- `src/track` codes (9 letters + 2 digits), generator (curvature/grade/width/flags/hazards/objects/map), runtime sampling.
+- `src/track` codes (9 letters + 2 digits), generator, runtime sampling, 64 course codes, `hashcheck.ts`.
 - `src/sim` 120 Hz car physics in road coordinates, AI (shared with the test bot), race manager, roster.
-- `src/render` bent-path renderer: each frame the road ahead is integrated into camera-relative "bent space"
-  (relative heading soft-clamped so bends sweep sideways and never fold back); road, terrain, scenery, hazards
-  and particles are placed from that path texture in vertex shaders. HDR + MSAA + bloom + radial speed blur + ACES.
-- `tests/` Node bot races (`npm run test:sim`), generator smoke test, headless screenshot harness (`tests/shot.mjs`).
+- `src/render` bent-path renderer (road ahead integrated each frame into camera-relative space, relative heading
+  soft-clamped so bends sweep sideways and never fold back); HDR + MSAA + bloom + radial speed blur + ACES.
+- `src/audio` synthesized engines/SFX and a small tracker with four songs.
+- `src/ui` DOM menus with keyboard/gamepad/mouse focus navigation, HUD, track constructor.
+- `tests/` bot races, 64-course runner, keyboard-driver test, gearbox test, fuel test, determinism hash,
+  headless screenshot / flow / frame-sequence harnesses, review-pass runner.
 
-## Milestones
-- [x] M1 Greybox: road, terrain, sky, car models, physics, chase camera, rivals on grid. Bot finishes races in all 13 scenarios.
-- [x] M2a Track generator + codes (deterministic, any text → valid code).
-- [ ] M2b Track constructor UI (sliders, map, elevation profile, copy code).
-- [~] M3 Rivals/AI done (lane scoring, yielding, blocking, laser timing). Modes/pit logic in sim. UI flow pending.
-- [~] M4 Scenarios: all 13 have looks, objects, hazards; visual polish pending.
-- [ ] M5 Audio (engine, sfx, music), menus, title/attract, HUD.
-- [ ] M6 Two-player, rebinding, quality presets/dynamic res, F3 overlay, benchmark.
-- [ ] M7 Review loop (screenshots ×2 passes), full tests, final build.
+## Milestones — all done
+- [x] M1 Greybox · [x] M2 Generator, codes, constructor · [x] M3 Rivals, modes, pits, seasons
+- [x] M4 13 scenarios + hazards · [x] M5 Audio, menus, title/attract, HUD · [x] M6 Two-player, rebinding, presets, F3, benchmark
+- [x] M7 Review loop: 3 passes × 13 scenarios × (1920x1080 + 3440x1440) in `review/pass1..3`, notes in `review/NOTES.md`
 
-## Test status
-- `npm run test:sim`: 39 bot races (13 scenarios × 3 difficulties × arcade+championship) — all pass after tuning
-  (Roadworks hard rivals slowed 4.5%, first-segment traffic allowance on narrow roads).
+## Test status (final)
+- Determinism: 100 tracks hash identically (combined `4dd29e0e`) in Node/V8, headless Chromium 153 and SpiderMonkey 115 (gjs). Open `crestline.html?hashcheck` in any browser to compare.
+- All 64 course tracks: bot beats every arcade limit (margin 4.8–25.5 %) and finishes top ten in every championship race.
+- Keyboard-tapping driver (8 Hz, 150 ms reaction) laps within 2–5 % of the analogue bot with no crashes (Mountains excepted).
+- `file://` with all network blocked: menus from title to race, zero console errors, zero network requests.
 
-## Resume notes
-- Development happens in the cloud workspace copy; the folder on Marko's PC is synced at milestones.
+## Known issues / not verified
+- Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
+- Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.

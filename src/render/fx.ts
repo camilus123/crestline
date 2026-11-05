@@ -48,9 +48,10 @@ void main(){
   float a;
   if (k == 6 || k == 8 || k == 9) a = step(r, 0.7); // solid bits
   else a = (1.0 - r * r) * (0.75 + 0.25 * vnoise(vQ * 3.0 + vW.xz));
+  float dist = length(vW - uCamPos);
+  a *= smoothstep(1.2, 5.0, dist); // particles brushing the lens fade instead of filling the view
   vec3 lit = vC.rgb * (uAmb * 1.2 + uSunC * 0.35);
   if (k == 7) { o = vec4(vC.rgb * 6.0 * a, 0.0); return; }
-  float dist = length(vW - uCamPos);
   float f = 1.0 - exp(-dist * uFog.x);
   lit = mix(lit, uFogC, min(f, uFog.w));
   o = vec4(lit * a * vC.a, a * vC.a);
@@ -75,7 +76,7 @@ void main(){ float r = length(vQ); float a = exp(-r * r * 5.0) + exp(-r * 18.0) 
 const W_VS = PRELUDE + NOISE + `
 layout(location=0) in vec3 aSeed; // random 0..1 x3
 layout(location=1) in float aEnd; // 0 tail, 1 head
-uniform mat4 uViewProj; uniform vec3 uCamPos; uniform float uTime; uniform vec3 uVel; uniform int uKind; uniform float uBox; uniform vec3 uWindV;
+uniform mat4 uViewProj; uniform vec3 uCamPos; uniform float uTime; uniform vec3 uVel; uniform int uKind; uniform float uBox; uniform vec3 uWindV; uniform float uPtScale;
 out float vA; out float vEnd;
 void main(){
   vec3 box = vec3(uBox, uBox * 0.6, uBox);
@@ -94,12 +95,15 @@ void main(){
   vA = smoothstep(uBox, uBox * 0.3, dist) * smoothstep(0.5, 2.0, dist);
   vEnd = aEnd;
   gl_Position = uViewProj * vec4(p, 1.0);
-  gl_PointSize = 1.0;
+  gl_PointSize = clamp(uPtScale / max(dist, 0.5), 1.0, 14.0);
 }`;
 const W_FS = PRELUDE + `
 in float vA; in float vEnd; out vec4 o;
-uniform vec4 uCol;
-void main(){ o = vec4(uCol.rgb * vA * uCol.a * (0.15 + 0.35 * vEnd), 0.0); }`;
+uniform vec4 uCol; uniform int uPts;
+void main(){
+  if (uPts == 1) { vec2 q = gl_PointCoord * 2.0 - 1.0; float r = dot(q, q); if (r > 1.0) discard; o = vec4(uCol.rgb * vA * uCol.a * (1.0 - r) * 0.55, 0.0); return; }
+  o = vec4(uCol.rgb * vA * uCol.a * (0.15 + 0.35 * vEnd), 0.0);
+}`;
 
 export interface Particle {
   d: number; // track s (absolute)
@@ -295,7 +299,9 @@ export class FX {
     gl.blendFunc(gl.ONE, gl.ONE);
     gl.depthMask(false);
     const n = Math.floor(this.wCount * Math.min(1, amount) / 2) * 2;
-    gl.drawArrays(gl.LINES, 0, n);
+    const pts = kind === 1;
+    p.i('uPts', pts ? 1 : 0).f('uPtScale', (gl.drawingBufferHeight / 1080) * 9);
+    gl.drawArrays(pts ? gl.POINTS : gl.LINES, 0, n);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
   }

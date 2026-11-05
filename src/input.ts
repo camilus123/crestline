@@ -86,10 +86,13 @@ export class Input {
       this.onFirstInput?.();
     }
   }
+  players = 1;
   assignPads(): void {
     const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
     const conn = pads.filter((p) => p && p.connected).map((p) => p!.index);
-    this.padOf = [conn[0] ?? -1, conn[1] ?? -1];
+    // two players and a single pad: player 1 keeps the keyboard, the pad goes to player 2
+    if (this.players > 1 && conn.length === 1) this.padOf = [-1, conn[0]];
+    else this.padOf = [conn[0] ?? -1, conn[1] ?? -1];
   }
 
   /** poll gamepads once per frame; generates menu events from pads */

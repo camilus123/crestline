@@ -81,7 +81,7 @@ void main(){
     vec3 acc = col; float wsum = 1.0;
     for (int i = 1; i < 9; i++) {
       float t = float(i) / 8.0;
-      vec2 su = clamp(uv - dir * t * m * 0.12, vp.xy + uTexel, vp.xy + vp.zw - uTexel);
+      vec2 su = clamp(uv - dir * t * m * 0.095, vp.xy + uTexel, vp.xy + vp.zw - uTexel);
       acc += texture(uScene, su * uScale).rgb * (1.0 - t * 0.5);
       wsum += 1.0 - t * 0.5;
     }

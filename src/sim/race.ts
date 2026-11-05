@@ -89,6 +89,8 @@ export class Race {
   private rnd: () => number;
 
   constructor(cfg: RaceCfg) {
+    // always 20 cars: rivals fill the places the players do not take
+    if (cfg.players.length + cfg.rivals.length > 20 && cfg.players.length) cfg = { ...cfg, rivals: cfg.rivals.slice(0, 20 - cfg.players.length) };
     this.cfg = cfg;
     this.track = new Track(cfg.track);
     this.rng = new Rng(cfg.seed);
@@ -137,7 +139,8 @@ export class Race {
         this.drivers.push(null);
       } else {
         const prof = {
-          skill: rc!.skill * scenarioRivalPace(cfg.track.params.scenario),
+          // in arcade the clock is the opponent: rivals are traffic to pass, a touch slower
+          skill: rc!.skill * scenarioRivalPace(cfg.track.params.scenario) * (cfg.mode === 'arcade' ? 0.95 : 1),
           aggression: rc!.aggression,
           laneBias: (this.rnd() - 0.5) * 2.2,
           consistency: 0.55 + 0.45 * rc!.skill,
@@ -162,8 +165,8 @@ export class Race {
     }
     // rivals pace: long races with fuel stops – rivals never pit, so slow them by the pit loss
     if (cfg.fuel) {
-      const loss = 14; // seconds a good stop costs
-      const f = Math.max(0.94, 1 - loss / Math.max(60, this.refTime));
+      const loss = 26; // seconds a stop really costs (braking, filling, accelerating)
+      const f = Math.max(0.92, 1 - loss / Math.max(60, this.refTime));
       for (const d of this.drivers) if (d) d.prof.skill *= f;
     }
     this.pitNeed = cfg.fuel ? 1 : 0;
@@ -205,7 +208,9 @@ export class Race {
         if (!inSeg) continue;
         const k = h.kind;
         const per = 1; // circuits: every lap meets every hazard
-        if (k === 11) t += 0.7 * per; // laser
+        if (k === 11) t += 1.1 * per; // laser
+        else if (k === 12) t += 0.35 * per; // magnet
+        else if (k === 13) t += 0.4 * per; // gust
         else if (k === 6) t += 0.5 * per; // cone closure
         else if (k === 9 || k === 7 || k === 8) t += 0.35 * per;
       }
@@ -235,6 +240,7 @@ export class Race {
         this.started = true;
         this.events.push({ t: 'go', car: -1 });
       }
+      for (const e of this.events) this.eventLog.push(e);
       // revving on the grid
       for (let i = 0; i < this.players.length; i++) {
         const c = this.players[i];
@@ -277,12 +283,26 @@ export class Race {
     this.collide();
     this.trafficCollide();
     this.bookkeeping();
+    for (const c of this.cars) {
+      (c as any).fxEv = ((c as any).fxEv | 0) | c.events;
+      (c as any).sndEv = ((c as any).sndEv | 0) | c.events;
+    }
+    for (const e of this.events) this.eventLog.push(e);
   }
+  /** events since the last call (for HUD and audio) */
+  takeEvents(): RaceEvent[] {
+    const e = this.eventLog;
+    this.eventLog = [];
+    return e;
+  }
+  eventLog: RaceEvent[] = [];
 
   fuelNeeded(car: Car): number {
     // fuel fraction needed to reach the finish, plus margin
     const remain = this.cfg.track.raceLen - car.dist;
-    return Math.min(1, (remain / 15000) * 1.08 + 0.03);
+    // use the consumption actually observed so far (falls back to full-throttle burn early on)
+    const rate = car.dist > 2000 ? car.fuelUsed / car.dist : 1 / 15000;
+    return Math.min(1, remain * rate * 1.06 + 0.04);
   }
 
   leadPlayer(): Car | null {
@@ -379,10 +399,12 @@ export class Race {
         c.v = 0;
         c.stun = 1.1;
         c.events |= EV_CRASH;
-        t.v *= 0.3;
-        this.events.push({ t: 'headon', car: c.index });
+        (t as any).dead = true;
+        if (c.isPlayer) this.events.push({ t: 'headon', car: c.index });
+        break;
       }
     }
+    if (this.traffic.some((t) => (t as any).dead)) this.traffic = this.traffic.filter((t) => !(t as any).dead);
   }
 
   private bookkeeping(): void {
@@ -421,7 +443,7 @@ export class Race {
       // refuelling: stopped on the pit strip
       c.pitting = false;
       if (this.cfg.fuel && c.isPlayer && tr.isPit(c.s) && c.x > tr.hwL(c.s) + 0.6 && c.v < 0.7 && c.fuel < 1) {
-        c.fuel = Math.min(1, c.fuel + DT * 0.11);
+        c.fuel = Math.min(1, c.fuel + DT * 0.14);
         c.pitting = true;
       }
     }
@@ -449,7 +471,7 @@ export class Race {
           this.events.push({ t: 'timeout', car: p.index });
         }
       }
-      const allOut = this.players.every((p, i) => p.finished || this.timeLeft[i] <= 0);
+      const allOut = this.players.length > 0 && this.players.every((p, i) => p.finished || this.timeLeft[i] <= 0);
       if (allOut) {
         this.over = true;
         this.overReason = this.players.some((p) => p.finished) ? 'finished' : 'timeout';
@@ -459,7 +481,7 @@ export class Race {
         }
       }
     } else if (!this.over) {
-      if (this.players.every((p) => p.finished)) {
+      if (this.players.length && this.players.every((p) => p.finished)) {
         this.over = true;
         this.overReason = 'finished';
       }

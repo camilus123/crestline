@@ -125,7 +125,7 @@ class CarMB {
         if (dot(n, out) < 0) n = [-n[0], -n[1], -n[2]];
         // end caps bias
         const mat = matFn(k, p[2], p[0], p[1]);
-        row.push(this.vert(p, n, mat));
+        row.push(this.vert(p, n, mat, 0, matColor(mat)));
       }
       grid.push(row);
     }
@@ -140,9 +140,10 @@ class CarMB {
         const s = secs[i];
         const ctr: P3 = [0, (s.y0 + s.y1) / 2, s.z];
         const nrm: P3 = [0, 0, i === 0 ? -1 : 1];
-        const c = this.vert(ctr, nrm, matFn(-1, s.z, 0, ctr[1]));
+        const cm = matFn(-1, s.z, 0, ctr[1]);
+        const c = this.vert(ctr, nrm, cm, 0, matColor(cm));
         const ring: number[] = [];
-        for (let k = 0; k < ringN; k++) ring.push(this.vert(pts[i][k], nrm, matFn(-1, s.z, pts[i][k][0], pts[i][k][1])));
+        for (let k = 0; k < ringN; k++) { const m = matFn(-1, s.z, pts[i][k][0], pts[i][k][1]); ring.push(this.vert(pts[i][k], nrm, m, 0, matColor(m))); }
         const inner: P3 = [0, ctr[1], s.z - nrm[2]];
         for (let k = 0; k < ringN; k++) this.orientTri(c, ring[k], ring[(k + 1) % ringN], inner);
       }
@@ -164,7 +165,7 @@ class CarMB {
     const xf = cx + (sx * w) / 2 + sx * 0.005;
     const rr = r * 0.66;
     const spokes = style === 1 ? 6 : style === 2 ? 0 : 5;
-    const rimC: P3 = style === 2 ? [0.12, 0.12, 0.14] : [0.75, 0.76, 0.8];
+    const rimC: P3 = style === 2 ? [0.12, 0.12, 0.14] : [0.42, 0.43, 0.46];
     // dish
     for (let i = 0; i < 20; i++) {
       const a0 = (i / 20) * Math.PI * 2, a1 = ((i + 1) / 20) * Math.PI * 2;
@@ -215,6 +216,12 @@ class CarMB {
   }
 }
 
+function matColor(m: number): P3 {
+  if (m === MAT.TRIM) return [0.035, 0.035, 0.04];
+  if (m === MAT.CARBON) return [0.05, 0.05, 0.056];
+  if (m === MAT.TAIL) return [0.5, 0.02, 0.02];
+  return [1, 1, 1];
+}
 function sub(a: P3, b: P3): P3 { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
 function cross(a: P3, b: P3): P3 { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
 function dot(a: P3, b: P3): number { return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]; }
@@ -284,11 +291,11 @@ export function buildCar(id: number): CarGeo {
     for (let i = 0; i < 7; i++) b.box([-0.6 + i * 0.2, 0.31, -2.1], [0.025, 0.12, 0.35], MAT.CARBON, [0.04, 0.04, 0.05], 0.6);
     for (const sx of [-0.32, -0.18, 0.18, 0.32]) b.cylZ(b, [sx, 0.42, -2.25], 0.05, 0.12);
     // side intakes
-    for (const sx of [-1, 1]) b.box([sx * 0.99, 0.62, -0.75], [0.04, 0.24, 0.7], MAT.TRIM, [0.02, 0.02, 0.02]);
+    for (const sx of [-1, 1]) b.box([sx * 0.975, 0.62, -0.75], [0.04, 0.22, 0.7], MAT.TRIM, [0.02, 0.02, 0.02]);
     // mirrors
     for (const sx of [-1, 1]) b.box([sx * 0.86, 0.9, 0.6], [0.16, 0.07, 0.14], MAT.PAINT);
     // accent stripe along the sides
-    for (const sx of [-1, 1]) b.box([sx * 0.995, 0.5, 0.2], [0.012, 0.035, 3.6], MAT.ACCENT);
+    for (const sx of [-1, 1]) b.box([sx * 0.99, 0.5, -0.1], [0.012, 0.035, 2.6], MAT.ACCENT);
     wheels = [0.84, 0.35, 1.38, 0.35, -0.84, 0.35, 1.38, 0.35, 0.86, 0.37, -1.36, 0.37, -0.86, 0.37, -1.36, 0.37];
     tail = [[-0.62, 0.81, -2.26], [-0.25, 0.81, -2.26], [0.25, 0.81, -2.26], [0.62, 0.81, -2.26]];
     head = [[-0.55, 0.39, 2.25], [0.55, 0.39, 2.25]];

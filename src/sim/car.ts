@@ -61,6 +61,7 @@ export class Car {
   vy = 0;
   hAir = 0;
   fuel = 1;
+  fuelUsed = 0;
   stun = 0;
   // derived
   latAccel = 0;
@@ -249,7 +250,7 @@ export class Car {
           case Hz.FALLEN_TREE: {
             // recover on the side with the open gap so the car is never trapped
             const gapL = h.u0 + hwL, gapR = hwR - h.u1;
-            this.crash(gapL >= gapR ? Math.min(h.u0 - 1.0, hwR - 1) : Math.max(h.u1 + 1.0, -hwL + 1), track);
+            this.crash(gapL >= gapR ? Math.max(-hwL + 1, h.u0 - 1.7) : Math.min(hwR - 1, h.u1 + 1.7), track);
             break;
           }
           case Hz.LOG:
@@ -292,6 +293,11 @@ export class Car {
         }
       }
     }
+
+    // external shoves never exceed what full steering can counter (gusts/magnets are beatable)
+    const extCap = sp.sMax * 0.62 * Math.min(1, grip + 0.1);
+    if (this.extLat > extCap) this.extLat = extCap;
+    else if (this.extLat < -extCap) this.extLat = -extCap;
 
     // ---------- vertical: crests make the car light, big crests launch it ----------
     const ground = track.y(s);
@@ -391,7 +397,7 @@ export class Car {
     const c = track.curv(s);
     const loadF = this.airborne ? 0.08 : Math.min(1.2, this.load);
     this.grip = grip;
-    const sCap = sp.sMax * Math.min(1, vv / 14) * Math.min(1.1, grip) * loadF * (this.brake > 0.5 ? 0.9 : 1);
+    const sCap = sp.sMax * Math.min(1, Math.max(vv, 2.5) / 14) * Math.min(1.1, grip) * loadF * (this.brake > 0.5 ? 0.9 : 1);
     const push = sp.kPush * c * vv * vv * (this.airborne ? 0.2 : 1);
     const target = this.steer * sCap - push + this.extLat;
     const rate = sp.response * Math.min(1.1, grip) * respMul * (this.airborne ? 0.15 : 1);
@@ -437,7 +443,9 @@ export class Car {
 
     // fuel
     if (env.fuel && !outOfFuel) {
-      this.fuel -= (this.v * dt * (0.3 + 0.7 * this.throttle)) / 15000;
+      const used = (this.v * dt * (0.3 + 0.7 * this.throttle)) / 15000;
+      this.fuel -= used;
+      this.fuelUsed += used;
       if (this.fuel < 0) this.fuel = 0;
     }
 

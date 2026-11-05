@@ -3,7 +3,9 @@
 export type RGB = [number, number, number];
 
 export function hex(h: string, mul = 1): RGB {
-  const v = parseInt(h.replace('#', ''), 16);
+  let x = h.replace('#', '');
+  if (x.length === 3) x = x[0] + x[0] + x[1] + x[1] + x[2] + x[2];
+  const v = parseInt(x, 16);
   const c = (x: number) => {
     const s = x / 255;
     return (s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4)) * mul;
@@ -97,7 +99,7 @@ export const LOOKS: Look[] = [
   // 0 Rally – sunlit summer dirt stages
   base({
     sunAz: 210, sunEl: 32, cloudCover: 0.5,
-    ground: [hex('#4a7a26'), hex('#79a33a'), hex('#b9a45a')], groundType: 0,
+    ground: [hex('#3a6424'), hex('#5e8434'), hex('#a8905a')], groundType: 0,
     terr: [16, 0.007, 0.8, 0],
     road: { base: hex('#8c6a46'), line: hex('#ffffff'), edge: false, center: 0, rumbleA: hex('#c11'), rumbleB: hex('#fff'), dirt: 1, snow: 0, patch: 0, gloss: 0.05 },
     layers: [
@@ -110,7 +112,7 @@ export const LOOKS: Look[] = [
   base({
     skyZenith: hex('#120734'), skyHorizon: hex('#ff4f8b'), skyGlow: hex('#ffb070'),
     sunAz: 350, sunEl: 4, sunColor: hex('#ff9a6a', 1.6), sunSize: 2.6,
-    ambTop: hex('#6a4cff', 0.55), ambBot: hex('#ff3fa0', 0.25),
+    ambTop: hex('#6a4cff', 0.8), ambBot: hex('#ff3fa0', 0.4),
     fogColor: hex('#5a2a7a'), fogDensity: 0.0012, fogSun: hex('#ff7a50', 0.6), fogMax: 0.9,
     cloudCover: 0.25, cloudColor: hex('#ff9ad0', 0.8), cloudShade: hex('#4a1a6a'), cloudHigh: 0.6,
     layers: [
@@ -161,20 +163,20 @@ export const LOOKS: Look[] = [
     water: hex('#3a4a3a'),
     road: { base: hex('#4a4740'), line: hex('#e8e2cc'), edge: true, center: 1, rumbleA: hex('#b22'), rumbleB: hex('#eee'), dirt: 0.15, snow: 0, patch: 0.5, gloss: 0.3 },
     wet: 0.45, mist: 0.7,
-    grade: { sat: 1.12, contrast: 1.05, exposure: 1.0, tint: [1.03, 1.0, 0.92], lift: [0.01, 0.01, 0], vignette: 0.4 },
+    grade: { sat: 1.15, contrast: 1.14, exposure: 0.98, tint: [1.03, 1.0, 0.92], lift: [0.0, 0.0, 0], vignette: 0.42 },
   }),
   // 4 Mountains – alpine passes
   base({
     skyZenith: hex('#1450b8'), skyHorizon: hex('#c8e2ff'), sunAz: 160, sunEl: 40, sunColor: hex('#fff6e8', 3.6),
-    fogColor: hex('#bcd2ee'), fogDensity: 0.00035,
+    fogColor: hex('#9cb2c8'), fogDensity: 0.00035,
     cloudCover: 0.35, cloudHigh: 0.5,
     layers: [
       { color: hex('#8aa3cc'), height: 12, rough: 0.8, kind: 0 },
       { color: hex('#5f7896'), height: 8, rough: 0.8, kind: 0 },
       { color: hex('#3d5068'), height: 4.5, rough: 0.9, kind: 0 },
     ],
-    snowCaps: 1,
-    ground: [hex('#5e7a3a'), hex('#7a7a6a'), hex('#9a9a92')], groundType: 4,
+    snowCaps: 1, ambBot: hex('#a08a68', 0.75), ambTop: hex('#9ab8e8', 0.75),
+    ground: [hex('#3e5a2a'), hex('#7a7a6a'), hex('#9a9a92')], groundType: 4,
     terr: [10, 0.01, 1.5, 4], terr2: [40, 160, 0, -60],
     road: { base: hex('#36373b'), line: hex('#f6d23a'), edge: true, center: 2, rumbleA: hex('#d22'), rumbleB: hex('#fff'), dirt: 0, snow: 0, patch: 0.15, gloss: 0.2 },
   }),
@@ -199,15 +201,15 @@ export const LOOKS: Look[] = [
   }),
   // 6 Roadworks – dusty industrial edge of town
   base({
-    skyZenith: hex('#3f7fc4'), skyHorizon: hex('#ecdcc0'), sunAz: 100, sunEl: 52, sunColor: hex('#fff0d8', 3.4),
-    fogColor: hex('#dccfb4'), fogDensity: 0.0009, fogSun: hex('#ffe0b0', 0.4),
+    skyZenith: hex('#2f6fc4'), skyHorizon: hex('#c8dcec'), sunAz: 100, sunEl: 42, sunColor: hex('#fff0d8', 3.4),
+    fogColor: hex('#c8d4dc'), fogDensity: 0.0007, fogSun: hex('#ffe0b0', 0.4),
     cloudCover: 0.25,
     layers: [
       { color: hex('#a8a8a4'), height: 3.5, rough: 1, kind: 2 },
       { color: hex('#8a8a78'), height: 2.4, rough: 0.6, kind: 1 },
       { color: hex('#5a6a3a'), height: 1.2, rough: 1, kind: 4 },
     ],
-    ground: [hex('#8a7a4a'), hex('#9a9a58'), hex('#6a5a3a')], groundType: 6,
+    ground: [hex('#5a6a34'), hex('#7a7a48'), hex('#6a5434')], groundType: 6,
     terr: [5, 0.01, 0.4, 0],
     road: { base: hex('#3e3c3a'), line: hex('#ffc21a'), edge: true, center: 1, rumbleA: hex('#ff8a00'), rumbleB: hex('#1a1a1a'), dirt: 0, snow: 0, patch: 0.8, gloss: 0.15 },
     grade: { sat: 1.15, contrast: 1.08, exposure: 1.0, tint: [1.04, 1.0, 0.94], lift: [0.01, 0.005, 0], vignette: 0.35 },
@@ -227,12 +229,12 @@ export const LOOKS: Look[] = [
     ground: [hex('#2e4a22'), hex('#40602a'), hex('#4a4a32')], groundType: 0,
     road: { base: hex('#2a2b2e'), line: hex('#e8e8e0'), edge: true, center: 1, rumbleA: hex('#b11'), rumbleB: hex('#ddd'), dirt: 0, snow: 0, patch: 0.6, gloss: 0.6 },
     wet: 1, rain: 1, lightning: 1, carLights: true, bloom: 0.12,
-    grade: { sat: 0.95, contrast: 1.12, exposure: 1.15, tint: [0.94, 0.98, 1.06], lift: [0, 0.005, 0.01], vignette: 0.5 },
+    grade: { sat: 0.98, contrast: 1.1, exposure: 1.32, tint: [0.94, 0.98, 1.06], lift: [0.004, 0.008, 0.014], vignette: 0.45 },
   }),
   // 8 Desert – heat, sand and mesas
   base({
     skyZenith: hex('#2f6fd0'), skyHorizon: hex('#ffdcae'), skyGlow: hex('#fff0cc'),
-    sunAz: 120, sunEl: 58, sunColor: hex('#fff2d8', 4.2),
+    sunAz: 120, sunEl: 50, sunColor: hex('#fff2d8', 3.5),
     ambTop: hex('#9cc0ff', 0.8), ambBot: hex('#c08a50', 0.55),
     fogColor: hex('#f2d6b0'), fogDensity: 0.00055, fogSun: hex('#fff0d0', 0.4),
     cloudCover: 0.08, cloudHigh: 0.25,
@@ -241,11 +243,11 @@ export const LOOKS: Look[] = [
       { color: hex('#b86a48'), height: 2.8, rough: 0.2, kind: 3 },
       { color: hex('#c8925a'), height: 1.1, rough: 0.3, kind: 1 },
     ],
-    ground: [hex('#d89a58'), hex('#eab878'), hex('#b8703a')], groundType: 1,
+    ground: [hex('#c4824a'), hex('#d8a066'), hex('#a8622e')], groundType: 1,
     terr: [6, 0.006, 0.3, 2], terr2: [0, 0, 6, -5],
     road: { base: hex('#4a4644'), line: hex('#f0e6c8'), edge: true, center: 1, rumbleA: hex('#c22'), rumbleB: hex('#eee'), dirt: 0, snow: 0, patch: 0.3, gloss: 0.12 },
     heatHaze: 1,
-    grade: { sat: 1.22, contrast: 1.08, exposure: 0.98, tint: [1.05, 1.0, 0.92], lift: [0.01, 0.005, 0], vignette: 0.35 },
+    grade: { sat: 1.16, contrast: 1.12, exposure: 0.9, tint: [1.05, 1.0, 0.92], lift: [0.01, 0.005, 0], vignette: 0.38 },
   }),
   // 9 Fog – grey morning farmland
   base({
@@ -287,10 +289,10 @@ export const LOOKS: Look[] = [
       { color: hex('#6a9a7a'), height: 2.5, rough: 0.4, kind: 1 },
       { color: hex('#4a7a3a'), height: 1.2, rough: 0.6, kind: 1 },
     ],
-    ground: [hex('#58902e'), hex('#86b440'), hex('#b8b060')], groundType: 0,
+    ground: [hex('#3a6a2c'), hex('#5a843a'), hex('#b8a860')], groundType: 0,
     terr: [12, 0.006, 0.5, 0],
     debris: 1,
-    grade: { sat: 1.2, contrast: 1.06, exposure: 1.0, tint: [1, 1, 1], lift: [0, 0, 0], vignette: 0.3 },
+    grade: { sat: 1.08, contrast: 1.08, exposure: 0.97, tint: [1, 1, 1], lift: [0, 0, 0], vignette: 0.32 },
   }),
   // 12 Forest – deep woods, dappled light
   base({

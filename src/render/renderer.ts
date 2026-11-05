@@ -418,7 +418,7 @@ export class Renderer {
       for (const sx of [-0.55, 0.55]) {
         const pos = path.pos(dd + 2.2, px + sx, 0.65 + p.hAir, [0, 0, 0, 0]);
         const yaw = pos[3] + p.yawVis;
-        const intensity = night > 0 ? 55 : look.carLights ? 18 : 0;
+        const intensity = night > 0 ? 32 : look.carLights ? 14 : 0;
         headU.set([pos[0], pos[1], pos[2], intensity], headN * 4);
         const pitch = -0.045;
         headD.set([Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch), 0.86], headN * 4);
@@ -455,7 +455,7 @@ export class Renderer {
       p.v4a('uPL', pl).v4a('uPLc', plc).i('uPLn', plN);
       p.f('uFlash', this.flash).f('uWet', wet).f('uTime', F.time);
       p.v4a('uBand', bandU);
-      p.v3('uSkyRef', skyRef).v3('uSkyRef2', skyRef2);
+      p.v3('uSkyRef', skyRef).v3('uSkyRef2', skyRef2).v3('uGroundRef', look.ground[0]);
     };
 
     // ---------- sky ----------
@@ -481,7 +481,7 @@ export class Renderer {
     const rs = look.road;
     p.tex('uAsphalt', this.tex.asphalt, 0).tex('uNoiseT', this.tex.noise, 1);
     p.v3('uRoadBase', rs.base).v3('uLine', rs.line).v3('uRumA', rs.rumbleA).v3('uRumB', rs.rumbleB);
-    p.v4('uRoadStyle', rs.edge ? 1 : 0, rs.center, rs.dirt, rs.snow);
+    p.v4('uRoadStyle', rs.edge ? 1 : 0, rs.center, rs.dirt, rs.snow).v3('uSandC', look.ground[1]);
     p.v4('uRoadStyle2', rs.patch, rs.gloss, tr.hwL(sCar) /* pit boundary approx */, rs.center === 4 ? 1 : 0);
     const lines = new Float32Array(12).fill(-1e6);
     lines[0] = 0;
@@ -498,7 +498,7 @@ export class Renderer {
       p = g.railP.use();
       prep(p);
       const mot = tr.d.scen.walls === 'motorway';
-      p.f('uRailOff', mot ? 3.1 : 0.7).i('uRailMode', mot ? 1 : 0).v3('uRailC', [0.62, 0.64, 0.67]);
+      p.f('uRailOff', mot ? 3.1 : 0.7).i('uRailMode', mot ? 1 : 0).v3('uRailC', [0.3, 0.31, 0.33]);
       g.rail.draw();
     }
     void ROWS;
@@ -531,7 +531,15 @@ export class Renderer {
       }
     }
     const windStr = race.scen === Scn.WIND ? 1.3 : race.scen === Scn.STORM ? 1.0 : 0.25;
-    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, [1, windStr, 0], night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25);
+    let gust = 0, gustDir = 1;
+    if (race.scen === Scn.WIND) {
+      for (const h of tr.hazardsIn(sCar - 50, sCar + 400, [])) {
+        if (h.kind !== Hz.GUST) continue;
+        const a = Math.max(hazardActive(h, race.time), gustWarning(h, race.time) * 0.4);
+        if (a > gust) { gust = a; gustDir = h.a; }
+      }
+    }
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, [gustDir, windStr + gust * 1.5, gust * 1.2 * gustDir], night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25);
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);
     this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
 
@@ -541,7 +549,7 @@ export class Renderer {
     this.fx.beginGlows();
     this.carGlows(race, sCar, a, maxD, lightsOn, night);
     if (look.streetLights || race.scen === Scn.FUTURE) {
-      for (let i = 0; i < plN; i++) this.fx.glow(pl[i * 4], pl[i * 4 + 1] + 0.05, pl[i * 4 + 2], 1.4, 2.2, 1.6, 0.9);
+      for (let i = 0; i < plN; i++) this.fx.glow(pl[i * 4], pl[i * 4 + 1] + 0.05, pl[i * 4 + 2], 0.65, 1.6, 1.15, 0.65);
     }
     // wet-road reflections of the glows: mirror them under the road surface
     if (look.wet > 0.25) {
@@ -550,7 +558,7 @@ export class Renderer {
         const gx = this.fx.gData[i * 8], gy = this.fx.gData[i * 8 + 1], gz = this.fx.gData[i * 8 + 2];
         const roadY = gy - (this.fx.gData[i * 8 + 1] - 0) * 0 - 0;
         void roadY;
-        this.fx.glow(gx, -gy * 0.9 - 0.1 + 2 * this.groundY(gx, gz), gz, this.fx.gData[i * 8 + 3] * 1.2, this.fx.gData[i * 8 + 4] * 0.35 * look.wet, this.fx.gData[i * 8 + 5] * 0.35 * look.wet, this.fx.gData[i * 8 + 6] * 0.35 * look.wet, 3.5);
+        this.fx.glow(gx, -gy * 0.9 - 0.1 + 2 * this.groundY(gx, gz), gz, this.fx.gData[i * 8 + 3] * 1.2, this.fx.gData[i * 8 + 4] * 0.2 * look.wet, this.fx.gData[i * 8 + 5] * 0.2 * look.wet, this.fx.gData[i * 8 + 6] * 0.2 * look.wet, 3.5);
       }
     }
     this.fx.drawGlows(vp, camR, camU);
@@ -660,6 +668,89 @@ export class Renderer {
       this.traffic[k].drawInstances(0, counts[k]);
     }
   }
+
+  private floorProg: Program | null = null;
+  private floorVao: WebGLVertexArrayObject | null = null;
+  /** car-select showroom: neon floor + slowly turning car */
+  renderShowroom(carId: number, livery: number, angle: number, time: number, look: Look): void {
+    const gl = this.gl;
+    this.resize();
+    const W = this.canvas.width, H = this.canvas.height;
+    const msaa = this.quality.msaa > 0;
+    if (msaa) this.ms.resize(W, H, this.quality.msaa);
+    this.plain.resize(W, H);
+    const target = msaa ? this.ms : this.plain;
+    target.bind();
+    gl.viewport(0, 0, W, H);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const aspect = W / H;
+    const r = 6.6;
+    const eye = [Math.sin(angle) * r, 1.55 + Math.sin(time * 0.3) * 0.1, Math.cos(angle) * r];
+    const tgt = [0, 0.55, 0];
+    let fwd = [tgt[0] - eye[0], tgt[1] - eye[1], tgt[2] - eye[2]];
+    const fl = Math.hypot(fwd[0], fwd[1], fwd[2]);
+    fwd = fwd.map((v) => v / fl);
+    let right = [fwd[2], 0, -fwd[0]];
+    const rl = Math.hypot(right[0], right[2]);
+    right = [right[0] / rl, 0, right[2] / rl];
+    const up = [fwd[1] * right[2] - fwd[2] * right[1], fwd[2] * right[0] - fwd[0] * right[2], fwd[0] * right[1] - fwd[1] * right[0]];
+    const view4 = viewFromBasis(new Float32Array(16), eye, right, up, fwd);
+    let vfov = (34 * Math.PI) / 180;
+    const hf = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
+    if (hf > (80 * Math.PI) / 180) vfov = 2 * Math.atan(Math.tan((40 * Math.PI) / 180) / aspect);
+    const proj = perspective(new Float32Array(16), vfov, aspect, 0.1, 500);
+    const vp = mul4(new Float32Array(16), proj, view4);
+    const invVP = invert4(new Float32Array(16), vp);
+    // sky backdrop
+    gl.disable(gl.DEPTH_TEST);
+    gl.depthMask(false);
+    this.sky.setLook(look, [0.3, 0.12, 0.95]);
+    this.sky.draw(invVP, eye, time * 0.02, 0, time, 0, [0, 0, 0]);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthMask(true);
+    // floor
+    if (!this.floorProg) {
+      this.floorProg = new Program(gl, PRELUDE_FLOOR_VS, PRELUDE_FLOOR_FS, 'floor');
+      this.floorVao = gl.createVertexArray()!;
+      gl.bindVertexArray(this.floorVao);
+      const b = gl.createBuffer()!;
+      gl.bindBuffer(gl.ARRAY_BUFFER, b);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    }
+    const fp = this.floorProg.use();
+    fp.m4('uViewProj', vp).f('uTime', time).v3('uCam', eye);
+    gl.bindVertexArray(this.floorVao);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    const sunB = [0.45, 0.62, -0.6];
+    const prep = (p: Program) => {
+      p.m4('uViewProj', vp).v3('uSunDir', sunB).v3('uSunCol', [2.2, 2.0, 1.9]).v3('uAmbTop', [0.22, 0.2, 0.4]).v3('uAmbBot', [0.12, 0.03, 0.1]);
+      p.v3('uFogCol', [0, 0, 0]).v3('uFogSun', [0, 0, 0]).v4('uFog', 0, 0, 0, 0).v3('uCamPos', eye);
+      p.i('uHeadN', 0).i('uPLn', 0).f('uFlash', 0).f('uWet', 0).f('uTime', time);
+      p.v3('uSkyRef', [0.5, 0.3, 1.0]).v3('uSkyRef2', [1.2, 0.5, 0.8]).v3('uGroundRef', [0.05, 0.02, 0.08]);
+    };
+    const m = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    const liv = LIVERIES[livery % LIVERIES.length];
+    const draws: CarDraw[] = [{ model: m, shadowModel: m, geo: carId, paint: liv[0], accent: liv[1], spin: time * 2, steer: Math.sin(time * 0.7) * 0.3, brake: 0, lights: 1, tail: 1 }];
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.DST_COLOR, gl.ZERO);
+    gl.depthMask(false);
+    this.cars.drawShadows(prep, draws, 0.8);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
+    if (msaa) {
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.ms.fb);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.plain.fb);
+      gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    }
+    this.post.run(this.plain, W, H, W, H, {
+      bloom: 0.12, exposure: 0.95, sat: 1.15, contrast: 1.08, tint: [1, 1, 1], lift: [0, 0, 0], vignette: 0.5, blur: [[0.5, 0.5, 0, 0]], vps: [[0, 0, 1, 1]],
+      flash: 0, haze: 0, time, rainLens: 0, sharpen: 0.3, fade: 0, fadeC: [0, 0, 0], hit: 0, threshold: 1.2,
+    }, this.quality.bloom);
+  }
 }
 
 function modelMatrix(x: number, y: number, z: number, yaw: number, pitch: number, roll: number): Float32Array {
@@ -677,3 +768,23 @@ function xform(m: Float32Array, p: number[]): number[] {
 }
 
 export { Spray };
+
+const PRELUDE_FLOOR_VS = `#version 300 es
+precision highp float;
+layout(location=0) in vec2 aQ;
+uniform mat4 uViewProj;
+out vec3 vW;
+void main(){ vW = vec3(aQ.x * 40.0, 0.0, aQ.y * 40.0); gl_Position = uViewProj * vec4(vW, 1.0); }`;
+const PRELUDE_FLOOR_FS = `#version 300 es
+precision highp float;
+in vec3 vW; out vec4 o; uniform float uTime; uniform vec3 uCam;
+void main(){
+  float r = length(vW.xz);
+  vec2 g = abs(fract(vW.xz * 0.5) - 0.5);
+  float line = smoothstep(0.03, 0.0, min(g.x, g.y)) * smoothstep(30.0, 4.0, r);
+  float ring = smoothstep(0.05, 0.0, abs(r - 3.4)) + smoothstep(0.03, 0.0, abs(r - 3.55)) * 0.6;
+  vec3 c = vec3(0.012, 0.008, 0.03) * (1.0 - smoothstep(0.0, 25.0, r));
+  c += vec3(0.05, 0.6, 0.9) * line * 0.25 + vec3(1.0, 0.15, 0.45) * ring * (1.2 + 0.4 * sin(uTime * 2.0));
+  c += vec3(0.25, 0.08, 0.35) * smoothstep(5.0, 0.0, r) * 0.25;
+  o = vec4(c, 1.0);
+}`;

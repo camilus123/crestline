@@ -34,19 +34,20 @@ uniform mat4 uViewProj;
 // ------------------------------------------------------------------ road
 const ROAD_VS = COMMON_VS + `
 layout(location=0) in vec2 aRC; // row, column (0 left edge, 1 right edge)
-out vec3 vW; out vec2 vSU; out float vHw; out float vHwR; out float vFlags; out float vCurv; out float vD;
+out vec3 vW; out vec2 vSU; out float vHw; out float vHwR; out float vFlags; out float vCurv; out float vD; out float vSand;
 void main(){
   float d = rowD(aRC.x);
   PathS p = pathAt(d);
   float u = aRC.y < 0.5 ? -p.hwL : p.hwR;
   vec3 w = bentPos(p, u, 0.0);
-  vW = w; vSU = vec2(p.s, u); vHw = p.hwL; vHwR = p.hwR; vFlags = p.flags; vCurv = p.curv; vD = d;
+  vW = w; vSU = vec2(p.s, u); vHw = p.hwL; vHwR = p.hwR; vFlags = p.flags; vCurv = p.curv; vD = d; vSand = p.sand;
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;
 
 const ROAD_FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec2 vSU; in float vHw; in float vHwR; in float vFlags; in float vCurv; in float vD;
+in vec3 vW; in vec2 vSU; in float vHw; in float vHwR; in float vFlags; in float vCurv; in float vD; in float vSand;
 out vec4 o;
+uniform vec3 uSandC;
 uniform sampler2D uAsphalt;
 uniform sampler2D uNoiseT;
 uniform vec3 uRoadBase; uniform vec3 uLine; uniform vec3 uRumA; uniform vec3 uRumB;
@@ -64,7 +65,7 @@ void main(){
   vec4 tB = texture(uAsphalt, vec2(u * 0.27 + 0.3, sm * 0.27));
   float macro = texture(uNoiseT, vec2(u * 0.01, sm * 0.004)).r;
   float lum = tA.r * (0.75 + 0.5 * tB.r) * (0.85 + 0.3 * macro);
-  vec3 alb = uRoadBase * lum * 1.25;
+  vec3 alb = uRoadBase * lum * 1.7;
   float rough = tA.g;
   float hwL = vHw, hwR = vHwR;
   float dl = u + hwL, dr = hwR - u; // distance to edges
@@ -158,6 +159,14 @@ void main(){
     rough = 0.5;
     rum = 1.0;
   }
+  // desert: sand blown in from the verges
+  if (vSand > 0.01) {
+    float sn = texture(uNoiseT, vec2(u * 0.35, sm * 0.08)).r;
+    float m = 1.0 - smoothstep(vSand * (0.5 + sn * 0.7), vSand * (0.9 + sn * 0.9), edgeD);
+    vec3 sc = uSandC * (0.85 + 0.3 * texture(uNoiseT, vec2(u * 2.0, sm * 2.0)).g);
+    alb = mix(alb, sc, m * 0.95);
+    rough = mix(rough, 0.95, m);
+  }
   // wetness: darker, glossier, reflective
   float wet = uWet * (1.0 - snow) * (1.0 - dirt * 0.5);
   float puddleN = smoothstep(0.55, 0.75, texture(uNoiseT, vec2(u * 0.12, sm * 0.03)).r) * wet;
@@ -232,14 +241,19 @@ void main(){
   float t = mix(g.r, g2.r, smoothstep(30.0, 200.0, dist)) * 0.6 + big * 0.6 - 0.1;
   vec3 c = mix(uG0, uG1, clamp(t, 0.0, 1.0));
   c = mix(c, uG2, clamp(g.b * 0.8 + (big - 0.6) * 0.8, 0.0, 1.0) * 0.6);
+  // large-scale patchiness so meadows are not a flat colour
+  float patchy = texture(uNoiseT, vec2(u, s) * 0.011 + 0.37).r;
+  c *= 0.72 + 0.5 * patchy;
+  if (uGType == 0 || uGType == 7) c = mix(c, vec3(dot(c, vec3(0.3, 0.55, 0.15))), 0.18);
   float det = mix(g.g, g2.g, smoothstep(20.0, 120.0, dist));
   c *= 0.55 + det * 0.75;
   float rough = g.a;
   // steep slopes become rock
   float rock = smoothstep(0.25, 0.5, vSlope);
   float strata = 0.75 + 0.25 * sin(vW.y * 2.2 + texture(uNoiseT, vec2(u * 0.02, s * 0.02)).r * 6.0);
-  vec3 rockC = vec3(0.17, 0.16, 0.15) * strata * (0.6 + 0.8 * texture(uNoiseT, vec2(u * 0.05, s * 0.05 + vW.y * 0.05)).r) * (0.8 + 0.4 * det);
+  vec3 rockC = vec3(0.23, 0.215, 0.2) * strata * (0.6 + 0.8 * texture(uNoiseT, vec2(u * 0.05, s * 0.05 + vW.y * 0.05)).r) * (0.8 + 0.4 * det);
   if (uGType == 2) rockC = mix(rockC, vec3(0.8, 0.85, 0.9), 0.35);
+  if (uGType == 4) rockC *= vec3(1.25, 1.12, 0.95);
   if (uGType == 1) rockC = vec3(0.55, 0.3, 0.18) * (0.8 + 0.4 * det);
   c = mix(c, rockC, rock);
   // shoulder / verge
@@ -317,7 +331,7 @@ in vec3 vW; in vec3 vN; in float vSide;
 out vec4 o;
 uniform vec3 uRailC;
 void main(){
-  vec3 col = lightSurf(uRailC, normalize(vN), vW, 0.3, 1.2, 1.0, 1.0);
+  vec3 col = lightSurf(uRailC, normalize(vN), vW, 0.45, 0.5, 0.8, 1.0);
   o = vec4(fogApply(col, vW), 1.0);
 }`;
 

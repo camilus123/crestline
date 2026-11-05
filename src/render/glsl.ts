@@ -143,7 +143,7 @@ vec3 lightSurf(vec3 albedo, vec3 N, vec3 wpos, float rough, float specK, float a
     vec3 l = L * inversesqrt(d2);
     float cd = dot(-l, uHeadDir[i].xyz);
     float cone = smoothstep(uHeadDir[i].w, uHeadDir[i].w + 0.12, cd);
-    float att = uHead[i].w * cone / (1.0 + d2 * 0.012);
+    float att = uHead[i].w * cone / (1.0 + d2 * 0.012) * smoothstep(3.0, 9.0, sqrt(d2));
     float nl = max(dot(N, l), 0.0);
     vec3 hh = normalize(l + V);
     float hs = pow(max(dot(N, hh), 0.0), shin) * specK * 2.0;

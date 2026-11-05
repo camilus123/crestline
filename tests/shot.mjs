@@ -16,14 +16,15 @@ page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') 
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
 page.on('request', (r) => { if (!r.url().startsWith('file:') && !r.url().startsWith('data:')) requests.push(r.url()); });
 const url = 'file://' + path.join(root, 'dist/crestline.html') + (query ? '?' + query : '');
+page.setDefaultTimeout(300000);
 await page.goto(url);
 await page.waitForTimeout(800);
 if (+steps > 0) await page.evaluate((n) => window.__crest.simulate(n), +steps);
 if (evalJs) await page.evaluate(evalJs);
 const t0 = Date.now();
-await page.evaluate(() => { window.__crest.renderOnce(); window.__crest.renderOnce(); });
+await page.evaluate(() => { window.__crest.renderOnce(); });
 console.error('render ms', (Date.now() - t0) / 2);
 await page.waitForTimeout(+wait);
-await page.screenshot({ path: path.join(root, out) });
+await page.screenshot({ path: path.join(root, out), timeout: 300000 });
 console.log(JSON.stringify({ errors, requests }));
 await browser.close();

@@ -58,6 +58,12 @@ vec3 env(vec3 R){
   return c;
 }
 void main(){
+  // cars right next to the lens dissolve (screen-door) instead of filling the view
+  float camD = length(vW - uCamPos);
+  if (camD < 3.6) {
+    float th = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    if (th > smoothstep(1.6, 3.6, camD)) discard;
+  }
   int m = int(vMat + 0.5);
   vec3 N = normalize(vN);
   if (!gl_FrontFacing) N = -N;
@@ -70,9 +76,9 @@ void main(){
   if (m == 0 || m == 1) {
     vec3 paint = m == 0 ? uPaint : uAccent;
     float flake = (hash2(floor(vL.xz * 900.0) + floor(vL.y * 900.0)) - 0.5) * 0.08;
-    vec3 diff = lightSurf(paint * (1.0 + flake), N, vW, 0.32, 0.9, 1.0, 1.0);
-    float coat = 0.06 + 0.94 * fres;
-    col = diff + env(R) * coat * 0.55;
+    vec3 diff = lightSurf(paint * (1.0 + flake), N, vW, 0.38, 0.45, 1.0, 1.0);
+    float coat = 0.04 + 0.96 * fres;
+    col = diff + env(R) * coat * 0.38;
   } else if (m == 2) {
     col = vec3(0.01, 0.012, 0.016) + env(R) * (0.12 + 0.88 * fres) * 0.9;
     col += lightSurf(vec3(0.02), N, vW, 0.05, 1.5, 1.0, 1.0) * 0.5;
@@ -95,7 +101,7 @@ void main(){
   } else if (m == 10) {
     col = vec3(0.2, 0.1, 0.0); emis = vec3(1.0, 0.5, 0.05) * 0.5;
   } else if (m == 11) {
-    col = vec3(0.0); emis = uNeonC * 4.0;
+    col = vec3(0.0); emis = uNeonC * 2.0;
   } else col = base;
   o = vec4(fogApply(col + emis, vW), 1.0);
 }`;

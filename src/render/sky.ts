@@ -146,7 +146,7 @@ void main(){
       float shadeT = clamp((horizon - elD) / max(0.5, hgt), 0.0, 1.0);
       lc *= 0.85 + 0.3 * (1.0 - shadeT);
       if (kind < 0.5 && uSnowCaps > 0.0) {
-        float cap = smoothstep(hgt * 0.55, hgt * 0.75, elD + fbm(vec2(x * 8.0, 4.0)) * 1.5);
+        float cap = smoothstep(horizon * 0.62, horizon * 0.8, elD + (fbm(vec2(x * 8.0, 4.0)) - 0.5) * hgt * 0.2) * smoothstep(hgt * 0.35, hgt * 0.6, horizon);
         lc = mix(lc, vec3(0.9, 0.93, 1.0) * (0.7 + 0.5 * max(0.0, uSunW.y + 0.3)), cap * uSnowCaps);
       }
       if (kind > 1.5 && kind < 2.5) {
@@ -169,7 +169,7 @@ void main(){
     col += vec3(0.55, 0.32, 0.12) * g * uExtra.w * 0.35;
   }
   // below the horizon: distant ground in fog
-  if (wd.y < 0.0) col = mix(uFogC * 0.92, uGround, smoothstep(0.0, -0.4, wd.y) * 0.3);
+  if (wd.y < 0.0) col = mix(mix(uHor, uFogC, 0.5) * 0.9, uGround * 0.8, smoothstep(-0.005, -0.12, wd.y) * 0.85);
   // mist band
   col = mix(col, uFogC, uMist * exp(-abs(elD) * 0.25) * 0.7);
   col += vec3(0.5, 0.55, 0.7) * uFlash * 0.35;

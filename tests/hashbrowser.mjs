@@ -1,0 +1,11 @@
+import { createRequire } from 'node:module';
+import fs from 'node:fs';
+const { chromium } = createRequire(import.meta.url)('playwright');
+const b = await chromium.launch();
+const p = await b.newPage();
+await p.setContent('<html><body></body></html>');
+await p.addScriptTag({ content: fs.readFileSync('tests/out/hash.js', 'utf8') });
+const out = await p.evaluate(() => window.__hashResult);
+fs.writeFileSync('tests/out/hash_chromium.txt', out + '\n');
+console.log(out.split('\n')[0], await p.evaluate(() => navigator.userAgent));
+await b.close();

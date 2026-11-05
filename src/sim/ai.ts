@@ -2,7 +2,7 @@
 
 import { DELTA, Hz, SCENARIOS } from '../track/defs';
 import { Hazard } from '../track/generator';
-import { hazardActive, Track } from '../track/track';
+import { gustWarning, hazardActive, Track } from '../track/track';
 import { Car, CarInput } from './car';
 import { CarSpec } from './specs';
 
@@ -102,7 +102,7 @@ export class AIDriver {
   prof: AIProfile;
   pace = 1; // external multiplier (rubber band, scenario)
   isBot = false; // drives a player car (testing)
-  wantFuel = 0; // bot: fuel target when pitting
+  pitTarget = 0; // bot: fuel level to fill to (0 = not pitting)
   private wobble = 0;
   private wobT = 0;
   private hz: Hazard[] = [];
@@ -139,12 +139,14 @@ export class AIDriver {
     // ---- pit stop (bots only; rivals never pit) ----
     let pitting = false;
     if (this.isBot && pitNeed > 0) {
-      const base = (hwL + hwR) / 2 - (hwR - hwL) / 2; // nominal half width
-      for (const pz of d.pits) {
-        const ds = track.delta(s, pz.s0);
-        const de = track.delta(s, pz.s1);
-        if ((ds > -10 && ds < 260) || (ds <= 0 && de > 0)) {
-          if (car.fuel < pitNeed) {
+      // decide once per pit strip: stop only if the tank cannot reach the finish
+      if (this.pitTarget === 0 && car.fuel + 0.02 < pitNeed && car.fuel < 0.85) this.pitTarget = Math.min(1, pitNeed + 0.03);
+      if (this.pitTarget > 0) {
+        const base = hwL;
+        for (const pz of d.pits) {
+          const ds = track.delta(s, pz.s0);
+          const de = track.delta(s, pz.s1);
+          if ((ds > -10 && ds < 260) || (ds <= 0 && de > 0)) {
             pitting = true;
             xT = base + 3.2;
             const stopAt = (pz.s0 + pz.s1) / 2;
@@ -152,6 +154,10 @@ export class AIDriver {
             const vStop = dd > 0 ? Math.sqrt(2 * 6 * Math.max(0, dd - 2)) : 0;
             vT = Math.min(vT, vStop, dd < 60 ? 14 : 99);
             if (Math.abs(dd) < 25 && v < 0.5) vT = 0;
+            if (car.fuel >= this.pitTarget) {
+              this.pitTarget = 0;
+              pitting = false;
+            }
           }
         }
       }
@@ -226,6 +232,12 @@ export class AIDriver {
       const ds = track.delta(s, bestBlock.s);
       if (ds < 14 && Math.abs(bestBlock.x - car.x) < 2.1) vT = Math.min(vT, bestBlock.v + (ds - 7) * 0.6);
     }
+    // gusts: lift a little while a gust is blowing or about to
+    for (const h of hz) {
+      if (h.kind !== Hz.GUST) continue;
+      const ds = track.delta(s, h.s);
+      if (ds < 120 && ds > -h.len && (hazardActive(h, time) > 0 || gustWarning(h, time) > 0.5)) vT *= 0.9;
+    }
     // laser gates: time the arrival for the off phase by lifting a little
     for (const h of hz) {
       if (h.kind !== Hz.LASER) continue;
@@ -233,7 +245,7 @@ export class AIDriver {
       if (ds < 3 || ds > 140) continue;
       const tArr = ds / Math.max(5, v);
       if (hazardActive(h, time + tArr) > 0 || hazardActive(h, time + tArr + 0.05) > 0) {
-        for (const f of [0.9, 0.82, 0.74, 0.66]) {
+        for (const f of this.isBot ? [0.9, 0.82, 0.74, 0.66] : [0.92, 0.85]) {
           const t2 = ds / Math.max(5, v * f);
           if (hazardActive(h, time + t2) === 0 && hazardActive(h, time + t2 + 0.06) === 0 && hazardActive(h, time + t2 - 0.06) === 0) {
             vT = Math.min(vT, v * f);
@@ -248,7 +260,7 @@ export class AIDriver {
     // ---- convert to inputs ----
     const c = track.curv(s);
     const push = sp.kPush * c * v * v;
-    const sCap = Math.max(0.5, sp.sMax * Math.min(1, v / 14) * Math.min(1.1, car.grip) * Math.min(1.2, Math.max(0.1, car.load)));
+    const sCap = Math.max(0.5, sp.sMax * Math.min(1, Math.max(v, 2.5) / 14) * Math.min(1.1, car.grip) * Math.min(1.2, Math.max(0.1, car.load)));
     const desired = Math.max(-sCap * 0.9, Math.min(sCap * 0.9, (xT - car.x) * 1.7 - car.vx * 0.25));
     let steer = (desired + push - car.extLat) / sCap;
     steer = Math.max(-1, Math.min(1, steer));

@@ -69,7 +69,7 @@ export const enum O {
   CABIN, LIGHT_TOWER, POWER_POLE, CACTUS, CACTUS_ARM, MESA, DRYBUSH, ADOBE, POPLAR, HEDGE,
   REFLECTOR, LAMP_DOUBLE, GANTRY, BILLBOARD, TURBINE, WINDSOCK, COTTAGE, LIGHTHOUSE, FERN, STUMP,
   LOGPILE, ARCH, PITSIGN, LASER_POST, SPIRE, PEAK, CRANE, WINDMILL, RUIN, SKILIFT,
-  PYLON, CHURCH, OVERPASS, FIRETOWER, OILPUMP, MARKER_POLE, BENT_OAK, SNOW_ROCK, BOARD, COUNT,
+  PYLON, CHURCH, OVERPASS, FIRETOWER, OILPUMP, MARKER_POLE, BENT_OAK, SNOW_ROCK, BOARD, MAST, COUNT,
 }
 
 export interface RoadsideRule {
@@ -146,7 +146,7 @@ export const SCENARIOS: ScenarioDef[] = [
   }),
   S({
     id: Scn.FUTURE, name: 'Futuristic', surface: Surf.CITY, grip: 1.05, response: 1.1, halfWidth: 6.4,
-    hazardRate: 5, hazards: [{ kind: Hz.MAGNET, weight: 5 }, { kind: Hz.LASER, weight: 4 }],
+    hazardRate: 4, hazards: [{ kind: Hz.MAGNET, weight: 5 }, { kind: Hz.LASER, weight: 2.6 }],
     roadside: [
       { type: O.TOWER, weight: 6, near: 18, far: 90, radius: 6, scale: [0.7, 2.2], cluster: 3, row: true },
       { type: O.NEON_PYLON, weight: 3, near: 1.5, far: 2.5, radius: 0.4, scale: [1, 1], row: true },
@@ -166,7 +166,7 @@ export const SCENARIOS: ScenarioDef[] = [
       { type: O.BUSH, weight: 3, near: 2, far: 25, radius: 0, scale: [0.7, 1.4], cluster: 4 },
       { type: O.POLE, weight: 1, near: 5, far: 7, radius: 0.3, scale: [1, 1.1], row: true },
     ],
-    landmarks: [{ type: O.PYLON, every: 2200, dist: [120, 400], scale: [1, 1.3] }],
+    landmarks: [{ type: O.MAST, every: 1700, dist: [90, 380], scale: [1, 1.4] }],
   }),
   S({
     id: Scn.MARSH, name: 'Marsh', grip: 0.92, halfWidth: 5.6, rumble: false, hillsScale: 0.35,
@@ -182,7 +182,7 @@ export const SCENARIOS: ScenarioDef[] = [
   }),
   S({
     id: Scn.MOUNTAINS, name: 'Mountains', halfWidth: 4.7, hillsScale: 1.6, curveScale: 1.25, walls: 'mountain',
-    hazardRate: 2.5, hazards: [{ kind: Hz.ROCK, weight: 3 }, { kind: Hz.POTHOLE, weight: 1 }], pitSigns: false,
+    hazardRate: 1.6, hazards: [{ kind: Hz.ROCK, weight: 2 }, { kind: Hz.POTHOLE, weight: 1.5 }], pitSigns: false,
     roadside: [
       { type: O.PINE, weight: 3, near: 6, far: 40, radius: 0.8, scale: [0.7, 1.4], cluster: 4 },
       { type: O.ROCK, weight: 2, near: 3, far: 30, radius: 0, scale: [0.8, 2.2], cluster: 3 },
@@ -203,7 +203,7 @@ export const SCENARIOS: ScenarioDef[] = [
     landmarks: [{ type: O.SKILIFT, every: 1600, dist: [70, 260], scale: [1, 1.3] }],
   }),
   S({
-    id: Scn.ROADWORKS, name: 'Roadworks', halfWidth: 3.9, hazardRate: 9, rivalPace: 0.955,
+    id: Scn.ROADWORKS, name: 'Roadworks', halfWidth: 3.9, hazardRate: 9, rivalPace: 0.94, densityMul: 1.4,
     hazards: [{ kind: Hz.CONE, weight: 4 }, { kind: Hz.BARRIER, weight: 3 }, { kind: Hz.POTHOLE, weight: 4 }],
     roadside: [
       { type: O.CONE_STACK, weight: 1.5, near: 0.6, far: 3, radius: 0.4, scale: [0.9, 1.1] },
@@ -214,7 +214,7 @@ export const SCENARIOS: ScenarioDef[] = [
       { type: O.FENCE, weight: 2.5, near: 2, far: 3, radius: 0.3, scale: [1, 1], row: true },
       { type: O.BUSH, weight: 2, near: 5, far: 30, radius: 0, scale: [0.6, 1.2], cluster: 3 },
     ],
-    landmarks: [{ type: O.CRANE, every: 1400, dist: [60, 260], scale: [1, 1.4] }],
+    landmarks: [{ type: O.CRANE, every: 600, dist: [40, 220], scale: [1, 1.4] }],
   }),
   S({
     id: Scn.STORM, name: 'Storm', grip: 0.82, response: 0.85, visibility: 1100, hazardRate: 9,
@@ -278,7 +278,7 @@ export const SCENARIOS: ScenarioDef[] = [
       { type: O.ROCK, weight: 1.2, near: 3, far: 30, radius: 0.9, scale: [0.6, 1.5], cluster: 2 },
     ],
     landmarks: [
-      { type: O.TURBINE, every: 500, dist: [70, 420], scale: [1, 1.3] },
+      { type: O.TURBINE, every: 260, dist: [45, 380], scale: [0.9, 1.3] },
       { type: O.LIGHTHOUSE, every: 4000, dist: [160, 300], scale: [1, 1.2] },
     ],
   }),

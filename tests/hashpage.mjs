@@ -1,0 +1,12 @@
+import { createRequire } from 'node:module';
+import path from 'node:path';
+const { chromium } = createRequire(import.meta.url)('playwright');
+const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage();
+const errs = [];
+p.on('pageerror', (e) => errs.push(e.message));
+await p.goto('file://' + path.resolve('dist/crestline.html') + '?hashcheck');
+await p.waitForSelector('pre.lcd', { timeout: 120000 });
+const t = await p.textContent('pre.lcd');
+console.log(t.split('\n').slice(0, 2).join(' | '), 'errors:', errs.length);
+await b.close();

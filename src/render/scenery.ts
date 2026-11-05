@@ -126,6 +126,8 @@ out vec4 o;
 uniform float uStrength;
 void main(){ if (vHide > 0.5) discard; float r = length(vQ); float a = smoothstep(1.0, 0.2, r) * uStrength; o = vec4(vec3(1.0 - a), 1.0); }`;
 
+const VARIANTS = new Set<number>([O.PINE, O.FIR, O.OAK, O.BENT_OAK, O.BIRCH, O.POPLAR, O.WILLOW, O.DEAD_TREE, O.BUSH, O.DRYBUSH, O.FERN, O.GRASS, O.REEDS, O.ROCK, O.SNOW_ROCK, O.SNOW_PINE, O.CACTUS_ARM, O.CACTUS, O.TOWER, O.CROWD, O.BILLBOARD, O.STUMP, O.HOUSE]);
+
 interface TypeSet {
   type: number;
   mesh: Mesh;
@@ -165,34 +167,39 @@ export class Scenery {
       if (!a) byType.set(t, (a = []));
       a.push(i);
     }
-    for (const [type, idx] of byType) {
-      const mb = buildModel(type);
-      const vbuf = mb.pack();
-      const mesh = new Mesh(gl, vbuf, 32, [
-        { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
-        { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
-        { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
-        { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
-      ], mb.vertexCount);
-      const data = new Float32Array(idx.length * 6);
-      const ss = new Float32Array(idx.length);
-      idx.forEach((i, k) => {
-        data.set([o.s[i], o.u[i], o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * 6);
-        ss[k] = o.s[i];
-        if (LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i], h: type === O.LAMP_DOUBLE ? 10 : type === O.LIGHT_TOWER ? 7 : 7, type });
-      });
-      const inst = [
-        { loc: 4, size: 3, type: gl.FLOAT, offset: 0 },
-        { loc: 5, size: 3, type: gl.FLOAT, offset: 12 },
-      ];
-      mesh.setInstances(data, 24, inst);
-      let shadow: Mesh | null = null;
-      const r = SHADOW_R[type];
-      if (r) {
-        shadow = new Mesh(gl, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), 8, [{ loc: 0, size: 2, type: gl.FLOAT, offset: 0 }], 6);
-        shadow.setInstances(data, 24, inst);
+    for (const [type, all] of byType) {
+      const V = VARIANTS.has(type) ? 3 : 1;
+      for (let v = 0; v < V; v++) {
+        const idx = V === 1 ? all : all.filter((i) => ((Math.imul(i + 7, 2654435761) >>> 0) % V) === v);
+        if (!idx.length) continue;
+        const mb = buildModel(type, v);
+        const vbuf = mb.pack();
+        const mesh = new Mesh(gl, vbuf, 32, [
+          { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
+          { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
+          { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
+          { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
+        ], mb.vertexCount);
+        const data = new Float32Array(idx.length * 6);
+        const ss = new Float32Array(idx.length);
+        idx.forEach((i, k) => {
+          data.set([o.s[i], o.u[i], o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * 6);
+          ss[k] = o.s[i];
+          if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i], h: type === O.LAMP_DOUBLE ? 10 : 7, type });
+        });
+        const inst = [
+          { loc: 4, size: 3, type: gl.FLOAT, offset: 0 },
+          { loc: 5, size: 3, type: gl.FLOAT, offset: 12 },
+        ];
+        mesh.setInstances(data, 24, inst);
+        let shadow: Mesh | null = null;
+        const r = SHADOW_R[type];
+        if (r) {
+          shadow = new Mesh(gl, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), 8, [{ loc: 0, size: 2, type: gl.FLOAT, offset: 0 }], 6);
+          shadow.setInstances(data, 24, inst);
+        }
+        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark: LANDMARK.has(type), span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0 });
       }
-      this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark: LANDMARK.has(type), span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0 });
     }
     this.lamps.sort((a, b) => a.s - b.s);
   }

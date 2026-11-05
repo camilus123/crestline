@@ -42,7 +42,7 @@ export const PLAYER_COLORS = [0, 1, 2, 3];
 export function makeRivals(seed: number, difficulty: number): RivalCfg[] {
   const rng = new Rng(seed);
   const out: RivalCfg[] = [];
-  const base = [0.875, 0.925, 0.96][difficulty] ?? 0.92;
+  const base = [0.875, 0.915, 0.94][difficulty] ?? 0.92;
   const spread = [0.09, 0.075, 0.06][difficulty] ?? 0.08;
   const aggr = [0.15, 0.35, 0.6][difficulty] ?? 0.3;
   for (let i = 0; i < 19; i++) {

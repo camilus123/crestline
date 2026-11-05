@@ -20,6 +20,9 @@ const glassLit = (h = '#ffd890', e = 1): Mat => ({ c: hex(h), spec: 0.4, emis: e
 type Builder = (b: MB) => void;
 
 function conifer(b: MB, col: string, snow = false, h = 9, tiers = 4, r = 2.6): void {
+  h *= 0.85 + b.rng.float() * 0.35;
+  r *= 0.85 + b.rng.float() * 0.3;
+  tiers += b.rng.int(3) - 1;
   b.cyl(0, 0, 0, 0.32, 0.2, h * 0.35, 6, bark);
   for (let i = 0; i < tiers; i++) {
     const t = i / tiers;
@@ -77,11 +80,13 @@ const LIB: Partial<Record<O, Builder>> = {
     b.blob(0, 8, 0, 1.6, 6.5, 1.6, leaf('#3a6a2a', 0.5), 0.15, 1);
   },
   [O.WILLOW]: (b) => {
-    b.cyl(0, 0, 0, 0.5, 0.35, 3.5, 7, bark, true, 0.15);
-    b.blob(0, 5.2, 0, 4.2, 2.2, 4.2, leaf('#6a8a3a', 0.9), 0.2, 1);
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      b.cyl(Math.cos(a) * 3.2, 1.2, Math.sin(a) * 3.2, 0.7, 1.4, 3.6, 5, leaf('#7a9a42', 1.0), false, 0.2);
+    b.cyl(0, 0, 0, 0.5, 0.35, 3.8, 7, bark, true, 0.15);
+    b.blob(0, 5.4, 0, 3.4, 1.7, 3.4, leaf('#6a8a3a', 0.9), 0.25, 1);
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + b.rng.float() * 0.3;
+      const r = 2.2 + b.rng.float() * 1.3;
+      const len = 2.4 + b.rng.float() * 1.6;
+      b.cyl(Math.cos(a) * r, 5.0 - len, Math.sin(a) * r, 0.06, 0.32, len, 5, leaf(i % 2 ? '#7a9a42' : '#8aa84e', 1.0), false, 0.2);
     }
   },
   [O.DEAD_TREE]: (b) => {
@@ -118,10 +123,14 @@ const LIB: Partial<Record<O, Builder>> = {
     }
   },
   [O.REEDS]: (b) => {
-    for (let i = 0; i < 12; i++) {
-      const x = (b.rng.float() - 0.5) * 1.8, z = (b.rng.float() - 0.5) * 1.8, h = 1.4 + b.rng.float() * 1.2;
-      b.beam([x, 0, z], [x + 0.2, h, z], 0.05, leaf('#8a8a4a', 1));
-      if (i % 3 === 0) b.box(x + 0.2, h - 0.35, z, 0.1, 0.35, 0.1, M('#5a3a22', { sway: 1 }));
+    for (let i = 0; i < 22; i++) {
+      const x = (b.rng.float() - 0.5) * 2.0, z = (b.rng.float() - 0.5) * 2.0, hgt = 1.2 + b.rng.float() * 1.3;
+      const a = b.rng.float() * Math.PI;
+      const dx = Math.cos(a) * 0.035, dz = Math.sin(a) * 0.035;
+      const lean = (b.rng.float() - 0.5) * 0.5;
+      const col = b.rng.chance(0.5) ? '#7a8a3a' : b.rng.chance(0.5) ? '#9a9a4a' : '#6a7a34';
+      b.card([x - dx, 0, z - dz], [x + dx, 0, z + dz], [x + lean + dx * 0.2, hgt, z + dz * 0.2], [x + lean - dx * 0.2, hgt, z - dz * 0.2], leaf(col, 1));
+      if (i % 4 === 0) b.cyl(x + lean * 0.85, hgt * 0.8, z, 0.055, 0.05, 0.28, 5, M('#4a2e1a', { sway: 1 }));
     }
   },
   [O.ROCK]: (b) => {
@@ -150,7 +159,9 @@ const LIB: Partial<Record<O, Builder>> = {
     b.box(0, 0.75, 0, 0.06, 0.12, 4.2, wood);
     b.box(0, 0.4, 0, 0.06, 0.12, 4.2, wood);
   },
-  [O.HEDGE]: (b) => b.box(0, 0, 0, 1.4, 1.6, 6, leaf('#2e5a24', 0.15)),
+  [O.HEDGE]: (b) => {
+    for (let i = 0; i < 5; i++) b.blob((b.rng.float() - 0.5) * 0.3, 0.8 + b.rng.float() * 0.2, -2.4 + i * 1.2, 0.8, 0.85 + b.rng.float() * 0.2, 0.85, leaf(i % 2 ? '#2e5a24' : '#3a6a2a', 0.15), 0.18, 1);
+  },
   [O.CHEVRON]: (b) => {
     b.box(0, 0, 0, 0.1, 0.9, 0.1, dmetal);
     b.box(0, 0.9, 0, 0.06, 0.6, 1.0, M('#f4f4f0', { hue: 0, emis: 0.15 }));
@@ -176,7 +187,7 @@ const LIB: Partial<Record<O, Builder>> = {
   [O.MARKER_POLE]: (b) => {
     for (let i = 0; i < 5; i++) b.cyl(0, i * 0.4, 0, 0.04, 0.04, 0.4, 5, i % 2 ? white : red, false);
   },
-  [O.HOUSE]: (b) => house(b, '#d8c8a8', '#8a3a2a'),
+  [O.HOUSE]: (b) => { const w = ['#d8c8a8', '#e8e0d0', '#c8b090', '#b8c0c8'][b.rng.int(4)], r = ['#8a3a2a', '#4a4a52', '#6a4a2a'][b.rng.int(3)]; house(b, w, r, 6.5 + b.rng.float() * 2, 7 + b.rng.float() * 3, 4 + b.rng.float() * 1.5); },
   [O.COTTAGE]: (b) => house(b, '#f0ece0', '#3a4a5a', 6, 7, 3.6, 0.3),
   [O.BARN]: (b) => {
     b.box(0, 0, 0, 9, 6, 14, M('#8a2a22', { hue: 0.4 }));
@@ -232,7 +243,8 @@ const LIB: Partial<Record<O, Builder>> = {
   [O.TOWER]: (b) => {
     const h = 26 + b.rng.float() * 50;
     const w = 10 + b.rng.float() * 8;
-    b.box(0, 0, 0, w, h, w, M('#2a2a3e', { spec: 0.6, hue: 0.4 }));
+    b.box(0, 0, 0, w, h, w, M('#3e3862', { spec: 0.6, hue: 0.4 }));
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(sx * w / 2, 0, sz * w / 2, 0.25, h, 0.25, glassLit(sx > 0 ? '#40e8ff' : '#ff50c8', 1.2));
     // window bands
     for (let y = 3; y < h - 2; y += 3.2) {
       for (const side of [-1, 1]) b.box(side * (w / 2 + 0.03), y, 0, 0.06, 1.3, w * 0.86, glassLit(b.rng.chance(0.5) ? '#7ad8ff' : '#ff8ad8', b.rng.chance(0.65) ? 1.6 : 0.1));
@@ -299,7 +311,7 @@ const LIB: Partial<Record<O, Builder>> = {
   [O.LIGHT_TOWER]: (b) => {
     b.box(0, 0, 0, 1.6, 0.6, 2.2, M('#f0b010'));
     b.cyl(0, 0.6, 0, 0.1, 0.08, 6.5, 6, metal);
-    for (let i = 0; i < 4; i++) b.box(-0.8 + (i % 2) * 1.6, 7 + Math.floor(i / 2) * 0.6, 0, 0.5, 0.45, 0.2, glassLit('#fff4e0', 2.5));
+    for (let i = 0; i < 4; i++) b.box(-0.8 + (i % 2) * 1.6, 7 + Math.floor(i / 2) * 0.6, 0, 0.5, 0.45, 0.2, glassLit('#fff4e0', 1.0));
   },
   [O.CACTUS]: (b) => {
     b.cyl(0, 0, 0, 0.42, 0.36, 4.2, 8, M('#4a7a3a', { hue: 0.5 }));
@@ -496,6 +508,17 @@ const LIB: Partial<Record<O, Builder>> = {
     b.cyl(0, 2.55, 0, 0.2, 0.2, 0.35, 8, M('#202020'));
     b.box(0, 1.92, 0, 0.62, 0.12, 0.62, M('#c8202a'));
   },
+  [O.MAST]: (b) => {
+    const st = M('#6a6e78', { spec: 0.4, hue: 0 });
+    const H = 70;
+    for (let i = 0; i < 14; i++) {
+      const y0 = (i / 14) * H, y1 = ((i + 1) / 14) * H, w0 = 1.6 - (i / 14) * 1.1, w1 = 1.6 - ((i + 1) / 14) * 1.1;
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.beam([sx * w0, y0, sz * w0], [sx * w1, y1, sz * w1], 0.14, st);
+      b.beam([-w1, y1, -w1], [w1, y0, w1], 0.08, st);
+    }
+    for (const y of [24, 48, 70]) b.blob(0, y, 0, 0.45, 0.45, 0.45, glassLit('#ff1a1a', 6), 0, 1);
+    for (const [x, z] of [[1, 0], [-1, 0], [0, 1]]) b.beam([0, 50, 0], [x * 30, 0, z * 30], 0.04, M('#333'));
+  },
   [O.BOARD]: (b) => {
     b.box(0, 0, 0, 0.1, 1.6, 0.1, dmetal);
     b.box(0, 1.6, 0, 0.08, 0.8, 1.4, M('#f4f4f0'));
@@ -503,7 +526,7 @@ const LIB: Partial<Record<O, Builder>> = {
 };
 
 /** objects drawn at any distance (not culled by terrain extents) */
-export const LANDMARK = new Set<number>([O.PEAK, O.MESA, O.SPIRE, O.CRANE, O.PYLON, O.TURBINE, O.LIGHTHOUSE, O.WINDMILL, O.SKILIFT, O.CHURCH, O.FIRETOWER, O.RUIN, O.TOWER]);
+export const LANDMARK = new Set<number>([O.MAST, O.PEAK, O.MESA, O.SPIRE, O.CRANE, O.PYLON, O.TURBINE, O.LIGHTHOUSE, O.WINDMILL, O.SKILIFT, O.CHURCH, O.FIRETOWER, O.RUIN, O.TOWER]);
 /** spanning objects (stretch across the road) */
 export const SPANNING = new Set<number>([O.ARCH, O.GANTRY, O.HOLO_ARCH, O.OVERPASS]);
 /** lamps that light the road at night */

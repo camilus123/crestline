@@ -144,6 +144,7 @@ export function generateTrack(input: string): TrackData {
     let i = 0;
     let sBendNext = false;
     let lastDir = rng.sign();
+    var loopTarget = rng.sign() * 2 * PI;
     while (i < n) {
       if (prot[i]) {
         H[i + 1] = H[i];
@@ -174,8 +175,14 @@ export function generateTrack(input: string): TrackData {
         ramp *= f;
         arc *= f;
       }
-      // direction with heading budget so the road never folds back within view
+      // direction with heading budget so the road never folds back within view;
+      // circuits are steered towards one full turn so they read as a loop on the map
       let dir = sBendNext ? -lastDir : rng.sign();
+      if (circuit && !sBendNext) {
+        const remainFrac = Math.max(0.05, 1 - i / n);
+        const deficit = (loopTarget - H[i]) / (2 * PI * remainFrac);
+        dir = rng.float() < 0.5 + Math.max(-0.42, Math.min(0.42, deficit * 0.6)) ? 1 : -1;
+      }
       const back = Math.max(0, i - Math.round(700 / D));
       const recent = H[i] - H[back];
       const turn = curvature * (arc + ramp);
@@ -195,6 +202,14 @@ export function generateTrack(input: string): TrackData {
     }
   }
   const curv = smoothArray(cT, 8, circuit, 2);
+  if (circuit) {
+    // make the total turning exactly one loop by scaling bends in proportion to their curvature
+    let tot = 0, abs = 0;
+    for (let i = 0; i < n; i++) { tot += curv[i] * D; abs += Math.abs(curv[i]) * D; }
+    const target = tot >= 0 ? 2 * PI : -2 * PI;
+    const e = target - tot;
+    if (abs > 1e-6) for (let i = 0; i < n; i++) curv[i] += (e * Math.abs(curv[i]) * D) / abs / D;
+  }
 
   // ---------- elevation ----------
   const grade = new Float64Array(n);
@@ -394,7 +409,7 @@ export function generateTrack(input: string): TrackData {
           }
           case Hz.ROCK: {
             if (near(s, 110)) continue;
-            const r = 0.7 + rng.float() * 0.7;
+            const r = scen.walls === 'mountain' ? 0.55 + rng.float() * 0.45 : 0.7 + rng.float() * 0.7;
             h.len = r * 2;
             const c = lerp(-L + r + 0.3, R - r - 0.3, rng.float());
             const gapL = c - r + L, gapR = R - (c + r);
@@ -417,7 +432,7 @@ export function generateTrack(input: string): TrackData {
           case Hz.LASER: {
             if (near(s, 80)) continue;
             h.len = 0.6; h.u0 = -L - 1.5; h.u1 = R + 1.5;
-            h.a = 2.2 + rng.float() * 1.6; h.b = 0.32 + rng.float() * 0.16; h.c = rng.float();
+            h.a = 1.8 + rng.float() * 1.3; h.b = 0.26 + rng.float() * 0.12; h.c = rng.float();
             blockers.push(s);
             break;
           }
@@ -569,7 +584,11 @@ export function generateTrack(input: string): TrackData {
       let s = sStart + orng.float() * lm.every;
       const rule: RoadsideRule = { type: lm.type, weight: 0, near: 0, far: 0, radius: 0, scale: lm.scale };
       while (s < sEnd) {
-        const side = orng.sign();
+        let side = orng.sign();
+        if (scen.walls === 'mountain') {
+          const fi = wrapIdx(idxOf(s), n, circuit);
+          if (fi >= 0) side = flags[fi] & F_CLIFF_L ? -1 : 1;
+        }
         const dist = lerp(lm.dist[0], lm.dist[1], orng.float());
         const u = dist === 0 ? 0 : side * (edgeAt(s, side) + dist);
         const i = wrapIdx(idxOf(s), n, circuit);
