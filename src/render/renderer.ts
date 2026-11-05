@@ -195,7 +195,9 @@ export class Renderer {
       if (c.sprayAmt > 0.05 && v > 4 && !c.airborne) {
         const kind = [-1, PT.DUST, PT.WATER, PT.SNOW, PT.MUD, PT.SAND, PT.SMOKE, PT.GRASS][c.spray] ?? -1;
         if (kind >= 0) {
-          const rate = c.sprayAmt * Math.min(1, v / 40) * (kind === PT.WATER ? 140 : kind === PT.SMOKE ? 50 : kind === PT.GRASS ? 40 : 90) * q;
+          // rivals throw up less than the cars being followed by a camera, so a pack stays readable
+          const own = viewers.includes(c) ? 1 : 0.6;
+          const rate = c.sprayAmt * Math.min(1, v / 40) * (kind === PT.WATER ? 110 : kind === PT.SMOKE ? 50 : kind === PT.GRASS ? 40 : 70) * q * own;
           let n = rate * dt;
           while (n > 0) {
             if (n < 1 && Math.random() > n) break;
@@ -204,7 +206,7 @@ export class Renderer {
             const big = kind === PT.WATER || kind === PT.DUST || kind === PT.SAND || kind === PT.SNOW;
             this.fx.spawn(kind, c.s - 1.8 - Math.random() * 0.5, c.x + side * 0.8 + (Math.random() - 0.5) * 0.4, 0.2 + Math.random() * 0.2,
               v * (0.35 + Math.random() * 0.3), side * (0.6 + Math.random() * 2.5) + c.vx * 0.5, 0.8 + Math.random() * (big ? 2.5 : 1.5),
-              (big ? 0.7 : 0.5) + Math.random() * 0.5, kind === PT.GRASS || kind === PT.MUD ? 0.12 : big ? 0.35 + Math.random() * 0.3 : 0.25,
+              (big ? 0.55 : 0.5) + Math.random() * 0.4, kind === PT.GRASS || kind === PT.MUD ? 0.12 : big ? 0.35 + Math.random() * 0.3 : 0.25,
               kind === PT.GRASS || kind === PT.MUD ? 0 : kind === PT.SMOKE ? 4 : 3.2, kind === PT.GRASS || kind === PT.MUD ? 9.8 : 0.4);
           }
         }
@@ -556,9 +558,8 @@ export class Renderer {
       const n = this.fx.gCount;
       for (let i = 0; i < n; i++) {
         const gx = this.fx.gData[i * 8], gy = this.fx.gData[i * 8 + 1], gz = this.fx.gData[i * 8 + 2];
-        const roadY = gy - (this.fx.gData[i * 8 + 1] - 0) * 0 - 0;
-        void roadY;
-        this.fx.glow(gx, -gy * 0.9 - 0.1 + 2 * this.groundY(gx, gz), gz, this.fx.gData[i * 8 + 3] * 1.2, this.fx.gData[i * 8 + 4] * 0.2 * look.wet, this.fx.gData[i * 8 + 5] * 0.2 * look.wet, this.fx.gData[i * 8 + 6] * 0.2 * look.wet, 3.5);
+        const st = this.fx.gData[i * 8 + 7];
+        this.fx.glow(gx, -gy * 0.9 - 0.1 + 2 * this.groundY(gx, gz), gz, this.fx.gData[i * 8 + 3] * 1.2 * (st < 0 ? -st * 0.6 : 1), this.fx.gData[i * 8 + 4] * 0.2 * look.wet, this.fx.gData[i * 8 + 5] * 0.2 * look.wet, this.fx.gData[i * 8 + 6] * 0.2 * look.wet, 3.5);
       }
     }
     this.fx.drawGlows(vp, camR, camU);
@@ -623,12 +624,13 @@ export class Renderer {
       // glows only show towards the camera: tail lights face backwards, headlights forwards
       const fx = m[8], fy = m[9], fz = m[10];
       const cam = this.lastCam;
-      const ti = (brake ? 2.2 : lights ? 0.7 : 0) * (1 + night * 0.4);
-      if (ti > 0) for (const p of geo.tailLights) {
-        const w = xform(m, p);
+      // the lamp surfaces carry most of the light; the glow is a modest halo shaped like the lamp
+      const ti = (brake ? 1.0 : lights ? 0.45 : 0) * (1 + night * 0.3);
+      if (ti > 0) for (const t of geo.tailLights) {
+        const w = xform(m, t.p);
         const dx = cam[0] - w[0], dy = cam[1] - w[1], dz = cam[2] - w[2];
         const facing = Math.max(0, -(dx * fx + dy * fy + dz * fz) / Math.hypot(dx, dy, dz));
-        if (facing > 0.05) this.fx.glow(w[0], w[1], w[2], brake ? 0.34 : 0.26, ti * facing, ti * 0.05 * facing, ti * 0.03 * facing);
+        if (facing > 0.05) this.fx.glow(w[0], w[1], w[2], t.size * (brake ? 1.35 : 1), ti * facing, ti * 0.06 * facing, ti * 0.035 * facing, t.stretch);
       }
       if (lights) for (const p of geo.headLights) {
         const w = xform(m, p);

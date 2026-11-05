@@ -15,7 +15,7 @@ uniform mat4 uModel;
 uniform vec4 uWheel[4];
 uniform float uSpin;
 uniform float uSteer;
-out vec3 vW; out vec3 vN; out vec4 vCol; out float vMat; out vec3 vL;
+out vec3 vW; out vec3 vN; out vec4 vCol; out float vMat; out vec3 vL; out vec3 vNL;
 void main(){
   vec3 p = aPos, n = aNrm;
   int wid = int(aAux.y * 255.0 + 0.5);
@@ -38,14 +38,22 @@ void main(){
   vCol = aCol;
   vMat = aAux.x * 255.0;
   vL = p;
+  vNL = n;
   gl_Position = uViewProj * w;
 }`;
 
 const FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec3 vN; in vec4 vCol; in float vMat; in vec3 vL;
+in vec3 vW; in vec3 vN; in vec4 vCol; in float vMat; in vec3 vL; in vec3 vNL;
 out vec4 o;
 uniform vec3 uPaint; uniform vec3 uAccent; uniform vec3 uNeonC;
 uniform float uBrake; uniform float uLights; uniform float uTail;
+uniform vec2 uRear; // tail-lamp height, rear-panel z
+// red light from the lamps washing over the rear panel around them
+vec3 lampSpill(vec3 albedo){
+  float facing = max(-normalize(vNL).z, 0.0);
+  float near = exp(-pow((vL.y - uRear.x) / 0.16, 2.0)) * smoothstep(uRear.y + 0.45, uRear.y + 0.02, vL.z);
+  return albedo * vec3(1.0, 0.07, 0.04) * facing * near * (0.25 * uTail + 1.1 * uBrake);
+}
 uniform vec3 uSkyRef; uniform vec3 uSkyRef2; uniform vec3 uGroundRef;
 vec3 env(vec3 R){
   vec3 sky = mix(uSkyRef2, uSkyRef, smoothstep(-0.02, 0.5, R.y));
@@ -78,7 +86,7 @@ void main(){
     float flake = (hash2(floor(vL.xz * 900.0) + floor(vL.y * 900.0)) - 0.5) * 0.08;
     vec3 diff = lightSurf(paint * (1.0 + flake), N, vW, 0.38, 0.45, 1.0, 1.0);
     float coat = 0.04 + 0.96 * fres;
-    col = diff + env(R) * coat * 0.38;
+    col = diff + env(R) * coat * 0.38 + lampSpill(paint);
   } else if (m == 2) {
     col = vec3(0.01, 0.012, 0.016) + env(R) * (0.12 + 0.88 * fres) * 0.9;
     col += lightSurf(vec3(0.02), N, vW, 0.05, 1.5, 1.0, 1.0) * 0.5;
@@ -86,11 +94,12 @@ void main(){
     col = env(R) * 0.85 * vec3(0.95, 0.96, 1.0) + lightSurf(vec3(0.3), N, vW, 0.1, 1.2, 1.0, 1.0) * 0.3;
   } else if (m == 4 || m == 9) {
     float weave = m == 9 ? 0.5 + 0.5 * step(0.5, fract((vL.x + vL.z) * 40.0)) : 1.0;
-    col = lightSurf(base * (0.7 + 0.3 * weave), N, vW, 0.5, 0.5, 1.0, 1.0) + env(R) * fres * 0.15;
+    col = lightSurf(base * (0.7 + 0.3 * weave), N, vW, 0.5, 0.5, 1.0, 1.0) + env(R) * fres * 0.15 + lampSpill(vec3(0.12));
   } else if (m == 5) {
-    float on = uTail + uBrake;
-    col = vec3(0.25, 0.01, 0.01) * 0.3 + env(R) * fres * 0.3;
-    emis = vec3(1.0, 0.04, 0.02) * (0.6 * uTail + 5.0 * uBrake);
+    // red lens: reads as red even when unlit; tail lights glow, brake lights flare
+    col = lightSurf(vec3(0.42, 0.02, 0.02), N, vW, 0.15, 1.2, 1.0, 1.0) + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.35, 0.35);
+    float inner = 0.75 + 0.25 * smoothstep(0.02, 0.0, abs(fract(vL.x * 9.0) - 0.5) - 0.42); // lamp segments
+    emis = vec3(1.0, 0.05, 0.025) * (0.9 * uTail + 3.2 * uBrake) * inner;
   } else if (m == 6) {
     col = vec3(0.6) * 0.1 + env(R) * (0.2 + fres) * 0.6;
     emis = vec3(1.0, 0.95, 0.85) * (0.15 + uLights * 7.0);
@@ -99,7 +108,8 @@ void main(){
   } else if (m == 8) {
     col = lightSurf(base, N, vW, 0.25, 1.0, 1.0, 1.0) + env(R) * 0.35 * (base.r + 0.2);
   } else if (m == 10) {
-    col = vec3(0.2, 0.1, 0.0); emis = vec3(1.0, 0.5, 0.05) * 0.5;
+    col = lightSurf(vec3(0.5, 0.22, 0.02), N, vW, 0.15, 1.2, 1.0, 1.0) + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.6, 0.3);
+    emis = vec3(1.0, 0.45, 0.05) * 0.06;
   } else if (m == 11) {
     col = vec3(0.0); emis = uNeonC * 2.0;
   } else col = base;
@@ -168,7 +178,7 @@ export class CarRenderer {
       const g = this.geos[c.geo];
       for (let i = 0; i < 16; i++) w[i] = g.wheels[i];
       p.m4('uModel', c.model).v4a('uWheel', w).f('uSpin', c.spin).f('uSteer', c.steer);
-      p.v3('uPaint', c.paint).v3('uAccent', c.accent).f('uBrake', c.brake).f('uLights', c.lights).f('uTail', c.tail);
+      p.v3('uPaint', c.paint).v3('uAccent', c.accent).f('uBrake', c.brake).f('uLights', c.lights).f('uTail', c.tail).v2('uRear', g.tailY, -g.length * 0.5);
       this.meshes[c.geo].draw();
     }
   }

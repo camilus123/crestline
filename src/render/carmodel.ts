@@ -231,18 +231,22 @@ export interface CarGeo {
   idx: Uint32Array;
   count: number;
   wheels: number[]; // x,y,z,r per wheel (4)
-  tailLights: [number, number, number][]; // glow sprite positions
+  tailLights: TailGlow[]; // glow sprites matching the shape of each car's lamps
+  tailY: number; // lamp height, for red light spilling onto the rear panel
   headLights: [number, number, number][];
   length: number;
   width: number;
 }
+
+export interface TailGlow { p: [number, number, number]; size: number; stretch: number }
 
 /** 0 Stiletto (wedge supercar), 1 Sprite (roadster), 2 Halo (concept) */
 export function buildCar(id: number): CarGeo {
   const b = new CarMB();
   const R = 24;
   let wheels: number[] = [];
-  let tail: [number, number, number][] = [];
+  let tail: TailGlow[] = [];
+  let tailY = 0.8;
   let head: [number, number, number][] = [];
   let length = 4.5, width = 1.98;
   if (id === 0) {
@@ -260,8 +264,7 @@ export function buildCar(id: number): CarGeo {
       { z: 2.28, w: 0.7, y0: 0.33, y1: 0.4, n: 3, m: 3 },
     ];
     b.loft(secs, R, (k, z, x, y) => {
-      if (k === -1 && z < 0) return MAT.TRIM; // rear cap: black panel
-      if (z < -2.18 && y > 0.74 && y < 0.88 && Math.abs(x) > 0.1) return MAT.TAIL;
+      if (k === -1 && z < 0) return MAT.PAINT; // rear panel in body colour (lamps, grille and diffuser are added on top)
       if (z > 2.1 && y > 0.36 && y < 0.42 && Math.abs(x) > 0.35) return MAT.HEAD;
       if (y < 0.42 && z > -1.6 && z < 1.6) return MAT.TRIM; // sills
       return MAT.PAINT;
@@ -285,9 +288,14 @@ export function buildCar(id: number): CarGeo {
       b.box([sx * 0.95, 1.06, -2.02], [0.03, 0.22, 0.42], MAT.PAINT);
       b.box([sx * 0.55, 1.0, -1.98], [0.05, 0.16, 0.12], MAT.TRIM, [0.05, 0.05, 0.05]);
     }
-    // tail light bar + diffuser + exhausts
-    b.box([0, 0.81, -2.235], [1.6, 0.08, 0.03], MAT.TAIL);
-    b.box([0, 0.66, -2.24], [1.1, 0.07, 0.02], MAT.TRIM, [0.03, 0.03, 0.03]);
+    // tail lamps: a wide cluster at each corner joined by a thin light strip; dark grille below; diffuser + exhausts
+    for (const sx of [-1, 1]) {
+      b.box([sx * 0.6, 0.81, -2.262], [0.42, 0.1, 0.03], MAT.TAIL);
+      b.box([sx * 0.6, 0.81, -2.252], [0.47, 0.14, 0.02], MAT.TRIM, [0.03, 0.03, 0.03]); // lamp surround
+    }
+    b.box([0, 0.83, -2.258], [0.78, 0.022, 0.025], MAT.TAIL);
+    b.box([0, 0.6, -2.252], [1.26, 0.16, 0.02], MAT.CARBON, [0.03, 0.03, 0.035], 0.4); // grille
+    b.box([0, 0.47, -2.25], [1.5, 0.05, 0.02], MAT.TRIM, [0.03, 0.03, 0.03]);
     for (let i = 0; i < 7; i++) b.box([-0.6 + i * 0.2, 0.31, -2.1], [0.025, 0.12, 0.35], MAT.CARBON, [0.04, 0.04, 0.05], 0.6);
     for (const sx of [-0.32, -0.18, 0.18, 0.32]) b.cylZ(b, [sx, 0.42, -2.25], 0.05, 0.12);
     // side intakes
@@ -297,7 +305,8 @@ export function buildCar(id: number): CarGeo {
     // accent stripe along the sides
     for (const sx of [-1, 1]) b.box([sx * 0.99, 0.5, -0.1], [0.012, 0.035, 2.6], MAT.ACCENT);
     wheels = [0.84, 0.35, 1.38, 0.35, -0.84, 0.35, 1.38, 0.35, 0.86, 0.37, -1.36, 0.37, -0.86, 0.37, -1.36, 0.37];
-    tail = [[-0.62, 0.81, -2.26], [-0.25, 0.81, -2.26], [0.25, 0.81, -2.26], [0.62, 0.81, -2.26]];
+    tail = [{ p: [-0.6, 0.81, -2.28], size: 0.12, stretch: -2.6 }, { p: [0.6, 0.81, -2.28], size: 0.12, stretch: -2.6 }, { p: [0, 0.83, -2.28], size: 0.05, stretch: -7 }];
+    tailY = 0.81;
     head = [[-0.55, 0.39, 2.25], [0.55, 0.39, 2.25]];
   } else if (id === 1) {
     // ---------- Kestrel Sprite: compact roadster ----------
@@ -329,7 +338,10 @@ export function buildCar(id: number): CarGeo {
     b.box([0, 1.0, 0.55], [1.3, 0.3, 0.03], MAT.GLASS, [1, 1, 1], 0.9, -0.55);
     b.box([0, 0.98, -1.15], [1.3, 0.16, 0.6], MAT.PAINT, [1, 1, 1], 0.5, 0.15);
     // round twin tail lights
-    for (const sx of [-0.55, -0.3, 0.3, 0.55]) b.cylZ(b, [sx, 0.74, -1.96], 0.075, 0.04, MAT.TAIL);
+    for (const sx of [-0.55, -0.3, 0.3, 0.55]) {
+      b.cylZ(b, [sx, 0.74, -1.955], 0.088, 0.03, MAT.CHROME); // bezel
+      b.cylZ(b, [sx, 0.74, -1.975], 0.07, 0.03, sx * sx > 0.2 ? MAT.TAIL : MAT.AMBER);
+    }
     b.box([0, 0.5, -1.97], [0.9, 0.12, 0.02], MAT.TRIM, [0.04, 0.04, 0.04]);
     b.cylZ(b, [0.35, 0.38, -1.95], 0.05, 0.14);
     b.cylZ(b, [0.47, 0.38, -1.95], 0.05, 0.14);
@@ -339,7 +351,8 @@ export function buildCar(id: number): CarGeo {
     for (const sx of [-0.18, 0.18]) b.box([sx, 0.955, -1.4], [0.12, 0.012, 1.0], MAT.ACCENT);
     for (const sx of [-0.18, 0.18]) b.box([sx, 0.85, 1.2], [0.12, 0.012, 1.4], MAT.ACCENT);
     wheels = [0.75, 0.33, 1.2, 0.33, -0.75, 0.33, 1.2, 0.33, 0.76, 0.34, -1.22, 0.34, -0.76, 0.34, -1.22, 0.34];
-    tail = [[-0.55, 0.74, -1.99], [-0.3, 0.74, -1.99], [0.3, 0.74, -1.99], [0.55, 0.74, -1.99]];
+    tail = [{ p: [-0.55, 0.74, -2.0], size: 0.1, stretch: 1 }, { p: [0.55, 0.74, -2.0], size: 0.1, stretch: 1 }];
+    tailY = 0.74;
     head = [[-0.55, 0.62, 1.9], [0.55, 0.62, 1.9]];
   } else {
     // ---------- Axiom Halo: futuristic concept ----------
@@ -357,7 +370,7 @@ export function buildCar(id: number): CarGeo {
       { z: 2.33, w: 0.7, y0: 0.3, y1: 0.4, n: 3, m: 3 },
     ];
     b.loft(secs, R, (k, z, x, y) => {
-      if (k === -1 && z < 0) return MAT.TRIM;
+      if (k === -1 && z < 0) return MAT.PAINT;
       if (y < 0.4) return MAT.CARBON;
       return MAT.PAINT;
     });
@@ -372,8 +385,10 @@ export function buildCar(id: number): CarGeo {
     ];
     b.loft(gh, R, () => MAT.GLASS);
     // light bars (neon) front and rear + twin fins
-    b.box([0, 0.78, -2.31], [1.55, 0.04, 0.03], MAT.TAIL);
-    b.box([0, 0.72, -2.3], [1.2, 0.02, 0.03], MAT.NEON);
+    b.box([0, 0.78, -2.315], [1.5, 0.045, 0.03], MAT.TAIL); // full-width light blade
+    b.box([0, 0.78, -2.305], [1.58, 0.09, 0.02], MAT.TRIM, [0.02, 0.02, 0.025]); // blade housing
+    b.box([0, 0.6, -2.305], [1.0, 0.12, 0.02], MAT.CARBON, [0.03, 0.03, 0.035], 0.4);
+    b.box([0, 0.69, -2.31], [1.2, 0.02, 0.03], MAT.NEON);
     b.box([0, 0.45, 2.32], [1.3, 0.035, 0.03], MAT.HEAD);
     for (const sx of [-1, 1]) {
       b.box([sx * 0.62, 1.02, -1.9], [0.04, 0.32, 0.7], MAT.PAINT, [1, 1, 1], 0.5, 0.35);
@@ -383,7 +398,8 @@ export function buildCar(id: number): CarGeo {
     b.box([0, 0.36, -2.2], [1.4, 0.1, 0.3], MAT.CARBON, [0.04, 0.04, 0.05], 0.6);
     b.cylZ(b, [0, 0.55, -2.3], 0.13, 0.06, MAT.NEON);
     wheels = [0.86, 0.35, 1.42, 0.35, -0.86, 0.35, 1.42, 0.35, 0.88, 0.36, -1.42, 0.36, -0.88, 0.36, -1.42, 0.36];
-    tail = [[-0.7, 0.78, -2.33], [-0.25, 0.78, -2.33], [0.25, 0.78, -2.33], [0.7, 0.78, -2.33]];
+    tail = [{ p: [-0.5, 0.78, -2.34], size: 0.07, stretch: -7 }, { p: [0.5, 0.78, -2.34], size: 0.07, stretch: -7 }];
+    tailY = 0.78;
     head = [[-0.5, 0.45, 2.34], [0.5, 0.45, 2.34]];
   }
   const style = id === 0 ? 0 : id === 1 ? 1 : 2;
@@ -392,7 +408,7 @@ export function buildCar(id: number): CarGeo {
     b.wheel(x, r, z, r, i < 2 ? 0.25 : 0.31, i + 1, style);
   }
   const p = b.pack();
-  return { ...p, wheels, tailLights: tail, headLights: head, length, width };
+  return { ...p, wheels, tailLights: tail, tailY, headLights: head, length, width };
 }
 
 // helper: cylinder along z (lights, exhausts) – attached as a method for convenience

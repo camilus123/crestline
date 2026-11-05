@@ -7,11 +7,11 @@ import { NOISE, PATH, PRELUDE } from './glsl';
 export const enum PT { DUST, WATER, SNOW, MUD, SAND, SMOKE, GRASS, SPARK, LEAF, CONE }
 
 const PCOL: number[][] = [
-  [0.62, 0.48, 0.32, 0.55], // dust
-  [0.85, 0.88, 0.92, 0.42], // water
-  [0.95, 0.97, 1.0, 0.7], // snow
+  [0.62, 0.48, 0.32, 0.34], // dust
+  [0.85, 0.88, 0.92, 0.3], // water
+  [0.95, 0.97, 1.0, 0.5], // snow
   [0.3, 0.22, 0.13, 0.75], // mud
-  [0.85, 0.66, 0.42, 0.55], // sand
+  [0.85, 0.66, 0.42, 0.36], // sand
   [0.6, 0.6, 0.62, 0.35], // smoke
   [0.3, 0.5, 0.15, 0.9], // grass bits
   [1.0, 0.6, 0.2, 1.0], // spark (additive)
@@ -27,18 +27,18 @@ layout(location=1) in vec4 iP; // d, u, h, size
 layout(location=2) in vec4 iC; // rgb, alpha
 layout(location=3) in vec2 iX; // rot, kind
 uniform mat4 uViewProj; uniform vec3 uCamR; uniform vec3 uCamU;
-out vec2 vQ; out vec4 vC; out vec3 vW; out float vK;
+out vec2 vQ; out vec4 vC; out vec3 vW; out float vK; out float vS;
 void main(){
   PathS p = pathAt(iP.x);
   vec3 c = bentPos(p, iP.y, iP.z);
   float r = iX.x, cr = cos(r), sr = sin(r);
   vec2 q = vec2(aQ.x * cr - aQ.y * sr, aQ.x * sr + aQ.y * cr);
   vec3 w = c + (uCamR * q.x + uCamU * q.y) * iP.w;
-  vQ = aQ; vC = iC; vW = w; vK = iX.y;
+  vQ = aQ; vC = iC; vW = w; vK = iX.y; vS = iP.w;
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;
 const P_FS = PRELUDE + NOISE + `
-in vec2 vQ; in vec4 vC; in vec3 vW; in float vK;
+in vec2 vQ; in vec4 vC; in vec3 vW; in float vK; in float vS;
 out vec4 o;
 uniform vec3 uAmb; uniform vec3 uSunC; uniform vec3 uFogC; uniform vec4 uFog; uniform vec3 uCamPos;
 void main(){
@@ -50,6 +50,8 @@ void main(){
   else a = (1.0 - r * r) * (0.75 + 0.25 * vnoise(vQ * 3.0 + vW.xz));
   float dist = length(vW - uCamPos);
   a *= smoothstep(1.2, 5.0, dist); // particles brushing the lens fade instead of filling the view
+  // soft puffs that would cover a big part of the screen thin out, so a cloud just ahead stays see-through
+  if (k != 6 && k != 8 && k != 9 && k != 7) a *= smoothstep(1.2, 6.0, dist / max(vS, 0.05));
   vec3 lit = vC.rgb * (uAmb * 1.2 + uSunC * 0.35);
   if (k == 7) { o = vec4(vC.rgb * 6.0 * a, 0.0); return; }
   float f = 1.0 - exp(-dist * uFog.x);
@@ -64,7 +66,9 @@ layout(location=2) in vec4 iC; // rgb intensity, stretch
 uniform mat4 uViewProj; uniform vec3 uCamR; uniform vec3 uCamU;
 out vec2 vQ; out vec3 vC;
 void main(){
-  vec3 w = iP.xyz + (uCamR * aQ.x + uCamU * aQ.y * iC.w) * iP.w;
+  // stretch > 0 elongates vertically (wet-road streaks), < 0 horizontally (light bars)
+  vec2 sc = iC.w >= 0.0 ? vec2(1.0, iC.w) : vec2(-iC.w, 1.0);
+  vec3 w = iP.xyz + (uCamR * aQ.x * sc.x + uCamU * aQ.y * sc.y) * iP.w;
   vQ = aQ; vC = iC.rgb;
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;
@@ -221,6 +225,17 @@ export class FX {
     if (!n) return;
     const D = this.pData;
     let k = 0, a = 0;
+    // visibility budget: when many soft puffs hang in the view ahead (dust or spray from a pack of cars),
+    // each one is drawn fainter so the total haze stays see-through
+    let soft = 0;
+    for (let i = 0; i < n; i++) {
+      const p = P[i];
+      if (p.kind !== PT.DUST && p.kind !== PT.WATER && p.kind !== PT.SAND && p.kind !== PT.SNOW && p.kind !== PT.SMOKE) continue;
+      let d = p.d - sCar;
+      if (loop > 0) d = (((d + loop / 2) % loop) + loop) % loop - loop / 2;
+      if (d > -8 && d < 70) soft++;
+    }
+    const softK = Math.min(1, 80 / Math.max(1, soft));
     // additive particles (sparks) go last by sorting kind
     for (let pass = 0; pass < 2; pass++) {
       for (let i = 0; i < n; i++) {
@@ -231,7 +246,8 @@ export class FX {
         if (loop > 0) d = (((d + loop / 2) % loop) + loop) % loop - loop / 2;
         const t = 1 - p.life / p.max;
         const c = PCOL[p.kind];
-        const fade = Math.min(1, p.life / (p.max * 0.4)) * Math.min(1, t * 8 + 0.2);
+        let fade = Math.min(1, p.life / (p.max * 0.4)) * Math.min(1, t * 8 + 0.2);
+        if (p.kind === PT.DUST || p.kind === PT.WATER || p.kind === PT.SAND || p.kind === PT.SNOW || p.kind === PT.SMOKE) fade *= softK;
         D.set([d, p.u, p.h, p.size * (1 + t * p.grow), c[0], c[1], c[2], c[3] * fade, p.rot, p.kind], k * 10);
         k++;
       }

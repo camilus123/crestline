@@ -26,10 +26,24 @@ Rebuild: `npm install` once, then `npm run build`.
 - [x] M7 Review loop: 3 passes × 13 scenarios × (1920x1080 + 3440x1440) in `review/pass1..3`, notes in `review/NOTES.md`
 
 ## Test status (final)
-- Determinism: 100 tracks hash identically (combined `4dd29e0e`) in Node/V8, headless Chromium 153 and SpiderMonkey 115 (gjs). Open `crestline.html?hashcheck` in any browser to compare.
+- Determinism: 100 tracks hash identically (combined `a0d30c1d`) in Node/V8, headless Chromium 153 and SpiderMonkey 115 (gjs). Open `crestline.html?hashcheck` in any browser to compare.
 - All 64 course tracks: bot beats every arcade limit (margin 4.8–25.5 %) and finishes top ten in every championship race.
 - Keyboard-tapping driver (8 Hz, 150 ms reaction) laps within 2–5 % of the analogue bot with no crashes (Mountains excepted).
 - `file://` with all network blocked: menus from title to race, zero console errors, zero network requests.
+
+## Fixes after first playtest (2026-11-05)
+- Dust/spray behind a pack (Rally, Marsh, also Storm/Snow/Desert): lighter puffs, rivals throw up less,
+  puffs that would cover a large part of the screen thin out, and a density budget caps the total haze ahead.
+- Futuristic buildings over the road with no collision: towers were up to ~40 m wide, randomly rotated, 18 m
+  from the edge, with a smaller collision box. Buildings, fences and signs now face the road; every roadside rule
+  in every scenario keeps its drawn model off the road and its collision box covering its solid part
+  (`tests/footprint.test.ts` checks this). Scenery now bends with the road along its length, and the far-distance
+  squeeze can no longer pull a building towards the road.
+- Car rears: the Stiletto and Halo had a black rear panel; now body colour with proper lamp clusters (Stiletto),
+  a light blade (Halo), round red + amber lamps (Sprite), red lenses that read red when unlit, red light spilling
+  onto the paint around them, and glows shaped like the lamps instead of four round blobs. Brake glow toned down.
+- Re-tested: all 64 courses pass (arcade margin 4.8–25.5 %), hashes identical in V8/Chromium/SpiderMonkey,
+  `file://` flow zero errors / zero requests. Before/after shots in `review/fix4/`.
 
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.

@@ -486,6 +486,9 @@ export function generateTrack(input: string): TrackData {
       if (i < 0) return 6;
       return side < 0 ? hwL[i] : hwR[i];
     };
+    // buildings, fences and signs face the road so their drawn footprint matches their collision box
+    const alignRot = (rule: RoadsideRule, side: number, rot: number) =>
+      rule.align === 'face' ? (side > 0 ? 0 : PI) : rule.align === 'grid' ? Math.round(rot / (PI / 2)) * (PI / 2) : rot;
     const add = (s: number, u: number, rule: RoadsideRule, scale: number, rot: number, hue: number) => {
       if (!circuit && (s < -sOff || s > geoLen - sOff)) return;
       const ws = circuit ? ((s % lapLen) + lapLen) % lapLen : s;
@@ -519,7 +522,7 @@ export function generateTrack(input: string): TrackData {
           const f = orng.float();
           const off = lerp(rule.near, rule.far, f * f * 0.7 + f * 0.3);
           const sc = lerp(rule.scale[0], rule.scale[1], orng.float());
-          const rot = orng.float() * PI * 2;
+          const rot = alignRot(rule, side, orng.float() * PI * 2);
           const hue = (orng.float() * 2 - 1) * lerp(0.3, 1, tSa);
           add(sj, side * (edgeAt(sj, side) + off), rule, sc, rot, hue);
           if (rule.cluster && rule.cluster > 1 && orng.chance(0.25 + 0.5 * tSa)) {
@@ -527,7 +530,7 @@ export function generateTrack(input: string): TrackData {
             for (let c = 0; c < k; c++) {
               const s2 = sj + (orng.float() - 0.5) * 12;
               const off2 = Math.max(rule.near, off + (orng.float() - 0.5) * 10);
-              add(s2, side * (edgeAt(s2, side) + off2), rule, lerp(rule.scale[0], rule.scale[1], orng.float()), orng.float() * PI * 2, (orng.float() * 2 - 1) * lerp(0.3, 1, tSa));
+              add(s2, side * (edgeAt(s2, side) + off2), rule, lerp(rule.scale[0], rule.scale[1], orng.float()), alignRot(rule, side, orng.float() * PI * 2), (orng.float() * 2 - 1) * lerp(0.3, 1, tSa));
             }
           }
           s += spacing * (0.5 + orng.float());

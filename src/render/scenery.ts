@@ -19,6 +19,8 @@ uniform float uSCar;
 uniform int uLandmark;
 uniform int uSpan;
 uniform int uRotor;
+uniform int uBend;     // follow the road's curve along the object's length (keeps long buildings off the road)
+uniform float uFoot;   // model footprint radius (unscaled)
 uniform float uTime;
 uniform vec3 uWind; // dirX (lateral), strength, gust
 out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide;
@@ -32,7 +34,11 @@ void main(){
   float edge = side < 0.0 ? p.hwL : p.hwR;
   float ext = side < 0.0 ? p.extL : p.extR;
   if (uLandmark == 0 && abs(u) > ext + 1.0 && uSpan == 0) hide = 1.0;
-  if (uLandmark == 1 && abs(u) > ext) u = side * mix(ext, abs(u), 0.85);
+  if (uLandmark == 1 && abs(u) > ext) {
+    // squeeze far landmarks inside the folding limit, but never closer to the road than they were placed
+    float keep = min(abs(iSUR.y), edge + uFoot * iSHX.x + 1.0);
+    u = side * max(mix(ext, abs(u), 0.85), keep);
+  }
   float off = max(abs(u) - edge, 0.0);
   float base = uSpan == 1 ? 0.0 : terrainH(p, u, off);
   if (uLandmark == 1 && abs(iSUR.y) > ext) base -= 6.0;
@@ -70,8 +76,21 @@ void main(){
   vec3 right = vec3(cos(p.phi), 0.0, -sin(p.phi));
   vec3 fwd = vec3(sin(p.phi), 0.0, cos(p.phi));
   vec3 w = o + right * lp.x + vec3(0, 1, 0) * lp.y + fwd * lp.z;
+  vec3 nrm = right * ln.x + vec3(0, 1, 0) * ln.y + fwd * ln.z;
+  if (uBend == 1 && uSpan == 0) {
+    // place each vertex against the road at its own distance, so a long object bends with the road
+    // instead of cutting across the inside of a curve; blend back to rigid where the bent space folds
+    float kb = 1.0 - smoothstep(ext * 0.75, ext, abs(u) + uFoot * iSHX.x);
+    PathS q = pathAt(d + lp.z);
+    vec3 rq = vec3(cos(q.phi), 0.0, -sin(q.phi));
+    vec3 fq = vec3(sin(q.phi), 0.0, cos(q.phi));
+    vec2 xz = q.xz + rq.xz * (u + lp.x);
+    vec3 wb = vec3(xz.x, o.y + lp.y, xz.y);
+    w = mix(w, wb, kb);
+    nrm = mix(nrm, rq * ln.x + vec3(0, 1, 0) * ln.y + fq * ln.z, kb);
+  }
   vW = w;
-  vN = normalize(right * ln.x + vec3(0, 1, 0) * ln.y + fwd * ln.z);
+  vN = normalize(nrm);
   vec3 col = aCol.rgb * aCol.rgb;
   col *= 1.0 + hue * 0.16 * aAux.z;
   col += vec3(0.05, 0.035, -0.03) * hue * aAux.z;
@@ -139,6 +158,8 @@ interface TypeSet {
   span: boolean;
   rotor: boolean;
   radius: number;
+  foot: number;
+  bend: boolean;
 }
 
 const SHADOW_R: Partial<Record<number, number>> = {
@@ -198,7 +219,10 @@ export class Scenery {
           shadow = new Mesh(gl, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), 8, [{ loc: 0, size: 2, type: gl.FLOAT, offset: 0 }], 6);
           shadow.setInstances(data, 24, inst);
         }
-        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark: LANDMARK.has(type), span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0 });
+        let foot = 0;
+        for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
+        const landmark = LANDMARK.has(type);
+        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0, foot, bend: !landmark || type === O.TOWER });
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
@@ -241,7 +265,7 @@ export class Scenery {
     const r: number[] = [];
     gl.disable(gl.CULL_FACE);
     for (const set of this.sets) {
-      p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0);
+      p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0).i('uBend', set.bend ? 1 : 0).f('uFoot', set.foot);
       this.ranges(set, sCar, 60, set.landmark ? maxD + 400 : maxD, loop, r);
       for (let k = 0; k < r.length; k += 2) set.mesh.drawInstances(r[k], r[k + 1]);
     }
