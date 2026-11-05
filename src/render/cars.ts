@@ -113,7 +113,7 @@ void main(){
   } else if (m == 11) {
     col = vec3(0.0); emis = uNeonC * 2.0;
   } else col = base;
-  o = vec4(fogApply(col + emis, vW), 1.0);
+  o = vec4(fogApply(col + emis, vW), blurW(vW));
 }`;
 
 const SH_VS = PRELUDE + `

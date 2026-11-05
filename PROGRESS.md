@@ -45,6 +45,15 @@ Rebuild: `npm install` once, then `npm run build`.
 - Re-tested: all 64 courses pass (arcade margin 4.8–25.5 %), hashes identical in V8/Chromium/SpiderMonkey,
   `file://` flow zero errors / zero requests. Before/after shots in `review/fix4/`.
 
+## Fixes after second playtest (2026-11-05)
+- "Warp speed" stars and turbines: the radial speed blur streaked the whole screen. Every opaque surface now
+  writes a motion weight (falls off as 1/distance, like real forward motion) and the sky writes none, so near
+  road and verges still streak while stars, turbines and distant scenery stay sharp. Stars are now small
+  round twinkling dots of varied colour instead of filled square cells.
+- Forest depth: a dense, purely visual woodland band (about 13–85 m beyond the road edge, ~1.7 trees per metre
+  per side) generated in the renderer from the track code, kept clear of every other stretch of road; track
+  data, hashes and race results are unchanged. The ground under the trees is now a dark, dappled forest floor.
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.

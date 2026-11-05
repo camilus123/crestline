@@ -508,7 +508,7 @@ export class Renderer {
     // ---------- decals and blob shadows ----------
     if (this.hazards) this.hazards.drawDecals(prep, sCar);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.DST_COLOR, gl.ZERO);
+    gl.blendFuncSeparate(gl.DST_COLOR, gl.ZERO, gl.ZERO, gl.ONE);
     gl.depthMask(false);
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -2);
@@ -737,7 +737,7 @@ export class Renderer {
     const liv = LIVERIES[livery % LIVERIES.length];
     const draws: CarDraw[] = [{ model: m, shadowModel: m, geo: carId, paint: liv[0], accent: liv[1], spin: time * 2, steer: Math.sin(time * 0.7) * 0.3, brake: 0, lights: 1, tail: 1 }];
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.DST_COLOR, gl.ZERO);
+    gl.blendFuncSeparate(gl.DST_COLOR, gl.ZERO, gl.ZERO, gl.ONE);
     gl.depthMask(false);
     this.cars.drawShadows(prep, draws, 0.8);
     gl.depthMask(true);

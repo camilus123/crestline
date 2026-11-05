@@ -187,7 +187,7 @@ void main(){
   float sunR = pow(max(dot(R, uSunDir), 0.0), mix(40.0, 900.0, 1.0 - rough));
   col += (skyR * fres * gloss * (1.0 - rough) * 0.9 + uSunCol * sunR * gloss * 0.5 * (1.0 - rough));
   col += emis;
-  o = vec4(fogApply(col, vW), 1.0);
+  o = vec4(fogApply(col, vW), blurW(vW));
 }`;
 
 // ------------------------------------------------------------------ terrain
@@ -268,9 +268,20 @@ void main(){
     c += uG2 * grid * 0.8 * smoothstep(3.0, 6.0, vOff); }
   vec3 N = normalize(vN + vec3(g.g - 0.5, 0.0, g2.g - 0.5) * 0.25 * (1.0 - rock));
   float ao = 0.75 + 0.25 * smoothstep(0.0, 2.0, vOff);
-  vec3 col = lightSurf(c, N, vW, rough, spec, ao, 1.0);
+  float shade = 1.0;
+  if (uGType == 7) {
+    // forest floor under the trees: needles, moss and leaf litter in dappled canopy shade
+    float deep = smoothstep(5.0, 16.0, vOff) * (1.0 - rock);
+    float moss = texture(uNoiseT, vec2(u, s) * 0.04 + 0.13).g;
+    vec3 floorC = mix(vec3(0.15, 0.08, 0.035), vec3(0.085, 0.1, 0.035), smoothstep(0.55, 0.85, moss)) * (0.65 + 0.5 * det);
+    c = mix(c, floorC, deep * 0.95);
+    float dapple = smoothstep(0.42, 0.62, texture(uNoiseT, vec2(u, s) * 0.06 + 0.71).r);
+    shade = 1.0 - deep * (0.85 - 0.6 * dapple);
+    ao *= 1.0 - deep * 0.4;
+  }
+  vec3 col = lightSurf(c, N, vW, rough, spec, ao, shade);
   if (uGType == 5) col += uG2 * smoothstep(0.02, 0.0, abs(fract(u / 8.0) - 0.5) - 0.485) * 0.6 * smoothstep(3.0, 6.0, vOff);
-  o = vec4(fogApply(col, vW), 1.0);
+  o = vec4(fogApply(col, vW), blurW(vW));
 }`;
 
 // ------------------------------------------------------------------ water
@@ -304,7 +315,7 @@ void main(){
   vec3 sky = mix(uSkyRef2, uSkyRef, smoothstep(-0.05, 0.5, R.y));
   float sun = pow(max(dot(R, uSunDir), 0.0), 300.0) * 4.0;
   vec3 col = uWaterC * (uAmbTop * 0.6 + uSunCol * 0.1) + sky * fres + uSunCol * sun;
-  o = vec4(fogApply(col, vW), 1.0);
+  o = vec4(fogApply(col, vW), blurW(vW));
 }`;
 
 // ------------------------------------------------------------------ guard rail / barrier strip
@@ -332,7 +343,7 @@ out vec4 o;
 uniform vec3 uRailC;
 void main(){
   vec3 col = lightSurf(uRailC, normalize(vN), vW, 0.45, 0.5, 0.8, 1.0);
-  o = vec4(fogApply(col, vW), 1.0);
+  o = vec4(fogApply(col, vW), blurW(vW));
 }`;
 
 export class Ground {

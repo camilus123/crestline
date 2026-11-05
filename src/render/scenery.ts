@@ -1,7 +1,8 @@
 // Instanced roadside scenery. Each object type is one mesh + one instance buffer sorted by s;
 // per frame we draw only the s-range in view (two ranges across the loop seam on circuits).
 
-import { O } from '../track/defs';
+import { O, Scn } from '../track/defs';
+import { hashString, Rng } from '../core/rng';
 import { TrackData } from '../track/generator';
 import { GL, Mesh, Program } from './gl';
 import { LIGHT, NOISE, PATH, PRELUDE } from './glsl';
@@ -111,7 +112,7 @@ void main(){
   float ao = clamp(0.55 + vW.y * 0.0 + 0.45, 0.0, 1.0);
   vec3 col = lightSurf(vCol.rgb, N, vW, 1.0 - vCol.a, vCol.a, ao, 1.0);
   col += vCol.rgb * vAux.x * uEmisMul * 4.0;
-  o = vec4(fogApply(col, vW), 1.0);
+  o = vec4(fogApply(col, vW), blurW(vW));
 }`;
 
 const SHADOW_VS = PRELUDE + NOISE + PATH + `
@@ -160,6 +161,67 @@ interface TypeSet {
   radius: number;
   foot: number;
   bend: boolean;
+  backdrop: boolean; // deep woodland behind the roadside: visual only, shorter draw distance
+}
+
+/**
+ * Deep woodland for the Forest scenario: a dense, purely visual band of trees behind the roadside scenery.
+ * Generated from the track code (deterministic), kept off every other stretch of road, never collides
+ * (it starts well beyond the reach of the cars), and lives only in the renderer so track data is unchanged.
+ */
+function woodland(track: TrackData): { s: number; u: number; type: number; scale: number; rot: number; hue: number }[] {
+  const out: { s: number; u: number; type: number; scale: number; rot: number; hue: number }[] = [];
+  const rng = new Rng(hashString(track.code + '/woods'));
+  const n = track.n, D = 2, X = track.X, Z = track.Z, H = track.heading;
+  // spatial hash of road samples, to keep trees off other parts of the road
+  const CELL = 24;
+  const grid = new Map<number, number[]>();
+  const key = (cx: number, cz: number) => (cx + 4096) * 8192 + (cz + 4096);
+  for (let i = 0; i < n; i += 2) {
+    const k = key(Math.floor(X[i] / CELL), Math.floor(Z[i] / CELL));
+    let a = grid.get(k);
+    if (!a) grid.set(k, (a = []));
+    a.push(i);
+  }
+  const clearOfRoad = (x: number, z: number, own: number) => {
+    const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
+    for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+      const a = grid.get(key(cx + dx, cz + dz));
+      if (!a) continue;
+      for (const i of a) {
+        let di = Math.abs(i - own);
+        if (track.circuit) di = Math.min(di, n - di);
+        if (di * D < 70) continue; // the stretch this tree belongs to
+        const ex = X[i] - x, ez = Z[i] - z;
+        const lim = Math.max(track.hwL[i], track.hwR[i]) + 12;
+        if (ex * ex + ez * ez < lim * lim) return false;
+      }
+    }
+    return true;
+  };
+  const types = [O.FIR, O.FIR, O.FIR, O.OAK, O.OAK, O.BIRCH, O.PINE];
+  const STEP = 3.2, NEAR = 13, FAR = 85;
+  for (let i0 = 0; i0 < n - 1; i0++) {
+    // a few trees per side for every STEP metres of road
+    if ((i0 * D) % STEP >= D) continue;
+    for (const side of [-1, 1]) {
+      const k = 4 + Math.floor(rng.float() * 4);
+      for (let c = 0; c < k; c++) {
+        const i = Math.min(n - 1, i0 + Math.floor(rng.float() * (STEP / D + 1)));
+        const f = rng.float();
+        const edge = side < 0 ? track.hwL[i] : track.hwR[i];
+        const off = edge + NEAR + (FAR - NEAR) * (f * 0.6 + f * f * 0.4);
+        const u = side * off;
+        const th = H[i];
+        const x = X[i] + Math.cos(th) * u, z = Z[i] - Math.sin(th) * u;
+        const type = types[Math.floor(rng.float() * types.length)];
+        const scale = 0.85 + rng.float() * 0.9, rot = rng.float() * Math.PI * 2, hue = rng.float() * 2 - 1;
+        if (!clearOfRoad(x, z, i)) continue;
+        out.push({ s: i * D - track.sOff, u, type, scale, rot, hue });
+      }
+    }
+  }
+  return out;
 }
 
 const SHADOW_R: Partial<Record<number, number>> = {
@@ -174,6 +236,8 @@ export class Scenery {
   shProg: Program;
   quad: WebGLBuffer;
   lamps: { s: number; u: number; h: number; type: number }[] = [];
+  /** draw distance of the deep woodland as a fraction of the scenery distance (lower on low quality) */
+  backdropDist = 0.8;
   constructor(private gl: GL, track: TrackData) {
     this.prog = new Program(gl, OBJ_VS, OBJ_FS, 'objects');
     this.shProg = new Program(gl, SHADOW_VS, SHADOW_FS, 'blobshadow');
@@ -222,10 +286,39 @@ export class Scenery {
         let foot = 0;
         for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
         const landmark = LANDMARK.has(type);
-        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0, foot, bend: !landmark || type === O.TOWER });
+        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0, foot, bend: !landmark || type === O.TOWER, backdrop: false });
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
+    if (track.params.scenario === Scn.FOREST) this.addBackdrop(woodland(track));
+  }
+
+  private addBackdrop(trees: { s: number; u: number; type: number; scale: number; rot: number; hue: number }[]): void {
+    const gl = this.gl;
+    trees.sort((a, b) => a.s - b.s);
+    const byKey = new Map<string, typeof trees>();
+    trees.forEach((t, i) => {
+      const k = t.type + ':' + (i % 3);
+      let a = byKey.get(k);
+      if (!a) byKey.set(k, (a = []));
+      a.push(t);
+    });
+    for (const [k, list] of byKey) {
+      const [type, v] = k.split(':').map(Number);
+      const mb = buildModel(type, v);
+      const mesh = new Mesh(gl, mb.pack(), 32, [
+        { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
+        { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
+        { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
+        { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
+      ], mb.vertexCount);
+      const data = new Float32Array(list.length * 6), ss = new Float32Array(list.length);
+      list.forEach((t, j) => { data.set([t.s, t.u, t.rot, t.scale, t.hue, (j * 0.618034) % 1], j * 6); ss[j] = t.s; });
+      mesh.setInstances(data, 24, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }]);
+      let foot = 0;
+      for (let q = 0; q < mb.pos.length; q += 3) foot = Math.max(foot, Math.hypot(mb.pos[q], mb.pos[q + 2]));
+      this.sets.push({ type, mesh, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true });
+    }
   }
 
   /** visible instance ranges for one type */
@@ -266,7 +359,7 @@ export class Scenery {
     gl.disable(gl.CULL_FACE);
     for (const set of this.sets) {
       p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0).i('uBend', set.bend ? 1 : 0).f('uFoot', set.foot);
-      this.ranges(set, sCar, 60, set.landmark ? maxD + 400 : maxD, loop, r);
+      this.ranges(set, sCar, 60, set.landmark ? maxD + 400 : set.backdrop ? maxD * this.backdropDist : maxD, loop, r);
       for (let k = 0; k < r.length; k += 2) set.mesh.drawInstances(r[k], r[k + 1]);
     }
   }
@@ -308,3 +401,4 @@ export class Scenery {
     }
   }
 }
+export const woodlandCount = (t: TrackData): number => woodland(t).length;

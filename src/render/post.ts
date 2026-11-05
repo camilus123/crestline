@@ -73,11 +73,13 @@ void main(){
   }
   vec4 B = uBlur[vi];
   vec2 suv = uv * uScale;
-  vec3 col = texture(uScene, suv).rgb;
-  if (B.z > 0.001) {
+  vec4 sc = texture(uScene, suv);
+  vec3 col = sc.rgb;
+  if (B.z > 0.001 && sc.a > 0.01) {
     vec2 ctr = (vp.xy + B.xy * vp.zw);
     vec2 dir = (uv - ctr);
-    float m = smoothstep(0.08, 0.5, length(dir * vec2(1.6, 1.0))) * B.z;
+    // per-pixel weight from the scene alpha: near surfaces streak, distant scenery and the sky stay sharp
+    float m = smoothstep(0.08, 0.5, length(dir * vec2(1.6, 1.0))) * B.z * sc.a;
     vec3 acc = col; float wsum = 1.0;
     for (int i = 1; i < 9; i++) {
       float t = float(i) / 8.0;

@@ -111,6 +111,9 @@ uniform float uFlash; // lightning
 uniform float uWet;   // road wetness 0..1
 uniform float uTime;
 
+// motion-blur weight written to the scene's alpha: forward motion streaks near things, not far ones
+float blurW(vec3 wpos){ return clamp(20.0 / max(length(wpos - uCamPos), 1.0), 0.0, 1.0); }
+
 vec3 fogApply(vec3 col, vec3 wpos){
   vec3 v = wpos - uCamPos;
   float dist = length(v);

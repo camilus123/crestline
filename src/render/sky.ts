@@ -63,10 +63,18 @@ void main(){
   col += uGlow * pow(sunD, 6.0) * 0.55 + uGlow * pow(sunD, 64.0) * 0.6;
   // stars
   if (uExtra.x > 0.0 && wd.y > 0.0) {
+    // one star in some cells, drawn as a small soft dot at a random spot (not a filled square cell)
     vec2 sp = vec2(az * 120.0, el * 120.0);
-    float st = step(0.996, hash2(floor(sp))) * hash2(floor(sp) + 7.0);
-    float tw = 0.6 + 0.4 * sin(uTime * 3.0 + hash2(floor(sp)) * 40.0);
-    col += vec3(0.8, 0.85, 1.0) * st * tw * uExtra.x * 2.0 * smoothstep(0.0, 0.2, wd.y);
+    vec2 cell = floor(sp);
+    float pick = hash2(cell);
+    vec2 at = vec2(hash2(cell + 3.1), hash2(cell + 5.7)) * 0.6 + 0.2;
+    float px = fwidth(sp.x) + fwidth(sp.y); // one screen pixel in cell units
+    float r = length(fract(sp) - at) / max(px, 1e-4);
+    float mag = hash2(cell + 7.0);
+    float st = step(0.994, pick) * mag * (exp(-r * r * 0.9) + 0.25 * exp(-r * 0.9));
+    float tw = 0.65 + 0.35 * sin(uTime * (2.0 + mag * 3.0) + pick * 400.0);
+    vec3 sc = mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), hash2(cell + 9.3));
+    col += sc * st * tw * uExtra.x * 2.6 * smoothstep(0.0, 0.2, wd.y);
     // milky band
     float band = exp(-pow((wd.y - 0.55 + 0.3 * sin(az)), 2.0) * 18.0) * fbm(vec2(az * 6.0, el * 6.0));
     col += vec3(0.12, 0.14, 0.22) * band * uExtra.x;
@@ -173,7 +181,7 @@ void main(){
   // mist band
   col = mix(col, uFogC, uMist * exp(-abs(elD) * 0.25) * 0.7);
   col += vec3(0.5, 0.55, 0.7) * uFlash * 0.35;
-  o = vec4(col, 1.0);
+  o = vec4(col, 0.0); // the sky never streaks
 }`;
 
 export class Sky {

@@ -261,10 +261,10 @@ export class FX {
     gl.bindVertexArray(this.pVao);
     gl.enable(gl.BLEND);
     gl.depthMask(false);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, a);
     if (k > a) {
-      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
       // draw the additive tail: rebind offsets
       gl.bindBuffer(gl.ARRAY_BUFFER, this.pBuf);
       gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 40, a * 40);
@@ -297,7 +297,7 @@ export class FX {
     p.m4('uViewProj', vp).v3('uCamR', camR).v3('uCamU', camU);
     gl.bindVertexArray(this.gVao);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
     gl.depthMask(false);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.gCount);
     gl.depthMask(true);
@@ -312,7 +312,7 @@ export class FX {
     p.v4('uCol', col[0], col[1], col[2], amount).v3('uWindV', wind);
     gl.bindVertexArray(this.wVao);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
     gl.depthMask(false);
     const n = Math.floor(this.wCount * Math.min(1, amount) / 2) * 2;
     const pts = kind === 1;

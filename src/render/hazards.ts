@@ -45,7 +45,7 @@ void main(){
   vec3 N = normalize(vN);
   if (!gl_FrontFacing) N = -N;
   vec3 col = lightSurf(vCol.rgb, N, vW, 1.0 - vCol.a, vCol.a, 1.0, 1.0) + vCol.rgb * vEm * 5.0;
-  o = vec4(fogApply(col, vW), 1.0);
+  o = vec4(fogApply(col, vW), blurW(vW));
 }`;
 
 // decals: grid with (fraction u, fraction s) + per-decal (s0, len, u0, u1) + kind
@@ -347,7 +347,7 @@ export class HazardRenderer {
     prep(p);
     p.f('uSCar', sCar);
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
     gl.depthMask(false);
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-2, -4);
