@@ -97,15 +97,19 @@ export class BentPath {
     // only consider the visible window
     const kMax = Math.min(n, Math.ceil((this.maxD - this.dFirst) / PATH_STEP) + COARSE);
     const ncv = Math.min(nc, Math.ceil(kMax / COARSE));
+    // coarse samples sit at fixed places on the track (not fixed distances from the car), so the limits do not
+    // jitter as the car moves and the sampling slides along the road
+    const phase = (((Math.round(this.s0 / PATH_STEP) % COARSE) + COARSE) % COARSE);
+    const kAt = (i: number) => Math.max(0, Math.min(n - 1, i * COARSE - phase + COARSE));
     const eL = new Float32Array(ncv).fill(MAX_EXT), eR = new Float32Array(ncv).fill(MAX_EXT);
     for (let i = 0; i < ncv; i++) {
-      const ki = i * COARSE;
+      const ki = kAt(i);
       const fx = Math.sin(phi[ki]), fz = Math.cos(phi[ki]);
       const nx = fz, nz = -fx; // right normal
       const xi = px[ki], zi = pz[ki];
       for (let j = 0; j < ncv; j++) {
         if (Math.abs(i - j) < 4) continue;
-        const kj = j * COARSE;
+        const kj = kAt(j);
         const vx = px[kj] - xi, vz = pz[kj] - zi;
         const a = vx * nx + vz * nz;
         const b = vx * fx + vz * fz;
@@ -138,7 +142,7 @@ export class BentPath {
     };
     const L = mf(eL), R = mf(eR);
     for (let k = 0; k < n; k++) {
-      const f = k / COARSE;
+      const f = Math.max(0, (k + phase) / COARSE - 1);
       const i = Math.min(ncv - 1, Math.floor(f));
       const j = Math.min(ncv - 1, i + 1);
       const t = f - Math.floor(f);

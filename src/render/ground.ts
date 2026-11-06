@@ -195,14 +195,24 @@ void main(){
 const TERR_VS = COMMON_VS + `
 layout(location=0) in vec3 aRCS; // row, offset beyond edge, side
 out vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge;
-vec3 terrPoint(float d, float off, float side, out PathS p){
+// Terrain beyond the fold limit (ext, the inside of tight bends) is squeezed smoothly towards it instead of
+// being collapsed onto it, and only the far remainder sinks out of sight. Normals ignore that sinking, so the
+// lip is shaded like the ground next to it (a collapsed, near-vertical curtain showed as dark flickering bands).
+vec3 terrPoint(float d, float off, float side, bool sink, out PathS p, out float uuOut){
   p = pathAt(d);
   float edge = side < 0.0 ? p.hwL : p.hwR;
   float ext = side < 0.0 ? p.extL : p.extR;
   float uu = edge + off;
   float dip = 0.0;
-  if (uu > ext) { dip = (uu - ext) * 0.35; uu = ext; }
+  float es = max(edge + 1.0, ext - max(8.0, (ext - edge) * 0.35));
+  if (uu > es) {
+    float span = max(ext - es, 1.0);
+    float t = uu - es;
+    uu = es + span * (1.0 - exp(-t / span));
+    if (sink) dip = max(0.0, t - 2.5 * span) * 0.3;
+  }
   float u = side * uu;
+  uuOut = uu;
   float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) - dip;
   return bentPos(p, u, h);
 }
@@ -210,16 +220,19 @@ void main(){
   float d = rowD(aRCS.x);
   float off = aRCS.y, side = aRCS.z;
   PathS p;
-  vec3 w = terrPoint(d, off, side, p);
-  // normal by finite differences
+  float uu, tmp;
+  vec3 w = terrPoint(d, off, side, true, p, uu);
+  // normal by finite differences (on the unsunk surface)
   PathS q;
   float e = max(0.8, off * 0.08);
-  vec3 wa = terrPoint(d + 1.5, off, side, q);
-  vec3 wb = terrPoint(d, off + e, side, q);
-  vec3 tA = wa - w, tB = (wb - w) * side;
+  vec3 w0 = terrPoint(d, off, side, false, q, tmp);
+  vec3 wa = terrPoint(d + 1.5, off, side, false, q, tmp);
+  vec3 wb = terrPoint(d, off + e, side, false, q, tmp);
+  vec3 tA = wa - w0, tB = (wb - w0) * side;
   vec3 n = normalize(cross(tA, tB));
   if (n.y < 0.0) n = -n;
-  vW = w; vN = n; vSU = vec2(p.s, side * ((side < 0.0 ? p.hwL : p.hwR) + off)); vOff = off; vSlope = 1.0 - n.y; vFlags = p.flags;
+  // texture and ground-type lookups use where the vertex ends up (squeezed), not where it would have been
+  vW = w; vN = n; vSU = vec2(p.s, side * uu); vOff = max(0.0, uu - (side < 0.0 ? p.hwL : p.hwR)); vSlope = 1.0 - n.y; vFlags = p.flags;
   vEdge = side < 0.0 ? p.hwL : p.hwR;
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;

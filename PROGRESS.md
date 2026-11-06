@@ -110,6 +110,14 @@ Rebuild: `npm install` once, then `npm run build`.
   with a low sun (faces turned away from the sun get less, faces towards it more; flat ground unchanged);
   Motorway haze slightly thinner and its fill light lower. Checked Motorway, Marsh, Snow.
 
+## v1.9.0 (2026-11-06) — terrain "wall" on the inside of tight bends
+- Beyond the per-frame fold limit (inside of tight bends) terrain vertices were collapsed onto the limit line and
+  dropped, forming a near-vertical curtain: lit like a wall, sand texture stretched into dark vertical bands, and
+  flickering because the limit was sampled at positions that slid with the car.
+- Now: terrain is squeezed smoothly towards the limit (no kink), only the far remainder sinks, normals ignore the
+  sinking and texture/ground-type lookups use the squeezed position (the lip shades like the ground beside it);
+  the limit's coarse samples sit at fixed track positions, so it no longer jitters as the car moves.
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.
