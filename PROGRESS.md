@@ -81,6 +81,13 @@ Rebuild: `npm install` once, then `npm run build`.
   Menus already work by tapping. Touch-first devices start on the Medium preset if nothing was saved yet.
   Tested with Chromium phone emulation (layout, multi-touch, accelerate/steer/brake/gears); not tried on a real device.
 
+## v1.6.0 (2026-11-06)
+- Menus on phones: every screen scrolls when its content does not fit (swipe to scroll; a swipe that starts on a
+  button does not press it, a tap still does). Small screens get a compact layout (tighter spacing, smaller type,
+  map gets a fixed height); portrait stacks the columns into one list; touch-first devices hide the
+  keyboard/gamepad hint bar. Desktop layout unchanged (checked at 1920x1080: no scrolling, same sizes).
+  Tested in Chromium phone emulation at 915x412 and 412x915 (swipe scroll, no accidental press, tap START).
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.

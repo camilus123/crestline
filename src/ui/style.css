@@ -8,7 +8,7 @@
 .scr{position:absolute;inset:0;display:flex;flex-direction:column;pointer-events:auto;opacity:0;transform:translateY(1.2rem);transition:opacity .28s ease,transform .32s cubic-bezier(.2,.8,.2,1)}
 .scr.on{opacity:1;transform:none}
 .scr.bg{background:radial-gradient(120% 90% at 50% 110%,rgba(255,42,109,.28),transparent 60%),linear-gradient(180deg,rgba(6,3,20,.55),rgba(6,3,20,.82))}
-.scan:after{content:'';position:absolute;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
+.scan:after{content:'';position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px);mix-blend-mode:overlay}
 .disp{font-family:'Russo One','Chakra Petch',sans-serif;letter-spacing:.04em;text-transform:uppercase}
 .mono{font-family:'Share Tech Mono',monospace}
 .logo{font-family:'Russo One',sans-serif;font-style:italic;line-height:.9;letter-spacing:.02em;
@@ -184,3 +184,28 @@ body.touchui .hud .br{bottom:auto;top:22%}
 body.touchui .hud .bl{bottom:auto;top:30%}
 .tc-rotate{display:none;position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);padding:.8rem 1.2rem;background:rgba(0,0,0,.7);border:1px solid var(--cyan);color:#fff;font:700 16px 'Chakra Petch',sans-serif;letter-spacing:.1em;pointer-events:none}
 @media (orientation:portrait){.tc-rotate{display:block}}
+
+/* menus scroll when they do not fit (phones, small windows); a swipe that starts on a button scrolls, it does not press */
+.scr{overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:rgba(5,217,232,.55) transparent}
+.scr::-webkit-scrollbar{width:6px}
+.scr::-webkit-scrollbar-thumb{background:rgba(5,217,232,.55)}
+.slider{touch-action:pan-y}
+/* small screens: compact spacing, content takes its natural height and the screen scrolls */
+@media (max-height:620px),(max-width:760px){
+  html{font-size:12px}
+  #ui{--fs:clamp(12px, calc(1.6vh + .5vw), 18px)}
+  .hdr{padding:.7rem 1.2rem .3rem;gap:.8rem}
+  .hdr .logo{font-size:1.9rem}
+  .body{flex:none;min-height:auto;padding:.5rem 1.2rem 1.2rem;gap:1rem}
+  .row{min-height:2.6rem}
+  .mapbox{flex:none;height:46vh;min-height:12rem}
+  .carname{font-size:2.6rem}
+  .hint{padding:.4rem 1.2rem .8rem;flex-wrap:wrap;gap:.4rem 1.4rem}
+}
+/* narrow (portrait phone): columns stack */
+@media (max-width:760px){
+  .body{flex-direction:column}
+  .hdr .ttl{letter-spacing:.2em}
+}
+/* touch-first devices: the keyboard/gamepad hint bar only takes space */
+@media (pointer:coarse) and (hover:none){ .hint{display:none} }
