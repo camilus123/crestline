@@ -297,7 +297,7 @@ export class Game {
     }));
     const cfg: RaceCfg = {
       track, mode: S.mode, difficulty: S.difficulty, players, rivals: S.rivals, playerSlots: S.slots.slice(0, st.players),
-      fuel: S.mode === 'championship' && track.raceLen > 15000, seed: hashString(code) ^ S.index,
+      fuel: S.mode === 'championship', seed: hashString(code) ^ S.index,
     };
     return new Race(cfg);
   }
@@ -309,7 +309,7 @@ export class Game {
     if (bot) (this.session as any).bot = true;
     this.race = this.prepareRace();
     this.attract = null;
-    this.renderer.loadTrack(this.race.cfg.track);
+    this.renderer.loadTrack(this.race.cfg.track, this.race.cfg.fuel);
     this.hud?.destroy();
     this.hud = new Hud(this.ui, this.race.players.length);
     this.layout();

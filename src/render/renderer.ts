@@ -137,11 +137,14 @@ export class Renderer {
     this.dynScale = q.scale;
   }
 
-  loadTrack(t: TrackData): void {
+  /** pits: the race uses fuel stops (pit-lane markings and signs are drawn); otherwise the strip is a plain lay-by */
+  pits = false;
+  loadTrack(t: TrackData, pits = false): void {
+    this.pits = pits;
     this.track = new Track(t);
     this.look = LOOKS[t.params.scenario];
     this.tex.setGround(this.look.groundType);
-    this.scenery = new Scenery(this.gl, t);
+    this.scenery = new Scenery(this.gl, t, pits);
     this.hazards = new HazardRenderer(this.gl, t);
     this.fx.parts.length = 0;
     let sum = 0;
@@ -484,7 +487,7 @@ export class Renderer {
     p.tex('uAsphalt', this.tex.asphalt, 0).tex('uNoiseT', this.tex.noise, 1);
     p.v3('uRoadBase', rs.base).v3('uLine', rs.line).v3('uRumA', rs.rumbleA).v3('uRumB', rs.rumbleB);
     p.v4('uRoadStyle', rs.edge ? 1 : 0, rs.center, rs.dirt, rs.snow).v3('uSandC', look.ground[1]);
-    p.v4('uRoadStyle2', rs.patch, rs.gloss, tr.hwL(sCar) /* pit boundary approx */, rs.center === 4 ? 1 : 0);
+    p.v4('uRoadStyle2', rs.patch, rs.gloss, this.pits ? tr.hwL(sCar) : -tr.hwL(sCar) /* pit boundary approx; negative: no pit stops (solid edge line) */, rs.center === 4 ? 1 : 0);
     const lines = new Float32Array(12).fill(-1e6);
     lines[0] = 0;
     if (!tr.circuit) tr.d.checkpoints.forEach((c, i) => { if (i < 11) lines[i + 1] = c; });

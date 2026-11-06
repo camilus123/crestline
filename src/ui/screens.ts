@@ -3,6 +3,7 @@
 import type { Game } from '../game';
 import { MenuKey, ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS } from '../input';
 import { CARS } from '../sim/specs';
+import { fuelPlan } from '../sim/race';
 import { LIVERIES } from '../sim/roster';
 import { decodeCode, normalizeCode } from '../track/codes';
 import { SCENARIO_NAMES } from '../track/defs';
@@ -153,7 +154,7 @@ function setup(g: Game): Screen {
     } else {
       txt = `<b>${codes.length} races</b>: ` + codes.map((c) => SCENARIO_NAMES[decodeCode(c).scenario]).join(' · ');
     }
-    txt += st.mode === 'arcade' ? '<br>Beat the clock. Checkpoints extend your time. Highest score wins.' : '<br>Season against 19 rivals. Finish in the top ten to stay in. Long races need a fuel stop.';
+    txt += st.mode === 'arcade' ? '<br>Beat the clock. Checkpoints extend your time. Highest score wins.' : '<br>Season against 19 rivals. Finish in the top ten to stay in. Every race needs one fuel stop: stop on the pit strip on the right to refuel.';
     info.innerHTML = txt;
     const key = `${st.mode}:${st.course}${st.course === 'custom' ? ':' + normalizeCode(st.customCode).code : ''}`;
     const list = g.bestScores[key];
@@ -345,7 +346,7 @@ function grid(g: Game): Screen {
   const info = h('div', { class: 'panel' }, h('h3', {}, `RACE ${S.index + 1} OF ${S.codes.length}`),
     h('div', { class: 'code' }, d.code),
     h('div', { class: 'info', html: `<b>${d.scen.name.toUpperCase()}</b> · ${d.circuit ? `${d.laps} laps of ${(d.lapLen / 1000).toFixed(2)} km` : `${d.checkpoints.length} stages`} · ${(d.raceLen / 1000).toFixed(1)} km<br>` +
-      (S.mode === 'arcade' ? `Time for the first ${d.circuit ? 'lap' : 'stage'}: <b>${tl} s</b> · score so far <b>${S.score.map((x) => x.toLocaleString('en')).join(' / ')}</b>` : `${race.cfg.fuel ? '<b>Fuel stop needed</b> – pit strip on the right after the ' + (d.circuit ? 'start line' : 'checkpoints') + (d.scen.pitSigns ? '' : ' (no signs on mountain roads)') : 'No fuel stop needed'}`) +
+      (S.mode === 'arcade' ? `Time for the first ${d.circuit ? 'lap' : 'stage'}: <b>${tl} s</b> · score so far <b>${S.score.map((x) => x.toLocaleString('en')).join(' / ')}</b>` : `${race.cfg.fuel ? `<b>One fuel stop needed</b> – a full tank lasts about ${(fuelPlan(d).tank / 1000).toFixed(1)} km of ${(d.raceLen / 1000).toFixed(1)} km. Stop on the pit strip on the right after the ` + (d.circuit ? 'start line' : 'checkpoints') + (d.scen.pitSigns ? '' : ' (no signs on mountain roads)') : 'No fuel stop needed'}`) +
       `<br>Difficulty ${Math.round(p.difficulty * 4)}% · curves ${Math.round(p.curves * 4)}% · hills ${Math.round(p.hills * 4)}%`
       + (g.bestTimes[d.code] ? `<br>Best time: <b>${fmtTime(g.bestTimes[d.code].time)}</b> by ${g.bestTimes[d.code].name}` : '') }));
   // championship standings

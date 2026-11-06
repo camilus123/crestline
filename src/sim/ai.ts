@@ -102,7 +102,8 @@ export class AIDriver {
   prof: AIProfile;
   pace = 1; // external multiplier (rubber band, scenario)
   isBot = false; // drives a player car (testing)
-  pitTarget = 0; // bot: fuel level to fill to (0 = not pitting)
+  pitTarget = 0; // fuel level to fill to (0 = not pitting)
+  pitExit = false; // filled up, leaving along the inner half of the pit lane
   private wobble = 0;
   private wobT = 0;
   private hz: Hazard[] = [];
@@ -136,33 +137,47 @@ export class AIDriver {
     }
     xT += this.wobble;
 
-    // ---- pit stop (bots only; rivals never pit) ----
-    let pitting = false;
-    if (this.isBot && pitNeed > 0) {
-      // decide once per pit strip: stop only if the tank cannot reach the finish
-      if (this.pitTarget === 0 && car.fuel + 0.02 < pitNeed && car.fuel < 0.85) this.pitTarget = Math.min(1, pitNeed + 0.03);
-      if (this.pitTarget > 0) {
+    // ---- pit stop: anyone who cannot reach the finish on what is in the tank ----
+    // Each car has its own stopping spot along the strip and fills up in the outer half of the pit lane;
+    // cars arriving or leaving use the inner half, so they pass cars that are still filling.
+    let pitting = false, inStrip = false;
+    // the race's advice is re-read every step; a stop decided for one strip never carries over to the next
+    const onStrip = d.pits.some((pz) => track.delta(s, pz.s0) <= 0 && track.delta(s, pz.s1) > 0);
+    if (pitNeed > 0) {
+      if (this.pitTarget === 0 && car.fuel + 0.02 < pitNeed) this.pitTarget = Math.min(1, pitNeed + 0.03);
+    } else if (!onStrip) this.pitTarget = 0;
+    if (this.pitTarget > 0) {
+      {
         const base = hwL;
         for (const pz of d.pits) {
           const ds = track.delta(s, pz.s0);
           const de = track.delta(s, pz.s1);
           if ((ds > -10 && ds < 260) || (ds <= 0 && de > 0)) {
             pitting = true;
-            xT = base + 3.2;
-            const stopAt = (pz.s0 + pz.s1) / 2;
+            const slot = this.isBot ? 0.5 : 0.15 + 0.7 * (((car.index * 7) % 11) / 10);
+            const stopAt = pz.s0 + (pz.s1 - pz.s0) * slot;
             const dd = track.delta(s, stopAt);
+            // approach along the road edge (pit signs stand just off it); cross into the pit lane on the strip
+            inStrip = ds <= 0;
+            xT = !inStrip ? Math.min(base + 1.4, hwR - 1.3) : dd < 30 ? base + 5.0 : base + 1.4;
             const vStop = dd > 0 ? Math.sqrt(2 * 6 * Math.max(0, dd - 2)) : 0;
             vT = Math.min(vT, vStop, dd < 60 ? 14 : 99);
             if (Math.abs(dd) < 25 && v < 0.5) vT = 0;
             if (car.fuel >= this.pitTarget) {
               this.pitTarget = 0;
-              pitting = false;
+              this.pitExit = true;
             }
           }
         }
       }
     }
 
+    if (this.pitExit) {
+      // filled up: leave along the inner half of the pit lane, past anyone still filling
+      let inPit = false;
+      for (const pz of d.pits) if (track.delta(s, pz.s1) > 0 && track.delta(s, pz.s0) < 0) inPit = true;
+      if (inPit) { pitting = true; inStrip = true; xT = hwL + 1.4; } else this.pitExit = false;
+    }
     // ---- blocking players (aggression) ----
     if (!this.isBot && this.prof.aggression > 0) {
       for (const p of players) {
@@ -196,6 +211,7 @@ export class AIDriver {
     let bestX = xT, bestCost = Infinity, bestBlock: Car | null = null;
     const N = 22;
     for (let k = 0; k <= N + 1; k++) {
+      if (inStrip && k !== N + 1) continue; // in the pit lane: keep the pit line, only watch the car ahead in it
       const x = k === N + 1 ? xT : lo + ((hi - lo) * k) / N;
       let cost = Math.abs(x - xT) * 0.4 + Math.abs(x - car.x) * 0.12;
       let block: Car | null = null;

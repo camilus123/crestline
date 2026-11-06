@@ -124,9 +124,10 @@ void main(){
       m = 0.0;
     }
     // pit strip: dashed boundary along the original edge
+    // (z < 0: no pit stops in this race, so the strip is a hard shoulder behind a solid edge line)
     if (fl(4)) {
-      float pb = u - uRoadStyle2.z;
-      m = max(m, lineAA(pb, 0.1) * step(fract(s / 4.0), 0.5));
+      float pb = u - abs(uRoadStyle2.z);
+      m = max(m, lineAA(pb, 0.1) * (uRoadStyle2.z > 0.0 ? step(fract(s / 4.0), 0.5) : 1.0));
       // hatching inside the strip
       float hz = step(0.0, pb) * lineAA(fract((s + u) / 3.0) - 0.5, 0.06) * 0.0;
       m = max(m, hz);

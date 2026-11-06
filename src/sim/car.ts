@@ -2,7 +2,7 @@
 // No world heading, no spin-outs, no damage. Bends push the car outwards by curvature x speed^2.
 
 import { Hazard } from '../track/generator';
-import { Hz, Scn, Surf } from '../track/defs';
+import { Hz, O, Scn, Surf } from '../track/defs';
 import { hazardActive, Track } from '../track/track';
 import { CarSpec, torqueCurve } from './specs';
 
@@ -31,6 +31,7 @@ export interface SimEnv {
   time: number;
   scen: number;
   fuel: boolean;
+  tank: number; // metres a full tank lasts at full throttle (Championship sizes it per race)
   hzBuf: Hazard[];
   objBuf: number[];
   knocked: Set<Hazard>;
@@ -428,6 +429,7 @@ export class Car {
       const o = track.d.objects;
       for (let k = 0; k < objs.length; k++) {
         const i = objs[k];
+        if (!env.fuel && o.type[i] === O.PITSIGN) continue; // no pit stops in this race: no pit signs either
         const r = o.radius[i];
         const du = this.x - o.u[i];
         if (Math.abs(du) > r + 0.9) continue;
@@ -443,7 +445,7 @@ export class Car {
 
     // fuel
     if (env.fuel && !outOfFuel) {
-      const used = (this.v * dt * (0.3 + 0.7 * this.throttle)) / 15000;
+      const used = (this.v * dt * (0.3 + 0.7 * this.throttle)) / env.tank;
       this.fuel -= used;
       this.fuelUsed += used;
       if (this.fuel < 0) this.fuel = 0;

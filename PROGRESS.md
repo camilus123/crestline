@@ -27,7 +27,8 @@ Rebuild: `npm install` once, then `npm run build`.
 
 ## Test status (final)
 - Determinism: 100 tracks hash identically (combined `a0d30c1d`) in Node/V8, headless Chromium 153 and SpiderMonkey 115 (gjs). Open `crestline.html?hashcheck` in any browser to compare.
-- All 64 course tracks: bot beats every arcade limit (margin 4.8–25.5 %) and finishes top ten in every championship race.
+- All 64 course tracks: bot beats every arcade limit (margin 4.8–25.5 %); championship (every race now with a fuel stop):
+  31/32 top ten in the single-seed run, the 32nd (Storm, Hard) makes the top ten in 7 of 8 seeds (6 of 8 before fuel).
 - Keyboard-tapping driver (8 Hz, 150 ms reaction) laps within 2–5 % of the analogue bot with no crashes (Mountains excepted).
 - `file://` with all network blocked: menus from title to race, zero console errors, zero network requests.
 
@@ -87,6 +88,19 @@ Rebuild: `npm install` once, then `npm run build`.
   map gets a fixed height); portrait stacks the columns into one list; touch-first devices hide the
   keyboard/gamepad hint bar. Desktop layout unchanged (checked at 1920x1080: no scrolling, same sizes).
   Tested in Chromium phone emulation at 915x412 and 412x915 (swipe scroll, no accidental press, tap START).
+
+## v1.7.0 (2026-11-06) — fuel in every Championship race
+- Before: fuel only in Championship races over 15 km (12 of 64 races), rivals never pitted (they were slowed instead),
+  and pit strips were drawn on every track — so the mechanic looked missing.
+- Now: every Championship race uses fuel; the tank is sized per race (62–74 % of the distance) so exactly one stop is
+  needed and the best-placed pit strip is always in reach. Fuel gauge always shown; grid screen states the tank range.
+- Rivals really pit: one-stop strategy (pass a strip while the next is reachable, stop where one fill reaches the
+  finish, fill only what is needed); each has its own stopping spot, fills in the outer half of the pit lane and
+  arrives/leaves along the inner half; approach along the road edge so nobody clips the pit signs. In fuel races
+  rivals run 1 % slower (the stops reshuffle a field you start at the back of).
+- Arcade (no fuel): no pit signs (removed from the sim too, no invisible posts) and no pit-lane markings — the strip is
+  a hard shoulder behind a solid edge line.
+- Tested: all 32 Championship races — every car pits, nobody runs dry; Arcade results unchanged.
 
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.

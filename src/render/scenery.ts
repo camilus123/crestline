@@ -268,7 +268,7 @@ export class Scenery {
   lamps: { s: number; u: number; h: number; type: number }[] = [];
   /** draw distance of the deep woodland as a fraction of the scenery distance (lower on low quality) */
   backdropDist = 0.8;
-  constructor(private gl: GL, track: TrackData) {
+  constructor(private gl: GL, track: TrackData, pits = true) {
     this.prog = new Program(gl, OBJ_VS, OBJ_FS, 'objects');
     this.shProg = new Program(gl, SHADOW_VS, SHADOW_FS, 'blobshadow');
     this.quad = gl.createBuffer()!;
@@ -278,6 +278,7 @@ export class Scenery {
     const byType = new Map<number, number[]>();
     for (let i = 0; i < o.count; i++) {
       const t = o.type[i];
+      if (!pits && t === O.PITSIGN) continue;
       let a = byType.get(t);
       if (!a) byType.set(t, (a = []));
       a.push(i);

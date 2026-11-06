@@ -17,9 +17,15 @@ for (const mode of ['arcade', 'championship'] as const) {
     const rivals = makeRivals(hashString(mode + course + COURSES[mode][course].join('')), diff);
     for (const code of COURSES[mode][course]) {
       const track = generateTrack(code);
-      const r = new Race({ track, mode, difficulty: diff, players: [{ name: 'BOT', car: 0, manual: false, accelButton: false, color: 0, bot: true }], rivals, playerSlots: [19], fuel: mode === 'championship' && track.raceLen > 15000, seed: 5 });
+      const r = new Race({ track, mode, difficulty: diff, players: [{ name: 'BOT', car: 0, manual: false, accelButton: false, color: 0, bot: true }], rivals, playerSlots: [19], fuel: mode === 'championship', seed: 5 });
       let steps = 0, crashes = 0;
-      while (!r.over && steps < 120 * 60 * 25) { r.step([NO_INPUT]); for (const e of r.events) if (e.t === 'crash' || e.t === 'headon') crashes++; steps++; }
+      const pitted = new Set<number>(), dry = new Set<number>();
+      while (!r.over && steps < 120 * 60 * 25) {
+        r.step([NO_INPUT]);
+        for (const e of r.events) if (e.t === 'crash' || e.t === 'headon') crashes++;
+        if (r.cfg.fuel) for (const c of r.cars) { if (c.pitting) pitted.add(c.index); if (c.fuel <= 0 && !c.finished) dry.add(c.index); }
+        steps++;
+      }
       const p = r.players[0];
       let ok: boolean, info: string;
       if (mode === 'arcade') {
@@ -31,7 +37,8 @@ for (const mode of ['arcade', 'championship'] as const) {
         info = `t=${used.toFixed(0)}s limit=${total}s margin=${(margin * 100).toFixed(1)}% left=${r.timeLeft[0].toFixed(1)}`;
       } else {
         ok = p.position <= 10;
-        info = `pos=${p.position} fuel=${r.cfg.fuel ? p.fuel.toFixed(2) : '-'}`;
+        info = `pos=${p.position} fuel=${p.fuel.toFixed(2)} pitted=${pitted.size}/20 dry=${dry.size}`;
+        if (dry.size) ok = false;
       }
       n++;
       if (!ok) fails++;

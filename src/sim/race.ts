@@ -10,6 +10,29 @@ import { CARS, CarSpec } from './specs';
 
 export type Mode = 'arcade' | 'championship' | 'practice' | 'attract';
 
+/**
+ * Championship fuel: the tank is sized per race so that it cannot last the distance (one stop is needed)
+ * but always reaches the best-placed pit strip, and the finish after a full refill, with a margin.
+ */
+/** pit strips as race-distance windows (circuits: one per lap after the first) */
+export function pitWindows(t: TrackData): { a: number; b: number }[] {
+  const wins: { a: number; b: number }[] = [];
+  if (t.circuit) for (let k = 1; k < t.laps; k++) for (const p of t.pits) wins.push({ a: k * t.lapLen + p.s0, b: k * t.lapLen + p.s1 });
+  else for (const p of t.pits) wins.push({ a: p.s0, b: p.s1 });
+  return wins.sort((x, y) => x.a - y.a);
+}
+
+export function fuelPlan(t: TrackData): { tank: number; bestPit: number } {
+  const R = t.raceLen;
+  const wins = pitWindows(t);
+  let best = Infinity, bestPit = 0;
+  for (const w of wins) {
+    const need = Math.max(w.b, R - w.a);
+    if (need < best) { best = need; bestPit = (w.a + w.b) / 2; }
+  }
+  return { tank: Math.max(0.62 * R, best * 1.12), bestPit };
+}
+
 export interface PlayerCfg {
   name: string;
   car: number;
@@ -95,7 +118,7 @@ export class Race {
     this.track = new Track(cfg.track);
     this.rng = new Rng(cfg.seed);
     this.rnd = () => this.rng.float();
-    this.env = { time: 0, scen: cfg.track.params.scenario, fuel: cfg.fuel, hzBuf: [], objBuf: [], knocked: new Set(), coneHits: [] };
+    this.env = { time: 0, scen: cfg.track.params.scenario, fuel: cfg.fuel, tank: cfg.fuel ? fuelPlan(cfg.track).tank : 15000, hzBuf: [], objBuf: [], knocked: new Set(), coneHits: [] };
     const total = cfg.players.length + cfg.rivals.length;
     // grid slots
     const slotOf: number[] = new Array(total).fill(-1);
@@ -163,12 +186,9 @@ export class Race {
       this.bestPos.push(99);
       this.segIndex.push(0);
     }
-    // rivals pace: long races with fuel stops – rivals never pit, so slow them by the pit loss
-    if (cfg.fuel) {
-      const loss = 26; // seconds a stop really costs (braking, filling, accelerating)
-      const f = Math.max(0.92, 1 - loss / Math.max(60, this.refTime));
-      for (const d of this.drivers) if (d) d.prof.skill *= f;
-    }
+    // fuel races: rivals refuel in the pits like the players do (see AIDriver pit stop); the stops reshuffle a
+    // field you start at the back of, so rivals give up 1 % pace to keep the top ten within reach on Hard
+    if (cfg.fuel) for (const d of this.drivers) if (d) d.prof.skill *= 0.99;
     this.pitNeed = cfg.fuel ? 1 : 0;
   }
 
@@ -263,7 +283,7 @@ export class Race {
         if (car.finished && !bot) {
           inp = { ...NO_INPUT, throttle: 0.2, brake: 0.3 };
         } else if (bot) {
-          const need = this.cfg.fuel ? this.fuelNeeded(car) : 0;
+          const need = this.cfg.fuel ? this.pitAdvice(car) : 0;
           inp = bot.drive(tr, this.cars, this.time, [], trafficPos, need, this.rnd);
         } else inp = inputs[i] || NO_INPUT;
         if (this.over) inp = { ...NO_INPUT, brake: 0.5 };
@@ -275,7 +295,7 @@ export class Race {
           const gap = car.dist - lead.dist;
           d.pace = 1 - Math.max(-0.025, Math.min(0.025, gap / 12000));
         }
-        inp = d.drive(tr, this.cars, this.time, this.players, trafficPos, 0, this.rnd);
+        inp = d.drive(tr, this.cars, this.time, this.players, trafficPos, this.cfg.fuel ? this.pitAdvice(car) : 0, this.rnd);
         if (car.finished) inp = { ...inp, throttle: Math.min(inp.throttle, 0.4) };
       }
       car.step(inp, tr, this.env);
@@ -297,11 +317,29 @@ export class Race {
   }
   eventLog: RaceEvent[] = [];
 
+  private wins: { a: number; b: number }[] | null = null;
+  /**
+   * Pit strategy for a computer-driven car: the fuel level to fill to at the coming pit strip, or 0 to drive by.
+   * Stop where one fill gets you to the finish; pass a strip if the next one is still within reach.
+   */
+  pitAdvice(car: Car): number {
+    const need = this.fuelNeeded(car);
+    if (car.fuel + 0.02 >= need) return 0;
+    if (need <= 0.97) return need;
+    const wins = (this.wins ??= pitWindows(this.cfg.track));
+    const rate = car.dist > 2000 ? car.fuelUsed / car.dist : 1 / this.env.tank;
+    let k = wins.findIndex((w) => w.b > car.dist);
+    if (k >= 0 && wins[k].a <= car.dist + 300) k++; // the strip coming up now; can we reach the one after?
+    const next = k >= 0 ? wins[k] : undefined;
+    if (next && car.fuel > (next.a + 150 - car.dist) * rate * 1.1 + 0.05) return 0;
+    return 1;
+  }
+
   fuelNeeded(car: Car): number {
     // fuel fraction needed to reach the finish, plus margin
     const remain = this.cfg.track.raceLen - car.dist;
     // use the consumption actually observed so far (falls back to full-throttle burn early on)
-    const rate = car.dist > 2000 ? car.fuelUsed / car.dist : 1 / 15000;
+    const rate = car.dist > 2000 ? car.fuelUsed / car.dist : 1 / this.env.tank;
     return Math.min(1, remain * rate * 1.06 + 0.04);
   }
 
@@ -442,7 +480,7 @@ export class Race {
       }
       // refuelling: stopped on the pit strip
       c.pitting = false;
-      if (this.cfg.fuel && c.isPlayer && tr.isPit(c.s) && c.x > tr.hwL(c.s) + 0.6 && c.v < 0.7 && c.fuel < 1) {
+      if (this.cfg.fuel && tr.isPit(c.s) && c.x > tr.hwL(c.s) + 0.6 && c.v < 0.7 && c.fuel < 1) {
         c.fuel = Math.min(1, c.fuel + DT * 0.14);
         c.pitting = true;
       }
