@@ -69,7 +69,8 @@ export class Input {
       if (!e.repeat) this.keys.add(e.code);
       this.onKey?.(e);
       const m = menuFromKey(e.code);
-      if (m) this.menuQueue.push(m);
+      // a held Esc (e.g. holding it to leave fullscreen) is one 'back', not a stream of them
+      if (m && !(m === 'back' && e.repeat)) this.menuQueue.push(m);
     }, { passive: false });
     window.addEventListener('keyup', (e) => {
       this.keys.delete(e.code);

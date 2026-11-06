@@ -89,6 +89,16 @@ export class Game {
   private refresh = 1 / 60;
   private dtHist: number[] = [];
   private dynT = 0;
+  // performance monitor: wall-clock frame intervals, CPU time spent in a frame, GPU time from timer queries
+  private ivl: number[] = [];
+  private cpuMs: number[] = [];
+  private gpuMs: number[] = [];
+  private gpuT: { ext: any; free: WebGLQuery[]; busy: WebGLQuery[] } | null | undefined;
+  private benchEl: HTMLDivElement | null = null;
+  // fullscreen: Keyboard Lock lets Esc reach the game (hold Esc to leave fullscreen); without it the browser
+  // spends the first Esc press on leaving fullscreen, so that exit is treated as the press it was
+  private fsExitByUs = false;
+  private escLocked = false;
   bench: { t: number; frames: number[]; done: (r: string) => void } | null = null;
   private trackCache = new Map<string, TrackData>();
   idle = 0;
@@ -120,9 +130,19 @@ export class Game {
         this.toggleFullscreen();
       }
     };
-    window.addEventListener('blur', () => this.setPaused(true, true));
+    window.addEventListener('blur', () => { if (!this.bench) this.setPaused(true, true); });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.setPaused(true, true);
+    });
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) { this.lockEsc(); return; }
+      try { (navigator as any).keyboard?.unlock?.(); } catch { /* not supported */ }
+      if (!this.fsExitByUs && !this.escLocked && document.hasFocus()) {
+        if (this.screenId === 'race' && this.race && !this.paused) this.setPaused(true);
+        else if (this.screenId !== 'race') this.input.menuQueue.push('back');
+      }
+      this.fsExitByUs = false;
+      this.escLocked = false;
     });
     window.addEventListener('resize', () => this.layout());
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -135,11 +155,22 @@ export class Game {
 
   toggleFullscreen(): void {
     try {
-      if (document.fullscreenElement) void document.exitFullscreen();
-      else void document.documentElement.requestFullscreen({ navigationUI: 'hide' } as any);
+      if (document.fullscreenElement) {
+        this.fsExitByUs = true;
+        void document.exitFullscreen();
+      } else {
+        document.documentElement.requestFullscreen({ navigationUI: 'hide' } as any).catch(() => toast('Fullscreen is not available'));
+      }
     } catch {
       toast('Fullscreen is not available');
     }
+  }
+
+  /** Chrome/Edge: deliver Esc to the game while fullscreen (the browser then asks you to hold Esc to exit). */
+  private lockEsc(): void {
+    const kb = (navigator as any).keyboard;
+    if (!kb?.lock) return;
+    kb.lock(['Escape']).then(() => { this.escLocked = !!document.fullscreenElement; }, () => { this.escLocked = false; });
   }
 
   async start(): Promise<void> {
@@ -442,6 +473,9 @@ export class Game {
   }
 
   frame(now: number, forceDt?: number): void {
+    const t0 = performance.now();
+    const monitor = this.settings.fps || !!this.bench;
+    if (monitor) this.gpuBegin();
     const raw = this.last ? (now - this.last) / 1000 : 1 / 60;
     const dt = forceDt ?? Math.min(0.1, raw);
     this.last = now;
@@ -523,19 +557,60 @@ export class Game {
       if (this.screenId === 'setup' && this.idle > 45) this.show('title');
     }
     this.dynamicResolution(raw);
+    if (monitor) {
+      this.gpuEnd();
+      this.ivl.push(raw);
+      if (this.ivl.length > 480) this.ivl.shift();
+      this.cpuMs.push(performance.now() - t0);
+      if (this.cpuMs.length > 240) this.cpuMs.shift();
+    }
     this.overlay();
     if (this.bench) this.benchTick(raw);
     if (!this.manual) requestAnimationFrame((t) => this.frame(t));
   }
 
+  // GPU frame time via EXT_disjoint_timer_query_webgl2 (results arrive a few frames late)
+  private gpuBegin(): void {
+    const gl = this.renderer.gl;
+    if (this.gpuT === undefined) {
+      const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      this.gpuT = ext ? { ext, free: [], busy: [] } : null;
+    }
+    const T = this.gpuT;
+    if (!T) return;
+    while (T.busy.length) {
+      const q = T.busy[0];
+      if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+      T.busy.shift();
+      const disjoint = gl.getParameter(T.ext.GPU_DISJOINT_EXT);
+      if (!disjoint) {
+        this.gpuMs.push(gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6);
+        if (this.gpuMs.length > 240) this.gpuMs.shift();
+      }
+      T.free.push(q);
+    }
+    if (T.busy.length > 6) return;
+    const q = T.free.pop() ?? gl.createQuery();
+    if (!q) return;
+    gl.beginQuery(T.ext.TIME_ELAPSED_EXT, q);
+    T.busy.push(q);
+    (T as any).open = true;
+  }
+  private gpuEnd(): void {
+    const T = this.gpuT as any;
+    if (!T?.open) return;
+    this.renderer.gl.endQuery(T.ext.TIME_ELAPSED_EXT);
+    T.open = false;
+  }
+
   private dynamicResolution(raw: number): void {
+    // refresh interval estimate (always, the monitor shows it): low percentile of recent frame intervals
+    const s = this.dtHist.slice().sort((a, b) => a - b);
+    if (s.length > 30) this.refresh = Math.max(1 / 500, s[Math.floor(s.length * 0.1)]);
     if (!this.settings.dynRes || this.manual) {
       this.renderer.dynScale = this.renderer.quality.scale;
       return;
     }
-    // refresh interval estimate: low percentile of recent frame intervals
-    const s = this.dtHist.slice().sort((a, b) => a - b);
-    if (s.length > 30) this.refresh = Math.max(1 / 360, s[Math.floor(s.length * 0.1)]);
     this.dynT += raw;
     if (this.dynT < 0.25) return;
     this.dynT = 0;
@@ -552,17 +627,27 @@ export class Game {
     const on = this.settings.fps;
     this.f3.style.display = on ? '' : 'none';
     if (!on) return;
-    const ft = this.frameTimes.slice(-60);
-    const avg = ft.reduce((a, b) => a + b, 0) / Math.max(1, ft.length);
-    const worst = Math.max(...ft);
+    // last second of wall-clock frame intervals
+    const ft: number[] = [];
+    let sum = 0;
+    for (let i = this.ivl.length - 1; i >= 0 && sum < 1; i--) { ft.push(this.ivl[i]); sum += this.ivl[i]; }
+    const avg = sum / Math.max(1, ft.length);
+    const worst = ft.length ? Math.max(...ft) : 0;
+    const sorted = ft.slice().sort((a, b) => b - a);
+    const low = sorted.slice(0, Math.max(1, Math.ceil(sorted.length * 0.01)));
+    const lowFps = low.length ? low.length / low.reduce((a, b) => a + b, 0) : 0;
+    const mean = (a: number[]) => a.slice(-120).reduce((x, y) => x + y, 0) / Math.max(1, Math.min(120, a.length));
+    const cpu = mean(this.cpuMs), gpu = this.gpuMs.length ? mean(this.gpuMs) : -1;
     const R = this.renderer;
     this.f3.textContent =
-      `FPS        ${(1 / avg).toFixed(0)}\n` +
-      `frame      ${(avg * 1000).toFixed(2)} ms  (max ${(worst * 1000).toFixed(1)})\n` +
+      `FPS        ${(1 / avg).toFixed(1)}  (1% low ${lowFps.toFixed(0)})\n` +
+      `frame      ${(avg * 1000).toFixed(2)} ms  (max ${(worst * 1000).toFixed(2)})\n` +
+      `CPU        ${cpu.toFixed(2)} ms   GPU ${gpu >= 0 ? gpu.toFixed(2) + ' ms' : 'n/a'}\n` +
+      `headroom   ${gpu >= 0 ? Math.max(0, (1 - Math.max(cpu, gpu) / (avg * 1000)) * 100).toFixed(0) + ' %' : 'n/a'}\n` +
       `render     ${R.renderW}×${R.renderH}  (${Math.round((R.renderW / this.canvas.width) * 100)}%)\n` +
       `output     ${this.canvas.width}×${this.canvas.height}\n` +
       `preset     ${R.quality.name}${this.settings.dynRes ? '  dyn-res' : ''}  MSAA ${R.quality.msaa}x\n` +
-      `refresh    ~${(1 / this.refresh).toFixed(0)} Hz`;
+      `refresh    ~${(1 / this.refresh).toFixed(0)} Hz  (estimated from frame timing)`;
   }
 
   // ---------------------------------------------------------------- benchmark
@@ -573,13 +658,28 @@ export class Game {
     this.enterRace(true);
     // skip the countdown
     this.race!.countdown = 0.01;
+    this.paused = false;
+    // nothing may cover the race while it is measured
+    for (const e of Array.from(this.ui.querySelectorAll('.scr'))) if (e !== this.screen?.el) e.remove();
     this.bench = { t: 0, frames: [], done };
+    this.cpuMs.length = 0;
+    this.gpuMs.length = 0;
+    this.benchEl?.remove();
+    this.benchEl = h('div', { class: 'benchbar' });
+    document.body.appendChild(this.benchEl);
   }
   private benchTick(raw: number): void {
     const b = this.bench!;
     b.t += raw;
     if (b.t > 2) b.frames.push(raw);
+    if (this.benchEl) {
+      const recent = b.frames.slice(-120);
+      const fps = recent.length ? recent.length / recent.reduce((x, y) => x + y, 0) : 0;
+      this.benchEl.textContent = b.t < 2 ? 'BENCHMARK · warming up' : `BENCHMARK · ${Math.min(30, b.t - 2).toFixed(1)} / 30 s · ${fps.toFixed(0)} fps`;
+    }
     if (b.t >= 32) {
+      this.benchEl?.remove();
+      this.benchEl = null;
       const f = b.frames.slice().sort((x, y) => x - y);
       const avg = f.reduce((x, y) => x + y, 0) / f.length;
       const p99 = f[Math.floor(f.length * 0.99)] ?? avg;
@@ -595,6 +695,8 @@ export class Game {
         `1% low       ${low1fps.toFixed(1)} fps`,
         `99th pct     ${(p99 * 1000).toFixed(2)} ms`,
         `frames       ${f.length}`,
+        `CPU / frame  ${(this.cpuMs.reduce((x, y) => x + y, 0) / Math.max(1, this.cpuMs.length)).toFixed(2)} ms (last 240 frames)`,
+        `GPU / frame  ${this.gpuMs.length ? (this.gpuMs.reduce((x, y) => x + y, 0) / this.gpuMs.length).toFixed(2) + ' ms (last 240 frames)' : 'n/a (no GPU timer in this browser)'}`,
         `output       ${this.canvas.width}x${this.canvas.height}`,
         `render       ${R.renderW}x${R.renderH} (last)  preset ${R.quality.name} MSAA ${R.quality.msaa}x dyn-res ${this.settings.dynRes ? 'on' : 'off'}`,
         `refresh est  ${(1 / this.refresh).toFixed(0)} Hz`,

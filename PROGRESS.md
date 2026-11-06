@@ -54,6 +54,16 @@ Rebuild: `npm install` once, then `npm run build`.
   per side) generated in the renderer from the track code, kept clear of every other stretch of road; track
   data, hashes and race results are unchanged. The ground under the trees is now a dark, dappled forest floor.
 
+## Fixes after third playtest (2026-11-06)
+- Esc in fullscreen: Chrome/Edge now use Keyboard Lock, so Esc reaches the game (back / pause) and the browser
+  asks you to hold Esc to leave fullscreen. Browsers without it (Firefox) still spend the first Esc on leaving
+  fullscreen, but that exit is now treated as the press: it pauses a race or goes back in a menu.
+- F3 monitor: refresh estimate was only updated with dynamic resolution on (stuck at 60 Hz otherwise); now always.
+  Shows FPS to 0.1 with 1 % low, frame interval avg/max, CPU time per frame, GPU time per frame (timer query,
+  where the browser exposes it) and headroom — the frame interval alone always equals the refresh period.
+- Benchmark: live on-screen counter (elapsed / 30 s, current fps), anything left over the race is removed,
+  focus loss no longer pauses it, report adds CPU and GPU time per frame.
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.
