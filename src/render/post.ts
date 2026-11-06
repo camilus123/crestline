@@ -38,9 +38,54 @@ void main(){
   o = vec4(c / 12.0, 1.0);
 }`;
 
+// Screen-space ambient occlusion (Psycho): how enclosed each pixel is, from the scene depth nearby.
+const AO = PRELUDE + NOISE + `
+in vec2 vUv; out vec4 o;
+uniform sampler2D uDepth;
+uniform vec2 uScale;  // uv -> depth texture uv (render sub-rect)
+uniform vec4 uProj;   // proj[0], proj[5], near, far
+float linZ(vec2 uv){ float d = texture(uDepth, uv * uScale).r * 2.0 - 1.0; float n = uProj.z, f = uProj.w; return 2.0 * n * f / (f + n - d * (f - n)); }
+vec3 vpos(vec2 uv){ float z = linZ(uv); vec2 ndc = uv * 2.0 - 1.0; return vec3(ndc.x * z / uProj.x, ndc.y * z / uProj.y, z); }
+void main(){
+  float d = texture(uDepth, vUv * uScale).r;
+  if (d > 0.99999) { o = vec4(1.0); return; }
+  vec3 P = vpos(vUv);
+  vec3 N = normalize(cross(dFdx(P), dFdy(P)));
+  if (dot(N, P) > 0.0) N = -N;
+  const float R = 0.9;  // metres
+  float sr = R * uProj.y / P.z * 0.5;  // radius in uv (y)
+  if (sr < 0.0015 || P.z > 120.0) { o = vec4(1.0); return; }
+  sr = min(sr, 0.08);
+  float ang = hash2(gl_FragCoord.xy) * 6.2831;
+  float ao = 0.0;
+  for (int i = 0; i < 12; i++) {
+    float t = (float(i) + 0.5) / 12.0;
+    float a = ang + float(i) * 2.39996;
+    vec2 off = vec2(cos(a) * uProj.x / uProj.y, sin(a)) * sr * sqrt(t);
+    vec3 Q = vpos(vUv + off);
+    vec3 v = Q - P;
+    float dv = length(v) + 1e-4;
+    ao += max(0.0, dot(v / dv, N) - 0.12) * (1.0 - smoothstep(R * 0.6, R * 1.6, dv));
+  }
+  ao = 1.0 - 2.1 * ao / 12.0;
+  o = vec4(vec3(clamp(ao, 0.0, 1.0) * smoothstep(120.0, 70.0, P.z) + (1.0 - smoothstep(120.0, 70.0, P.z))), 1.0);
+}`;
+const AOBLUR = PRELUDE + `
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform vec2 uTexel;
+void main(){
+  float s = 0.0, w = 0.0;
+  for (int y = -2; y <= 2; y++) for (int x = -2; x <= 2; x++) {
+    float k = (3.0 - abs(float(x))) * (3.0 - abs(float(y)));
+    s += texture(uTex, vUv + vec2(x, y) * uTexel).r * k;
+    w += k;
+  }
+  o = vec4(vec3(s / w), 1.0);
+}`;
+
 const COMP = PRELUDE + NOISE + `
 in vec2 vUv; out vec4 o;
-uniform sampler2D uScene; uniform sampler2D uBloom;
+uniform sampler2D uScene; uniform sampler2D uBloom; uniform sampler2D uAO; uniform float uAOk;
 uniform vec2 uScale; // render-scale uv multiplier
 uniform vec2 uTexel;
 uniform float uBloomK; uniform float uExposure; uniform float uSat; uniform float uContrast;
@@ -95,6 +140,7 @@ void main(){
     vec3 n = texture(uScene, suv + vec2(t.x, 0)).rgb + texture(uScene, suv - vec2(t.x, 0)).rgb + texture(uScene, suv + vec2(0, t.y)).rgb + texture(uScene, suv - vec2(0, t.y)).rgb;
     col = max(col + (col * 4.0 - n) * 0.12 * uSharpen, 0.0);
   }
+  if (uAOk > 0.0) col *= mix(1.0, texture(uAO, uv).r, uAOk);
   col += texture(uBloom, uv).rgb * uBloomK;
   col += vec3(0.7, 0.75, 0.9) * uFlash * 0.25;
   col *= uExposure;
@@ -149,6 +195,15 @@ export class Post {
     this.down = new Program(gl, VS, DOWN, 'bloomdown');
     this.up = new Program(gl, VS, UP, 'bloomup');
     this.comp = new Program(gl, VS, COMP, 'composite');
+    this.aoP = new Program(gl, VS, AO, 'ssao');
+    this.aoBlurP = new Program(gl, VS, AOBLUR, 'ssao-blur');
+    this.aoA = new Target(gl, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, false);
+    this.aoB = new Target(gl, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, false);
+    this.aoB.resize(2, 2);
+    this.aoB.bind();
+    gl.clearColor(1, 1, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.vao = gl.createVertexArray()!;
     gl.bindVertexArray(this.vao);
     const b = gl.createBuffer()!;
@@ -163,6 +218,30 @@ export class Post {
     this.gl.bindVertexArray(this.vao);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
   }
+  private aoP: Program;
+  private aoBlurP: Program;
+  private aoA: Target;
+  private aoB: Target;
+  private aoOn = false;
+  /** ambient occlusion from a depth texture of the render sub-rect (rw x rh of a W x H texture) */
+  ssao(depth: WebGLTexture, rw: number, rh: number, W: number, H: number, proj: Float32Array, near: number, far: number): void {
+    const gl = this.gl;
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.BLEND);
+    const w = Math.max(2, rw >> 1), h = Math.max(2, rh >> 1);
+    this.aoA.resize(w, h);
+    this.aoB.resize(w, h);
+    this.aoA.bind();
+    gl.viewport(0, 0, w, h);
+    const p = this.aoP.use();
+    p.tex('uDepth', depth, 0).v2('uScale', rw / W, rh / H).v4('uProj', proj[0], proj[5], near, far);
+    this.tri();
+    this.aoB.bind();
+    const b = this.aoBlurP.use();
+    b.tex('uTex', this.aoA.tex, 0).v2('uTexel', 1 / w, 1 / h);
+    this.tri();
+    this.aoOn = true;
+  }
   run(scene: Target, rw: number, rh: number, outW: number, outH: number, P: PostParams, levels: number): void {
     const gl = this.gl;
     gl.disable(gl.DEPTH_TEST);
@@ -172,7 +251,15 @@ export class Post {
     let w = Math.max(2, rw >> 1), h = Math.max(2, rh >> 1);
     let src: Target = scene;
     let srcW = scene.w, srcH = scene.h;
-    const n = Math.max(1, Math.min(levels, this.chain.length));
+    const n = Math.max(0, Math.min(levels, this.chain.length));
+    if (n === 0) {
+      // no bloom (lightest preset): give the composite a cleared 2x2 bloom texture
+      const t = this.chain[0];
+      t.resize(2, 2);
+      t.bind();
+      gl.clearColor(0, 0, 0, 0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    }
     for (let i = 0; i < n; i++) {
       const t = this.chain[i];
       t.resize(w, h);
@@ -201,7 +288,8 @@ export class Post {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, outW, outH);
     const c = this.comp.use();
-    c.tex('uScene', scene.tex, 0).tex('uBloom', this.chain[0].tex, 1);
+    c.tex('uScene', scene.tex, 0).tex('uBloom', this.chain[0].tex, 1).tex('uAO', this.aoB.tex, 2).f('uAOk', this.aoOn ? 1.0 : 0);
+    this.aoOn = false;
     c.v2('uScale', rw / scene.w, rh / scene.h).v2('uTexel', 1 / outW, 1 / outH);
     c.f('uBloomK', P.bloom).f('uExposure', P.exposure).f('uSat', P.sat).f('uContrast', P.contrast).v3('uTint', P.tint).v3('uLift', P.lift).f('uVignette', P.vignette);
     const bl = new Float32Array(8), vp = new Float32Array(8);

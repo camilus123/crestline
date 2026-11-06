@@ -1,3 +1,4 @@
+import { glStats } from './prof';
 // Thin WebGL2 helpers: programs, meshes, textures, framebuffers.
 
 export type GL = WebGL2RenderingContext;
@@ -26,6 +27,14 @@ export class Program {
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`Link ${name}: ${gl.getProgramInfoLog(p)}`);
     this.p = p;
+    // the sun shadow map always lives on texture unit 6 (a 1x1 'fully lit' depth texture when shadows are off)
+    const sl = gl.getUniformLocation(p, 'uShadowMap');
+    if (sl) {
+      const cur = gl.getParameter(gl.CURRENT_PROGRAM);
+      gl.useProgram(p);
+      gl.uniform1i(sl, SHADOW_UNIT);
+      gl.useProgram(cur);
+    }
   }
   use(): this {
     this.gl.useProgram(this.p);
@@ -138,6 +147,8 @@ export class Mesh {
   }
   draw(mode: number = WebGL2RenderingContext.TRIANGLES): void {
     const gl = this.gl;
+    glStats.calls++;
+    glStats.verts += this.count;
     gl.bindVertexArray(this.vao);
     if (this.ibo) gl.drawElements(mode, this.count, this.indexType, 0);
     else gl.drawArrays(mode, 0, this.count);
@@ -146,6 +157,9 @@ export class Mesh {
   drawInstances(first: number, n: number, mode: number = WebGL2RenderingContext.TRIANGLES): void {
     if (n <= 0) return;
     const gl = this.gl;
+    glStats.calls++;
+    glStats.instances += n;
+    glStats.verts += this.count * n;
     gl.bindVertexArray(this.vao);
     if (first !== 0 || (this as any)._lastFirst !== 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.inst);
@@ -251,7 +265,20 @@ export class MSTarget {
   }
 }
 
+export const SHADOW_UNIT = 6;
+
 // --- tiny matrix helpers (column-major) ---
+export function ortho(out: Float32Array, l: number, r: number, b: number, t: number, n: number, f: number): Float32Array {
+  out.fill(0);
+  out[0] = 2 / (r - l);
+  out[5] = 2 / (t - b);
+  out[10] = -2 / (f - n);
+  out[12] = -(r + l) / (r - l);
+  out[13] = -(t + b) / (t - b);
+  out[14] = -(f + n) / (f - n);
+  out[15] = 1;
+  return out;
+}
 export function perspective(out: Float32Array, fovy: number, aspect: number, near: number, far: number): Float32Array {
   const f = 1 / Math.tan(fovy / 2);
   out.fill(0);

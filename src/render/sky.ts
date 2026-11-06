@@ -29,6 +29,7 @@ uniform float uFlash;
 uniform vec4 uBolt; // azimuth, intensity, seed, unused
 uniform vec3 uFogC;
 uniform float uMist;
+uniform float uLite; // lightest preset: one cloud noise instead of four
 const float PI = 3.14159265;
 
 float ridge(float x, float seed){
@@ -110,17 +111,20 @@ void main(){
   // clouds on a dome plane
   if (uCloud.x > 0.0 && wd.y > 0.0) {
     vec2 cp = wd.xz / (wd.y + 0.12) * 1.6 + vec2(uTime * uCloud.y, uTime * uCloud.y * 0.3);
-    float n = fbm(cp * 0.9) * 0.65 + fbm(cp * 2.6 + 3.0) * 0.35;
+    float n0 = fbm(cp * 0.9);
+    float n = uLite > 0.5 ? n0 : n0 * 0.65 + fbm(cp * 2.6 + 3.0) * 0.35;
     float cov = smoothstep(1.0 - uCloud.x * 0.75, 1.15 - uCloud.x * 0.6, n);
-    float shade = smoothstep(0.2, 0.9, fbm(cp * 0.9 + uSunW.xz * 0.3));
+    float shade = uLite > 0.5 ? smoothstep(0.35, 0.8, n0) : smoothstep(0.2, 0.9, fbm(cp * 0.9 + uSunW.xz * 0.3));
     vec3 cc = mix(uCloudC, uCloudS, shade * 0.75);
     cc += uGlow * pow(sunD, 8.0) * 0.8 * (1.0 - shade);
     cc += vec3(0.7, 0.75, 0.9) * uFlash * 2.5;
     float fade = smoothstep(0.0, 0.18, wd.y);
     col = mix(col, cc, cov * fade);
     // cirrus streaks
-    float ci = fbm(vec2(cp.x * 0.4, cp.y * 3.0) + 5.0);
-    col += uCloudC * smoothstep(0.55, 0.85, ci) * uCloud.z * 0.25 * fade;
+    if (uLite < 0.5) {
+      float ci = fbm(vec2(cp.x * 0.4, cp.y * 3.0) + 5.0);
+      col += uCloudC * smoothstep(0.55, 0.85, ci) * uCloud.z * 0.25 * fade;
+    }
   }
   // lightning bolt
   if (uBolt.y > 0.0) {
@@ -215,9 +219,11 @@ export class Sky {
     p.v4('uExtra', look.stars, look.moon, look.planet, look.cityGlow).f('uSnowCaps', look.snowCaps);
     p.v3('uFogC', look.fogColor).f('uMist', look.mist);
   }
+  lite = false;
   draw(invVP: Float32Array, cam: number[], heading: number, alt: number, time: number, flash: number, bolt: number[]): void {
     const gl = this.gl;
     const p = this.prog.use();
+    p.f('uLite', this.lite ? 1 : 0);
     p.m4('uInvVP', invVP).v3('uCamPos', cam).f('uHeading', heading).f('uAlt', alt).f('uTime', time).f('uFlash', flash);
     p.v4('uBolt', bolt[0], bolt[1], bolt[2], 0);
     gl.bindVertexArray(this.vao);

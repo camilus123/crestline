@@ -209,3 +209,7 @@ body.touchui .hud .bl{bottom:auto;top:30%}
 }
 /* touch-first devices: the keyboard/gamepad hint bar only takes space */
 @media (pointer:coarse) and (hover:none){ .hint{display:none} }
+/* benchmark report */
+.benchout{white-space:pre;overflow-x:auto;font-size:.78rem;line-height:1.35;margin-top:.8rem;max-height:none}
+.benchchart{width:100%;height:auto;margin-top:.8rem;background:rgba(0,0,0,.35);border:1px solid rgba(5,217,232,.25)}
+.benchbtns{display:flex;gap:1rem;flex-wrap:wrap;margin-top:1rem}

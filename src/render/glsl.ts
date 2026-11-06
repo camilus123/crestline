@@ -110,6 +110,34 @@ uniform int uPLn;
 uniform float uFlash; // lightning
 uniform float uWet;   // road wetness 0..1
 uniform float uTime;
+// sun shadow map (Psycho preset)
+uniform highp sampler2DShadow uShadowMap;
+uniform mat4 uShadowVP;
+uniform vec4 uShadowP; // on, texel size (uv), unused, depth bias
+
+const vec2 POISSON[12] = vec2[12](
+  vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
+  vec2(0.962, -0.195), vec2(0.473, -0.480), vec2(0.519, 0.767), vec2(0.185, -0.893),
+  vec2(0.507, 0.064), vec2(0.896, 0.412), vec2(-0.322, -0.933), vec2(-0.792, -0.598));
+
+/** 1 = in sunlight, 0 = shadowed; soft (12-tap PCF on top of the hardware 2x2 comparison) */
+float sunShadow(vec3 wpos, vec3 N, float ndl){
+  if (uShadowP.x < 0.5) return 1.0;
+  // normal offset: push the lookup off the surface, more at grazing sun angles (prevents acne)
+  float dist = length(wpos - uCamPos);
+  vec3 wp = wpos + N * (0.05 + 0.25 * (1.0 - ndl)) * (1.0 + dist * 0.004);
+  vec4 c = uShadowVP * vec4(wp, 1.0);
+  vec3 sc = c.xyz / c.w * 0.5 + 0.5;
+  if (sc.x <= 0.0 || sc.y <= 0.0 || sc.x >= 1.0 || sc.y >= 1.0 || sc.z >= 1.0) return 1.0;
+  float ang = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831;
+  mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
+  float r = uShadowP.y * (1.4 + dist * 0.01);
+  float s = 0.0;
+  for (int i = 0; i < 12; i++) s += texture(uShadowMap, vec3(sc.xy + rot * POISSON[i] * r, sc.z - uShadowP.w));
+  s /= 12.0;
+  vec2 e = min(sc.xy, 1.0 - sc.xy);
+  return mix(1.0, s, smoothstep(0.0, 0.06, min(e.x, e.y)));
+}
 
 // motion-blur weight written to the scene's alpha: forward motion streaks near things, not far ones
 float blurW(vec3 wpos){ return clamp(20.0 / max(length(wpos - uCamPos), 1.0), 0.0, 1.0); }
@@ -133,6 +161,8 @@ vec3 fogApply(vec3 col, vec3 wpos){
 vec3 lightSurf(vec3 albedo, vec3 N, vec3 wpos, float rough, float specK, float ao, float shadow){
   vec3 V = normalize(uCamPos - wpos);
   float ndl = max(dot(N, uSunDir), 0.0);
+  // real shadows let some scattered sunlight through and get a little more sky fill, as real shade does
+  if (ndl > 0.0 && uShadowP.x > 0.5) shadow *= mix(0.2, 1.0, sunShadow(wpos, N, ndl));
   vec3 H = normalize(V + uSunDir);
   float shin = mix(600.0, 6.0, rough);
   float sp = pow(max(dot(N, H), 0.0), shin) * (shin + 8.0) / 25.0 * specK;
@@ -143,6 +173,7 @@ vec3 lightSurf(vec3 albedo, vec3 N, vec3 wpos, float rough, float specK, float a
   vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
   float toSun = dot(N.xz, sunH) * (1.0 - abs(N.y));
   amb *= 1.0 + toSun * 0.45 * (1.0 - clamp(uSunDir.y * 1.6, 0.0, 1.0));
+  amb *= 1.0 + 0.3 * step(0.5, uShadowP.x);
   amb += vec3(0.55, 0.6, 0.85) * uFlash * 1.5;
   vec3 c = albedo * (amb + uSunCol * ndl * shadow) + uSunCol * sp * ndl * shadow;
   c += mix(uAmbBot, uAmbTop, 0.8) * fres * specK * 0.25 * ao;

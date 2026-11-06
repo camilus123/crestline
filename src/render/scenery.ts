@@ -268,7 +268,9 @@ export class Scenery {
   lamps: { s: number; u: number; h: number; type: number }[] = [];
   /** draw distance of the deep woodland as a fraction of the scenery distance (lower on low quality) */
   backdropDist = 0.8;
-  constructor(private gl: GL, track: TrackData, pits = true) {
+  /** density: fraction of purely decorative roadside objects kept (collidable ones always stay);
+   *  woods: deep Forest woodland draw distance factor (0 = not built) */
+  constructor(private gl: GL, track: TrackData, pits = true, density = 1, woods = 0.8) {
     this.prog = new Program(gl, OBJ_VS, OBJ_FS, 'objects');
     this.shProg = new Program(gl, SHADOW_VS, SHADOW_FS, 'blobshadow');
     this.quad = gl.createBuffer()!;
@@ -279,6 +281,8 @@ export class Scenery {
     for (let i = 0; i < o.count; i++) {
       const t = o.type[i];
       if (!pits && t === O.PITSIGN) continue;
+      // thin decorative clutter on light presets; anything a car can hit stays, so nothing solid is invisible
+      if (density < 1 && o.radius[i] <= 0 && !LANDMARK.has(t) && !SPANNING.has(t) && ((i * 2654435761) >>> 0) / 4294967296 > density) continue;
       let a = byType.get(t);
       if (!a) byType.set(t, (a = []));
       a.push(i);
@@ -321,7 +325,8 @@ export class Scenery {
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
-    if (track.params.scenario === Scn.FOREST) this.addBackdrop(woodland(track));
+    this.backdropDist = woods;
+    if (track.params.scenario === Scn.FOREST && woods > 0) this.addBackdrop(woodland(track));
   }
 
   private addBackdrop(trees: { s: number; u: number; type: number; scale: number; rot: number; hue: number }[]): void {

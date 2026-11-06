@@ -4,6 +4,7 @@ import type { Game } from '../game';
 import { MenuKey, ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS } from '../input';
 import { CARS } from '../sim/specs';
 import { fuelPlan } from '../sim/race';
+import type { BenchReport } from '../bench';
 import { LIVERIES } from '../sim/roster';
 import { decodeCode, normalizeCode } from '../track/codes';
 import { SCENARIO_NAMES } from '../track/defs';
@@ -547,26 +548,81 @@ function controls(g: Game, back: string): Screen {
 
 // ---------------------------------------------------------------- benchmark
 function bench(g: Game): Screen {
-  const panel = h('div', { class: 'panel', style: 'width:min(50rem,92vw)' }, h('h3', {}, 'BENCHMARK'), h('div', { class: 'info' }, 'A 30-second bot-driven race on a heavy track at your current preset. Do not touch the controls.'));
-  const out = h('pre', { class: 'lcd', style: 'white-space:pre-wrap;font-size:.85rem;margin-top:1rem;display:none' });
+  const panel = h('div', { class: 'panel', style: 'width:min(64rem,94vw)' }, h('h3', {}, 'BENCHMARK'),
+    h('div', { class: 'info' }, 'About 45 seconds: a bot races a heavy track at your current settings while the game measures where the time goes — a normal 30-second run, then per-pass GPU profiling and a resolution test. Leave the controls alone.'));
+  const chart = h('canvas', { class: 'benchchart', width: 960, height: 150, style: 'display:none' }) as HTMLCanvasElement;
+  const out = h('pre', { class: 'lcd benchout', style: 'display:none' });
   const menu = new Menu(g.sfx);
-  const startB = h('div', { class: 'btn go', style: 'margin-top:1rem' }, h('span', {}, 'Start'));
-  const copyB = h('div', { class: 'btn', style: 'margin-top:1rem;display:none' }, h('span', {}, 'Copy report'));
-  const backB = h('div', { class: 'btn', style: 'margin-top:1rem' }, h('span', {}, 'Back'));
-  panel.append(out, h('div', { style: 'display:flex;gap:1rem' }, startB, copyB, backB));
-  let report = '';
+  const startB = h('div', { class: 'btn go' }, h('span', {}, 'Start'));
+  const copyB = h('div', { class: 'btn', style: 'display:none' }, h('span', {}, 'Copy report'));
+  const saveB = h('div', { class: 'btn', style: 'display:none' }, h('span', {}, 'Save report'));
+  const backB = h('div', { class: 'btn' }, h('span', {}, 'Back'));
+  panel.append(chart, out, h('div', { class: 'benchbtns' }, startB, copyB, saveB, backB));
+  let rep: BenchReport | null = null;
+  const draw = (r: BenchReport) => {
+    const c = chart.getContext('2d');
+    if (!c || !r.timeline.length) return;
+    const W = chart.width, H = chart.height, pad = 26;
+    c.clearRect(0, 0, W, H);
+    const max = Math.max(r.refresh, ...r.timeline) * 1.08;
+    const x = (i: number) => pad + (i / Math.max(1, r.timeline.length - 1)) * (W - pad - 8);
+    const y = (v: number) => H - 18 - (v / max) * (H - 30);
+    c.font = '12px Share Tech Mono, monospace';
+    c.fillStyle = 'rgba(255,255,255,.55)';
+    for (const [v, lbl] of [[r.refresh, `${r.refresh.toFixed(0)} Hz`], [60, '60']] as [number, string][]) {
+      if (v > max) continue;
+      c.strokeStyle = 'rgba(255,255,255,.18)';
+      c.setLineDash([4, 4]);
+      c.beginPath(); c.moveTo(pad, y(v)); c.lineTo(W - 8, y(v)); c.stroke();
+      c.setLineDash([]);
+      c.fillText(lbl, W - 8 - c.measureText(lbl).width, y(v) - 4);
+    }
+    // render resolution (fraction of the output) as a faint band
+    c.strokeStyle = 'rgba(255,45,149,.6)';
+    c.beginPath();
+    r.scaleLine.forEach((v, i) => { const yy = H - 18 - v * (H - 30); if (i) c.lineTo(x(i), yy); else c.moveTo(x(i), yy); });
+    c.stroke();
+    c.strokeStyle = '#05d9e8';
+    c.lineWidth = 2;
+    c.beginPath();
+    r.timeline.forEach((v, i) => { if (i) c.lineTo(x(i), y(v)); else c.moveTo(x(i), y(v)); });
+    c.stroke();
+    c.lineWidth = 1;
+    c.fillStyle = 'rgba(255,255,255,.55)';
+    c.fillText('fps over the 30 s run', pad, 12);
+    c.fillStyle = '#ff2d95';
+    c.fillText('render resolution', pad + 170, 12);
+  };
+  const showRep = (r: BenchReport) => {
+    rep = r;
+    out.textContent = r.text;
+    out.style.display = '';
+    chart.style.display = '';
+    copyB.style.display = '';
+    saveB.style.display = '';
+    draw(r);
+  };
   const run = () => {
-    g.startBenchmark((rep) => {
-      report = rep;
-      store.set('lastBenchmark', rep);
+    g.startBenchmark((r) => {
+      store.set('lastBenchmark2', r);
       g.show('bench');
     });
   };
-  const last = store.get<string>('lastBenchmark', '');
-  if (last) { out.textContent = last; out.style.display = ''; copyB.style.display = ''; report = last; }
+  const last = store.get<BenchReport | null>('lastBenchmark2', null);
+  if (last && last.text) showRep(last);
   bind(menu, startB, 0, 0, { activate: run });
-  bind(menu, copyB, 0, 1, { activate: () => { void navigator.clipboard?.writeText(report).then(() => toast('Report copied'), () => toast('Copy failed – select the text manually')); } });
-  bind(menu, backB, 0, 2, { activate: () => g.show('settings') });
+  bind(menu, copyB, 0, 1, { activate: () => { if (rep) void navigator.clipboard?.writeText(rep.text).then(() => toast('Report copied'), () => toast('Copy failed – select the text manually')); } });
+  bind(menu, saveB, 0, 2, { activate: () => {
+    if (!rep) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([rep.text], { type: 'text/plain' }));
+    a.download = `crestline-benchmark-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    toast('Report saved to your downloads');
+  } });
+  bind(menu, backB, 0, 3, { activate: () => g.show('settings') });
   menu.setFocus(startB);
   menu.onBack = () => g.show('settings');
   const el = h('div', { class: 'scr bg scan' }, hdr('BENCHMARK'), h('div', { class: 'body', style: 'justify-content:center' }, panel), STD_HINT.cloneNode(true) as HTMLElement);

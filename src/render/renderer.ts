@@ -8,7 +8,7 @@ import { TrackData } from '../track/generator';
 import { gustWarning, hazardActive, laserWarning, Track } from '../track/track';
 import { CarDraw, CarRenderer } from './cars';
 import { FX, PT } from './fx';
-import { createTexture, GL, Mesh, MSTarget, perspective, Program, Target, viewFromBasis, mul4, invert4 } from './gl';
+import { createTexture, GL, Mesh, MSTarget, perspective, Program, Target, viewFromBasis, mul4, invert4, ortho, SHADOW_UNIT } from './gl';
 import { Ground, ROWS } from './ground';
 import { HazardRenderer } from './hazards';
 import { Look, LOOKS } from './looks';
@@ -21,20 +21,31 @@ import { MaterialTextures } from './textures';
 
 export interface Quality {
   name: string;
-  scale: number;
-  minScale: number;
-  msaa: number;
-  bloom: number;
-  dist: number;
+  scale: number; // render resolution (fraction of the output)
+  minScale: number; // dynamic resolution never goes below this
+  msaa: number; // samples (clamped to what the GPU supports)
+  bloom: number; // bloom levels (0 = no bloom)
+  dist: number; // draw distance factor
   particles: number;
   weather: number;
+  scenery: number; // fraction of roadside objects drawn (small clutter thinned first)
+  woods: number; // deep Forest woodland draw distance factor (0 = off)
+  lamps: number; // street lamps that light the scene
+  lite: boolean; // cheap post-processing (no speed blur, heat haze or lens rain)
+  shadows: number; // sun shadow map size in texels (0 = blob shadows only)
+  ssao: boolean; // screen-space ambient occlusion
+  dpr: number; // device-pixel-ratio cap for the 3D view (phones: fewer pixels, the HUD stays sharp)
 }
 export const QUALITY: Quality[] = [
-  { name: 'Low', scale: 0.6, minScale: 0.4, msaa: 0, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4 },
-  { name: 'Medium', scale: 0.8, minScale: 0.5, msaa: 2, bloom: 4, dist: 0.8, particles: 0.7, weather: 0.7 },
-  { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, bloom: 5, dist: 1.0, particles: 1, weather: 1 },
-  { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2 },
+  { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1 },
+  { name: 'Low', scale: 0.6, minScale: 0.4, msaa: 0, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4, scenery: 0.8, woods: 0.45, lamps: 8, lite: false, shadows: 0, ssao: false, dpr: 1.5 },
+  { name: 'Medium', scale: 0.8, minScale: 0.5, msaa: 2, bloom: 4, dist: 0.8, particles: 0.7, weather: 0.7, scenery: 1, woods: 0.65, lamps: 12, lite: false, shadows: 0, ssao: false, dpr: 2 },
+  { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, bloom: 5, dist: 1.0, particles: 1, weather: 1, scenery: 1, woods: 0.8, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2 },
+  { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 0.9, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2 },
+  { name: 'Psycho', scale: 1.0, minScale: 0.85, msaa: 8, bloom: 6, dist: 1.45, particles: 1.5, weather: 1.4, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2 },
 ];
+/** index of the default preset (High) */
+export const Q_DEFAULT = 3;
 
 export interface View {
   car: Car;
@@ -54,6 +65,8 @@ export interface FrameIn {
   attract?: boolean;
   orbit?: number; // attract-mode camera
 }
+
+import { Profiler } from './prof';
 
 const tmp4 = [0, 0, 0, 0];
 
@@ -80,6 +93,56 @@ export class Renderer {
   look: Look = LOOKS[0];
   quality: Quality = QUALITY[2];
   dynScale = 1;
+  /** benchmark resolution test: render at exactly this scale, ignoring the preset's limits */
+  forceScale: number | null = null;
+  // sun shadow map (Psycho)
+  private dummyShadow: WebGLTexture;
+  private shadowTex: WebGLTexture | null = null;
+  private shadowFB: WebGLFramebuffer | null = null;
+  private shadowSize = 0;
+  private shadowVP = new Float32Array(16);
+  private shadowLive = false;
+  private curTarget: { bind(): void } | null = null;
+  // scene depth copy for ambient occlusion (Psycho)
+  private depthFB: WebGLFramebuffer | null = null;
+  private depthTex: WebGLTexture | null = null;
+  private depthW = 0;
+  private depthH = 0;
+  private lastProj = new Float32Array(16);
+
+  private depthTexture(size: number, data: Uint32Array | null): WebGLTexture {
+    const gl = this.gl;
+    const t = gl.createTexture()!;
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, size, size, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, data);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_MODE, gl.COMPARE_REF_TO_TEXTURE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
+    return t;
+  }
+  private bindShadowUnit(t: WebGLTexture): void {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + SHADOW_UNIT);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.activeTexture(gl.TEXTURE0); // so later uploads never land on the shadow unit
+  }
+  private ensureShadow(size: number): void {
+    if (this.shadowSize === size && this.shadowTex) return;
+    const gl = this.gl;
+    if (this.shadowTex) gl.deleteTexture(this.shadowTex);
+    this.shadowTex = this.depthTexture(size, null);
+    this.shadowFB ??= gl.createFramebuffer()!;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
+    gl.drawBuffers([gl.NONE]);
+    gl.readBuffer(gl.NONE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.shadowSize = size;
+  }
   renderW = 0;
   renderH = 0;
   meanY = 0;
@@ -91,6 +154,7 @@ export class Renderer {
   private nextBolt = 6;
   thunderQueue: { at: number; power: number }[] = [];
   stats = { drawCalls: 0, w: 0, h: 0 };
+  prof!: Profiler;
   lastCam = [0, 0, 0];
   private camState = new Map<Car, { y: number; ty: number; fov: number; x: number }>();
   private pitchSm = 0;
@@ -100,6 +164,7 @@ export class Renderer {
     const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false, desynchronized: true }) as GL | null;
     if (!gl) throw new Error('WebGL2 is not available');
     this.gl = gl;
+    this.prof = new Profiler(gl);
     const cbf = gl.getExtension('EXT_color_buffer_float');
     gl.getExtension('EXT_color_buffer_half_float');
     gl.getExtension('OES_texture_float_linear');
@@ -115,6 +180,9 @@ export class Renderer {
     this.post = new Post(gl, this.fmt);
     this.ms = new MSTarget(gl, this.fmt.internal);
     this.plain = new Target(gl, this.fmt.internal, this.fmt.format, this.fmt.type, true);
+    // shadow unit: a 1x1 depth texture reading 'fully lit' until a real shadow map exists
+    this.dummyShadow = this.depthTexture(1, new Uint32Array([0xffffffff]));
+    this.bindShadowUnit(this.dummyShadow);
     this.pathTex = createTexture(gl, PATH_N, 3, gl.RGBA32F, gl.RGBA, gl.FLOAT, null, gl.NEAREST);
     for (let k = 0; k < 3; k++) {
       const mb = buildTraffic(k);
@@ -133,8 +201,13 @@ export class Renderer {
   }
 
   setQuality(q: Quality): void {
+    const prev = this.quality;
     this.quality = q;
     this.dynScale = q.scale;
+    // scenery thinning and the deep woodland are built per track: rebuild if they changed
+    if (this.track && this.scenery && (prev.scenery !== q.scenery || (prev.woods > 0) !== (q.woods > 0))) {
+      this.scenery = new Scenery(this.gl, this.track.d, this.pits, q.scenery, q.woods);
+    } else if (this.scenery) this.scenery.backdropDist = q.woods;
   }
 
   /** pits: the race uses fuel stops (pit-lane markings and signs are drawn); otherwise the strip is a plain lay-by */
@@ -144,7 +217,7 @@ export class Renderer {
     this.track = new Track(t);
     this.look = LOOKS[t.params.scenario];
     this.tex.setGround(this.look.groundType);
-    this.scenery = new Scenery(this.gl, t, pits);
+    this.scenery = new Scenery(this.gl, t, pits, this.quality.scenery, this.quality.woods);
     this.hazards = new HazardRenderer(this.gl, t);
     this.fx.parts.length = 0;
     let sum = 0;
@@ -175,7 +248,7 @@ export class Renderer {
   }
 
   resize(): void {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.quality.dpr);
     const w = Math.max(320, Math.floor(this.canvas.clientWidth * dpr));
     const h = Math.max(200, Math.floor(this.canvas.clientHeight * dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -256,14 +329,17 @@ export class Renderer {
     const race = F.race;
     const look = this.look;
     const W = this.canvas.width, H = this.canvas.height;
-    const scale = Math.max(this.quality.minScale, Math.min(this.quality.scale, this.dynScale));
+    const scale = this.forceScale ?? Math.max(this.quality.minScale, Math.min(this.quality.scale, this.dynScale));
     const rw = Math.max(64, Math.floor(W * scale)), rh = Math.max(64, Math.floor(H * scale));
     this.renderW = rw;
     this.renderH = rh;
     // allocate at full canvas size; render into a sub-rect when scaled
     if (this.quality.msaa > 0) this.ms.resize(W, H, this.quality.msaa);
     this.plain.resize(W, H);
+    const pf = this.prof;
+    pf.begin('effects (CPU)');
     this.effects(race, F.dt, F.views.map((v) => v.car));
+    pf.end();
     // lightning
     if (look.lightning > 0 && race.started) {
       this.nextBolt -= F.dt;
@@ -286,10 +362,13 @@ export class Renderer {
     if (this.hazards) this.hazards.updateLasers(race.time, hazardActive, laserWarning);
 
     const target = this.quality.msaa > 0 ? this.ms : this.plain;
+    this.curTarget = target;
+    pf.begin('clear');
     target.bind();
     gl.viewport(0, 0, rw, rh);
     gl.clearColor(0, 0, 0, 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    pf.end();
     const vpsUv: number[][] = [];
     const blur: number[][] = [];
     this.stats.w = rw;
@@ -307,22 +386,51 @@ export class Renderer {
       gl.disable(gl.SCISSOR_TEST);
       vpsUv.push([cx / this.canvas.clientWidth, 1 - (cy + ch) / this.canvas.clientHeight, cw / this.canvas.clientWidth, ch / this.canvas.clientHeight]);
       const spd = Math.min(1, view.car.v / view.car.spec.vTop);
-      blur.push([cam[0], cam[1], Math.max(0, spd - 0.35) * 1.4 * (F.attract ? 0.5 : 1), 0]);
+      blur.push([cam[0], cam[1], this.quality.lite ? 0 : Math.max(0, spd - 0.35) * 1.4 * (F.attract ? 0.5 : 1), 0]);
     }
     if (this.quality.msaa > 0) {
+      pf.begin('MSAA resolve');
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.ms.fb);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.plain.fb);
       gl.blitFramebuffer(0, 0, rw, rh, 0, 0, rw, rh, gl.COLOR_BUFFER_BIT, gl.NEAREST);
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      pf.end();
+    }
+    if (this.quality.ssao && F.views.length === 1) {
+      pf.begin('ambient occlusion');
+      if (!this.depthFB || this.depthW !== W || this.depthH !== H) {
+        this.depthFB ??= gl.createFramebuffer()!;
+        if (this.depthTex) gl.deleteTexture(this.depthTex);
+        this.depthTex = gl.createTexture()!;
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.depthTex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, W, H, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+        for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.depthFB);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.depthTex, 0);
+        gl.drawBuffers([gl.NONE]);
+        gl.readBuffer(gl.NONE);
+        this.depthW = W;
+        this.depthH = H;
+      }
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.quality.msaa > 0 ? this.ms.fb : this.plain.fb);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.depthFB);
+      gl.blitFramebuffer(0, 0, rw, rh, 0, 0, rw, rh, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+      this.post.ssao(this.depthTex!, rw, rh, W, H, this.lastProj, 0.25, 6000);
+      pf.end();
     }
     const g = look.grade;
     const P: PostParams = {
       bloom: look.bloom * (this.hdr ? 1 : 0.5), exposure: g.exposure, sat: g.sat, contrast: g.contrast, tint: g.tint, lift: g.lift, vignette: g.vignette,
-      blur, vps: vpsUv, flash: this.flash, haze: look.heatHaze, time: F.time, rainLens: look.rain * (F.views[0]?.car.v > 5 ? 0.6 : 1),
-      sharpen: scale < 0.95 ? 1 : 0.3, fade: F.fade, fadeC: [0, 0, 0], hit: Math.max(...F.hit, 0), threshold: look.bloomThreshold,
+      blur, vps: vpsUv, flash: this.flash, haze: this.quality.lite ? 0 : look.heatHaze, time: F.time, rainLens: this.quality.lite ? 0 : look.rain * (F.views[0]?.car.v > 5 ? 0.6 : 1),
+      sharpen: this.quality.lite ? 0 : scale < 0.95 ? 1 : 0.3, fade: F.fade, fadeC: [0, 0, 0], hit: Math.max(...F.hit, 0), threshold: look.bloomThreshold,
     };
+    pf.begin('post (bloom, blur, tonemap)');
     this.post.run(this.plain, rw, rh, W, H, P, this.quality.bloom);
+    pf.end();
   }
 
   /** draws one viewport; returns screen-space centre of the car (uv within the viewport) */
@@ -338,9 +446,12 @@ export class Renderer {
     const xCar = car.px + (car.x - car.px) * a;
     const maxD = Math.min(1950, tr.d.scen.visibility * 1.15 * this.quality.dist + (tr.d.scen.visibility < 400 ? 60 : 0));
     const path = this.path;
+    const pf = this.prof;
+    pf.begin('road path (CPU)');
     path.build(tr, sCar, maxD);
     gl.bindTexture(gl.TEXTURE_2D, this.pathTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, PATH_N, 3, gl.RGBA, gl.FLOAT, path.data);
+    pf.end();
 
     // ---------- camera ----------
     let cs = this.camState.get(car);
@@ -402,6 +513,7 @@ export class Renderer {
     const hf = 2 * Math.atan(Math.tan(vfov / 2) * aspect);
     if (hf > hMax) vfov = 2 * Math.atan(Math.tan(hMax / 2) / aspect);
     const proj = perspective(new Float32Array(16), vfov, aspect, 0.25, 6000);
+    this.lastProj.set(proj);
     const vp = mul4(new Float32Array(16), proj, view4);
     const invVP = invert4(new Float32Array(16), vp);
     this.lastCam = eye;
@@ -436,7 +548,7 @@ export class Renderer {
     const loop = tr.circuit ? tr.d.lapLen : 0;
     if (look.streetLights && this.scenery) {
       const lamps: { s: number; u: number; h: number; d: number }[] = [];
-      this.scenery.nearLamps(sCar, loop, 16, lamps);
+      this.scenery.nearLamps(sCar, loop, this.quality.lamps, lamps);
       for (const l of lamps) {
         const side = l.u < 0 ? 1 : -1;
         const pos = path.pos(l.d, l.u + side * 1.7, l.h - 0.2, [0, 0, 0, 0]);
@@ -461,13 +573,90 @@ export class Renderer {
       p.f('uFlash', this.flash).f('uWet', wet).f('uTime', F.time);
       p.v4a('uBand', bandU);
       p.v3('uSkyRef', skyRef).v3('uSkyRef2', skyRef2).v3('uGroundRef', look.ground[0]);
+      p.m4('uShadowVP', this.shadowVP).v4('uShadowP', this.shadowLive ? 1 : 0, 1 / Math.max(1, this.shadowSize), 0, 0.00022);
     };
+    const draws = this.carDraws(race, sCar, xCar, a, maxD, lightsOn);
+    const windStr = race.scen === Scn.WIND ? 1.3 : race.scen === Scn.STORM ? 1.0 : 0.25;
+    let gust = 0, gustDir = 1;
+    if (race.scen === Scn.WIND) {
+      for (const h of tr.hazardsIn(sCar - 50, sCar + 400, [])) {
+        if (h.kind !== Hz.GUST) continue;
+        const a = Math.max(hazardActive(h, race.time), gustWarning(h, race.time) * 0.4);
+        if (a > gust) { gust = a; gustDir = h.a; }
+      }
+    }
+    const wind = [gustDir, windStr + gust * 1.5, gust * 1.2 * gustDir];
+    const emisK = night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25;
+
+    // ---------- sun shadow map (Psycho) ----------
+    this.shadowLive = false;
+    if (this.quality.shadows > 0 && sunB[1] > 0.03 && night < 0.5) {
+      pf.begin('sun shadow map');
+      const S = this.quality.shadows;
+      this.ensureShadow(S);
+      // a 230 m box around and ahead of the camera, seen from the sun
+      const H = 115;
+      const fh = [fwd[0], 0, fwd[2]];
+      const fhl = Math.hypot(fh[0], fh[2]) || 1;
+      fh[0] /= fhl; fh[2] /= fhl;
+      const c = [eye[0] + fh[0] * 75, eye[1] - 1.6, eye[2] + fh[2] * 75];
+      const sl = Math.hypot(sunB[0], sunB[1], sunB[2]);
+      const lf = [-sunB[0] / sl, -sunB[1] / sl, -sunB[2] / sl];
+      // right = ref x f, up = f x right (the same handedness as the camera basis)
+      let lr = [fh[1] * lf[2] - fh[2] * lf[1], fh[2] * lf[0] - fh[0] * lf[2], fh[0] * lf[1] - fh[1] * lf[0]];
+      const lrl = Math.hypot(lr[0], lr[1], lr[2]) || 1;
+      lr = [lr[0] / lrl, lr[1] / lrl, lr[2] / lrl];
+      const lu = [lf[1] * lr[2] - lf[2] * lr[1], lf[2] * lr[0] - lf[0] * lr[2], lf[0] * lr[1] - lf[1] * lr[0]];
+      // snap the box to whole shadow texels so edges do not crawl
+      const texel = (2 * H) / S;
+      const cr = c[0] * lr[0] + c[1] * lr[1] + c[2] * lr[2], cu = c[0] * lu[0] + c[1] * lu[1] + c[2] * lu[2];
+      const dr = Math.round(cr / texel) * texel - cr, du = Math.round(cu / texel) * texel - cu;
+      const le = [c[0] - lf[0] * 450 + lr[0] * dr + lu[0] * du, c[1] - lf[1] * 450 + lr[1] * dr + lu[1] * du, c[2] - lf[2] * 450 + lr[2] * dr + lu[2] * du];
+      const lv = viewFromBasis(new Float32Array(16), le, lr, lu, lf);
+      const lp = ortho(new Float32Array(16), -H, H, -H, H, 1, 950);
+      mul4(this.shadowVP, lp, lv);
+      const vpBox = gl.getParameter(gl.VIEWPORT) as Int32Array;
+      const scBox = gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
+      const scOn = gl.isEnabled(gl.SCISSOR_TEST);
+      this.bindShadowUnit(this.dummyShadow); // never sample the map being drawn
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
+      gl.disable(gl.SCISSOR_TEST);
+      gl.viewport(0, 0, S, S);
+      gl.depthMask(true);
+      gl.clear(gl.DEPTH_BUFFER_BIT);
+      gl.enable(gl.DEPTH_TEST);
+      gl.depthFunc(gl.LEQUAL);
+      gl.disable(gl.BLEND);
+      gl.enable(gl.POLYGON_OFFSET_FILL);
+      gl.polygonOffset(1.5, 3);
+      const sv = this.shadowVP;
+      const prepS = (p: Program) => { prep(p); p.m4('uViewProj', sv); };
+      const tp = this.ground.terrP.use();
+      prepS(tp);
+      tp.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
+      this.ground.terr.draw();
+      if (this.hazards) this.hazards.drawProps(prepS, sCar, F.time);
+      if (this.scenery) this.scenery.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK);
+      this.drawTraffic(prepS, race.traffic, sCar, Math.min(maxD, 600), a, F.time);
+      this.cars.draw(prepS, draws, [0.2, 0.9, 1.0]);
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+      this.curTarget!.bind();
+      gl.viewport(vpBox[0], vpBox[1], vpBox[2], vpBox[3]);
+      gl.scissor(scBox[0], scBox[1], scBox[2], scBox[3]);
+      if (scOn) gl.enable(gl.SCISSOR_TEST);
+      this.bindShadowUnit(this.shadowTex!);
+      this.shadowLive = true;
+      pf.end();
+    }
 
     // ---------- sky ----------
+    pf.begin('sky');
     gl.disable(gl.DEPTH_TEST);
     gl.depthMask(false);
     this.sky.setLook(look, sw);
+    this.sky.lite = this.quality.lite;
     this.sky.draw(invVP, eye, heading, (tr.y(sCar) - this.meanY) + eye[1], F.time, this.flash, this.bolt);
+    pf.end();
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.depthMask(true);
@@ -475,12 +664,15 @@ export class Renderer {
 
     // ---------- terrain / road / water / rails ----------
     const g = this.ground;
+    pf.begin('terrain');
     let p = g.terrP.use();
     prep(p);
     p.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
     p.v3('uG0', look.ground[0]).v3('uG1', look.ground[1]).v3('uG2', look.ground[2]).i('uGType', look.groundType);
     p.v3('uShoulder', look.road.dirt > 0.5 ? look.road.base : look.groundType === 2 ? [0.8, 0.84, 0.9] : look.groundType === 1 ? look.ground[1] : [0.32, 0.3, 0.27]);
     g.terr.draw();
+    pf.end();
+    pf.begin('road');
     p = g.roadP.use();
     prep(p);
     const rs = look.road;
@@ -493,6 +685,8 @@ export class Renderer {
     if (!tr.circuit) tr.d.checkpoints.forEach((c, i) => { if (i < 11) lines[i + 1] = c; });
     p.v4a('uLines', lines).f('uLoopLen2', loop);
     g.road.draw();
+    pf.end();
+    pf.begin('water, rails');
     if (look.terr2[3] > -20) {
       p = g.waterP.use();
       prep(p);
@@ -507,8 +701,10 @@ export class Renderer {
       g.rail.draw();
     }
     void ROWS;
+    pf.end();
 
     // ---------- decals and blob shadows ----------
+    pf.begin('decals, blob shadows');
     if (this.hazards) this.hazards.drawDecals(prep, sCar);
     gl.enable(gl.BLEND);
     gl.blendFuncSeparate(gl.DST_COLOR, gl.ZERO, gl.ZERO, gl.ONE);
@@ -517,15 +713,16 @@ export class Renderer {
     gl.polygonOffset(-1, -2);
     const sunOff = [-sunB[0] / Math.max(0.25, sunB[1]) * 0.35, -sunB[2] / Math.max(0.25, sunB[1]) * 0.35];
     const shadowK = Math.min(0.5, (look.sunColor[0] + look.sunColor[1]) * 0.12) * (1 - night);
-    if (this.scenery && shadowK > 0.05) this.scenery.drawShadows(prep, sCar, loop, sunOff, shadowK);
-    // car shadows
-    const draws = this.carDraws(race, sCar, xCar, a, maxD, lightsOn);
-    this.cars.drawShadows(prep, draws, Math.max(0.35, shadowK + 0.3));
+    // blob shadows (all presets but Psycho, where the sun shadow map replaces them)
+    if (this.scenery && shadowK > 0.05 && !this.shadowLive) this.scenery.drawShadows(prep, sCar, loop, sunOff, shadowK);
+    this.cars.drawShadows(prep, draws, this.shadowLive ? 0.25 : Math.max(0.35, shadowK + 0.3));
     gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
+    pf.end();
 
     // ---------- props / scenery / cars ----------
+    pf.begin('hazards, props');
     if (this.hazards) {
       this.hazards.drawProps(prep, sCar, F.time);
       if (this.hazards.cones && this.scenery) {
@@ -535,22 +732,21 @@ export class Renderer {
         this.hazards.cones.drawInstances(0, this.hazards.coneCount);
       }
     }
-    const windStr = race.scen === Scn.WIND ? 1.3 : race.scen === Scn.STORM ? 1.0 : 0.25;
-    let gust = 0, gustDir = 1;
-    if (race.scen === Scn.WIND) {
-      for (const h of tr.hazardsIn(sCar - 50, sCar + 400, [])) {
-        if (h.kind !== Hz.GUST) continue;
-        const a = Math.max(hazardActive(h, race.time), gustWarning(h, race.time) * 0.4);
-        if (a > gust) { gust = a; gustDir = h.a; }
-      }
-    }
-    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, [gustDir, windStr + gust * 1.5, gust * 1.2 * gustDir], night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25);
+    pf.end();
+    pf.begin('scenery');
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK);
+    pf.end();
+    pf.begin('cars, traffic');
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);
     this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
+    pf.end();
 
     // ---------- particles, glows, weather ----------
     const camR = right, camU = up;
+    pf.begin('particles');
     this.fx.drawParticles(prep, sCar, loop, camR, camU, look.ambTop, look.sunColor, look.fogColor, [fogDen, 0, 0, look.fogMax], eye);
+    pf.end();
+    pf.begin('glows, weather');
     this.fx.beginGlows();
     this.carGlows(race, sCar, a, maxD, lightsOn, night);
     if (look.streetLights || race.scen === Scn.FUTURE) {
@@ -570,6 +766,7 @@ export class Renderer {
     const velB = [Math.sin(0) * car.v, 0, car.v];
     if (look.rain > 0) this.fx.drawWeather(vp, eye, F.time, velB, 0, look.rain * this.quality.weather, [0.55, 0.6, 0.7], [race.scen === Scn.STORM ? 6 : 0, 0, 0]);
     if (look.snow > 0) this.fx.drawWeather(vp, eye, F.time, velB, 1, look.snow * this.quality.weather, [1.3, 1.35, 1.45], [7, 0, 0]);
+    pf.end();
     // screen-space car position for the motion blur centre
     const cp = path.pos(0, xCar, 0.6, [0, 0, 0, 0]);
     const clip = [vp[0] * cp[0] + vp[4] * cp[1] + vp[8] * cp[2] + vp[12], vp[1] * cp[0] + vp[5] * cp[1] + vp[9] * cp[2] + vp[13], 0, vp[3] * cp[0] + vp[7] * cp[1] + vp[11] * cp[2] + vp[15]];

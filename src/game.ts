@@ -10,10 +10,11 @@ import { decodeCode, normalizeCode, DEFAULT_CODE } from './track/codes';
 import { COURSES, CourseKey } from './track/courses';
 import { generateTrack, TrackData } from './track/generator';
 import { hashString } from './core/rng';
-import { QUALITY, Renderer, View } from './render/renderer';
+import { QUALITY, Q_DEFAULT, Renderer, View } from './render/renderer';
 import { LOOKS } from './render/looks';
 import { Hud, ord } from './ui/hud';
 import { TouchControls } from './ui/touch';
+import { Benchmark, type BenchReport } from './bench';
 import { h, installStyle, store, toast } from './ui/dom';
 import * as Screens from './ui/screens';
 
@@ -31,6 +32,7 @@ export interface Settings {
   customCode: string;
   sequence: string;
   quality: number;
+  qv?: number; // preset list version (2: Ultra Low added at the front, Psycho at the end)
   dynRes: boolean;
   musicVol: number;
   sfxVol: number;
@@ -41,8 +43,8 @@ export interface Settings {
 
 const DEFAULTS: Settings = {
   players: 1, names: ['PLAYER 1', 'PLAYER 2'], manual: [false, false], accelButton: [false, false], cars: [0, 2], colors: [0, 1],
-  mode: 'arcade', course: 'easy', customCode: DEFAULT_CODE, sequence: '', quality: 2, dynRes: true, musicVol: 0.7, sfxVol: 0.85,
-  shake: true, fps: false, song: 0,
+  mode: 'arcade', course: 'easy', customCode: DEFAULT_CODE, sequence: '', quality: Q_DEFAULT, dynRes: true, musicVol: 0.7, sfxVol: 0.85,
+  shake: true, fps: false, song: 0, qv: 2,
 };
 
 export interface Session {
@@ -102,7 +104,7 @@ export class Game {
   touch: TouchControls;
   private mouseIdle = 0; // seconds since the mouse last moved; the cursor hides in a race when it isn't in use
   private escLocked = false;
-  bench: { t: number; frames: number[]; done: (r: string) => void } | null = null;
+  bench: Benchmark | null = null;
   private trackCache = new Map<string, TrackData>();
   idle = 0;
   bestScores: Record<string, { name: string; score: number }[]>;
@@ -110,13 +112,16 @@ export class Game {
 
   constructor(public canvas: HTMLCanvasElement, public ui: HTMLDivElement) {
     this.renderer = new Renderer(canvas);
-    this.settings = { ...DEFAULTS, ...store.get<Partial<Settings>>('settings', {}) };
+    const saved = store.get<Partial<Settings>>('settings', {});
+    // settings saved before Ultra Low existed stored the preset one position lower
+    if (saved.quality !== undefined && !saved.qv) saved.quality += 1;
+    this.settings = { ...DEFAULTS, ...saved, qv: 2 };
     const b = store.get<Bindings[] | null>('bindings', null);
     if (b && b.length === 2) this.input.bindings = b;
     this.bestScores = store.get('bestScores', {});
     this.bestTimes = store.get('bestTimes', {});
     // touch-first devices (phones, tablets) start on a lighter preset if nothing was saved yet
-    if (!store.get('settings', null) && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) this.settings.quality = 1;
+    if (!store.get('settings', null) && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) this.settings.quality = 0; // Ultra Low
     this.touch = new TouchControls(this.input, () => this.setPaused(true));
     this.f3 = h('div', { class: 'f3', style: 'display:none' });
     document.body.appendChild(this.f3);
@@ -185,7 +190,7 @@ export class Game {
   async start(): Promise<void> {
     await installStyle();
     const q = new URLSearchParams(location.search);
-    this.renderer.setQuality(QUALITY[+(q.get('q') ?? this.settings.quality)] ?? QUALITY[2]);
+    this.renderer.setQuality(QUALITY[+(q.get('q') ?? this.settings.quality)] ?? QUALITY[Q_DEFAULT]);
     this.manual = q.has('manual');
     if (q.has('hashcheck')) {
       const { hashCheck } = await import('./track/hashcheck');
@@ -351,6 +356,7 @@ export class Game {
   setPaused(p: boolean, auto = false): void {
     if (this.screenId !== 'race' || !this.race) return;
     if (p === this.paused) return;
+    if (p && this.bench) { this.cancelBenchmark(); return; } // a paused run would measure nothing useful
     if (!p && auto) return;
     this.paused = p;
     this.audio.pause(p);
@@ -484,7 +490,9 @@ export class Game {
   frame(now: number, forceDt?: number): void {
     const t0 = performance.now();
     const monitor = this.settings.fps || !!this.bench;
-    if (monitor) this.gpuBegin();
+    const pf = this.renderer.prof;
+    if (this.bench) pf.frameStart();
+    else if (monitor) this.gpuBegin(); // (the benchmark's profiler owns the GPU timer while it runs)
     const raw = this.last ? (now - this.last) / 1000 : 1 / 60;
     const dt = forceDt ?? Math.min(0.1, raw);
     this.last = now;
@@ -515,11 +523,13 @@ export class Game {
       if (!this.paused && live) {
         this.acc += dt;
         let n = 0;
+        pf.begin('simulation (CPU)');
         while (this.acc >= DT && n < 12) {
           this.stepSim();
           this.acc -= DT;
           n++;
         }
+        pf.end();
         if (n >= 12) this.acc = 0;
         if (this.screenId === 'race') this.handleRaceEvents();
         else r.takeEvents();
@@ -531,6 +541,7 @@ export class Game {
       const rects = this.viewRects();
       const views: View[] = r.players.map((p, i) => ({ car: p, rect: rects[i], shake: this.settings.shake ? 1 : 0 }));
       this.renderer.render({ race: r, alpha: this.acc / DT, time: this.time, dt: this.paused ? 0 : dt, views, fade: this.fade, hit: this.hit });
+      pf.begin('HUD, audio (CPU)');
       if (!this.paused && this.screenId === 'race') this.hud?.update(r, dt);
       if (this.hud) this.hud.root.style.display = this.screenId === 'race' ? '' : 'none';
       // thunder
@@ -538,6 +549,7 @@ export class Game {
       while (tq.length && tq[0].at <= this.time) this.audio.thunder(tq.shift()!.power);
       const look = this.renderer.look;
       this.audio.update(r.players, r.cars, (a, b) => r.track.delta(a, b), { rain: look.rain, wind: r.scen === 11 ? 1 : 0, scen: r.scen }, r.started && !this.paused && this.screenId === 'race');
+      pf.end();
     } else if (this.showroom) {
       const s = this.showroom;
       s.angle += dt * 0.35;
@@ -571,16 +583,22 @@ export class Game {
     this.mouseIdle += raw;
     const hideCursor = this.screenId === 'race' && !this.paused && this.mouseIdle > 1.2;
     if (hideCursor !== document.body.classList.contains('nocursor')) document.body.classList.toggle('nocursor', hideCursor);
-    this.dynamicResolution(raw);
+    if (!this.bench?.holdScale) this.dynamicResolution(raw);
+    if (this.bench?.finishFrames) this.renderer.prof.sync(); // whole-frame cost incl. the GPU (resolution test)
+    if (monitor && !this.bench) this.gpuEnd();
     if (monitor) {
-      this.gpuEnd();
       this.ivl.push(raw);
       if (this.ivl.length > 480) this.ivl.shift();
       this.cpuMs.push(performance.now() - t0);
       if (this.cpuMs.length > 240) this.cpuMs.shift();
     }
     this.overlay();
-    if (this.bench) this.benchTick(raw);
+    if (this.bench) {
+      const b = this.bench;
+      pf.frameEnd();
+      b.frame(raw, performance.now() - t0);
+      if (this.benchEl) this.benchEl.textContent = b.label;
+    }
     if (!this.manual) requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -666,8 +684,7 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- benchmark
-  startBenchmark(done: (report: string) => void): void {
-    this.settings.players = this.settings.players;
+  startBenchmark(done: (report: BenchReport) => void): void {
     this.session = null;
     this.startSession('arcade', 'custom', ['TUORSWWUS14'], true);
     this.enterRace(true);
@@ -676,49 +693,14 @@ export class Game {
     this.paused = false;
     // nothing may cover the race while it is measured
     for (const e of Array.from(this.ui.querySelectorAll('.scr'))) if (e !== this.screen?.el) e.remove();
-    this.bench = { t: 0, frames: [], done };
     this.cpuMs.length = 0;
     this.gpuMs.length = 0;
     this.benchEl?.remove();
     this.benchEl = h('div', { class: 'benchbar' });
     document.body.appendChild(this.benchEl);
-  }
-  private benchTick(raw: number): void {
-    const b = this.bench!;
-    b.t += raw;
-    if (b.t > 2) b.frames.push(raw);
-    if (this.benchEl) {
-      const recent = b.frames.slice(-120);
-      const fps = recent.length ? recent.length / recent.reduce((x, y) => x + y, 0) : 0;
-      this.benchEl.textContent = b.t < 2 ? 'BENCHMARK · warming up' : `BENCHMARK · ${Math.min(30, b.t - 2).toFixed(1)} / 30 s · ${fps.toFixed(0)} fps`;
-    }
-    if (b.t >= 32) {
+    this.bench = new Benchmark(this, (rep) => {
       this.benchEl?.remove();
       this.benchEl = null;
-      const f = b.frames.slice().sort((x, y) => x - y);
-      const avg = f.reduce((x, y) => x + y, 0) / f.length;
-      const p99 = f[Math.floor(f.length * 0.99)] ?? avg;
-      const low1 = f.slice(Math.floor(f.length * 0.99));
-      const low1fps = 1 / (low1.reduce((x, y) => x + y, 0) / Math.max(1, low1.length));
-      const gl = this.renderer.gl;
-      const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-      const gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
-      const R = this.renderer;
-      const report = [
-        `CRESTLINE v${__VERSION__} benchmark (30 s)`,
-        `average      ${(1 / avg).toFixed(1)} fps   ${(avg * 1000).toFixed(2)} ms`,
-        `1% low       ${low1fps.toFixed(1)} fps`,
-        `99th pct     ${(p99 * 1000).toFixed(2)} ms`,
-        `frames       ${f.length}`,
-        `CPU / frame  ${(this.cpuMs.reduce((x, y) => x + y, 0) / Math.max(1, this.cpuMs.length)).toFixed(2)} ms (last 240 frames)`,
-        `GPU / frame  ${this.gpuMs.length ? (this.gpuMs.reduce((x, y) => x + y, 0) / this.gpuMs.length).toFixed(2) + ' ms (last 240 frames)' : 'n/a (no GPU timer in this browser)'}`,
-        `output       ${this.canvas.width}x${this.canvas.height}`,
-        `render       ${R.renderW}x${R.renderH} (last)  preset ${R.quality.name} MSAA ${R.quality.msaa}x dyn-res ${this.settings.dynRes ? 'on' : 'off'}`,
-        `refresh est  ${(1 / this.refresh).toFixed(0)} Hz`,
-        `GPU          ${gpu}`,
-        `browser      ${navigator.userAgent}`,
-      ].join('\n');
-      const done = b.done;
       this.bench = null;
       this.audio.stopEngines();
       this.hud?.destroy();
@@ -726,7 +708,24 @@ export class Game {
       this.race = null;
       this.session = null;
       this.startAttract();
-      done(report);
-    }
+      done(rep);
+    });
   }
+  cancelBenchmark(): void {
+    if (!this.bench) return;
+    this.bench.restore();
+    this.bench = null;
+    this.benchEl?.remove();
+    this.benchEl = null;
+    this.audio.stopEngines();
+    this.hud?.destroy();
+    this.hud = null;
+    this.race = null;
+    this.session = null;
+    this.startAttract();
+    this.show('bench');
+    toast('Benchmark cancelled');
+  }
+  /** display refresh rate estimated from frame timing (Hz) */
+  get refreshRate(): number { return 1 / this.refresh; }
 }

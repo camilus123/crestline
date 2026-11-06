@@ -118,6 +118,40 @@ Rebuild: `npm install` once, then `npm run build`.
   sinking and texture/ground-type lookups use the squeezed position (the lip shades like the ground beside it);
   the limit's coarse samples sit at fixed track positions, so it no longer jitters as the car moves.
 
+## v2.0.0 (2026-11-06) — detailed benchmark, Ultra Low and Psycho presets
+- Benchmark (Settings → Benchmark) now runs on screen: 2 s warm-up, 30 s normal run, 6 s profiling, then 3 s at
+  full and 3 s at half resolution with vsync bypassed. The report has:
+  - average / 1 % / 0.1 % lows, p50/p95/p99 frame time, hitches, time below 60 fps, refresh, render resolution;
+  - frame cost without vsync at full and half resolution, which tells GPU-fill-bound apart from geometry- or CPU-bound;
+  - CPU time per frame, and draw calls, instances and vertices per frame;
+  - a per-stage CPU/GPU table (sky, terrain, road, scenery, cars, particles, post, shadows, AO, MSAA resolve,
+    simulation, HUD and the rest);
+  - a plain-language "what limits this device" verdict;
+  - the settings, the GPU name, WebGL limits, CPU threads, memory and browser;
+  - fps for every second, with a chart of fps and render resolution, plus Copy report and Save report (.txt).
+- GPU time per stage comes from GPU timer queries where the browser offers them. Otherwise the profiling phase makes
+  the GPU finish at every stage boundary with a 1-pixel read-back (gl.finish() does not wait in Chrome). Stage times
+  are then real, but that phase runs slower than normal play. Profiling is never active outside the benchmark.
+- Ultra Low preset (new default on touch-first devices):
+  - 75 % render scale with dynamic resolution down to 50 %, pixel ratio 1;
+  - no MSAA, no bloom, draw distance ×0.36;
+  - half the decorative scenery, no background woodland, 4 dynamic lights;
+  - simplified sky and post-processing.
+- Psycho preset (above Ultra):
+  - a 4096² sun shadow map with 12-tap soft filtering: cars, trees, buildings, props and terrain cast real
+    shadows, replacing blob shadows;
+  - screen-space ambient occlusion and 8× MSAA;
+  - draw distance ×1.45, with more woodland, particles and weather;
+  - shadows are skipped at night and when the sun is very low.
+- The presets are now Ultra Low, Low, Medium, High (default), Ultra and Psycho. Saved settings are migrated so a
+  stored preset keeps its name.
+
 ## Known issues / not verified
+- Not measured: whether Ultra Low reaches ~60 fps on a mid-range phone, or what Psycho costs on the target PC.
+  Only relative costs on a software GPU are known, per frame on an emulated phone: Ultra Low 1.4 s, Low 2.0 s,
+  High 11.4 s, Psycho 45 s.
+- Generated-track bot test (`npm run test:sim`): on Roadworks d1 the bot finishes the championship race 17th (it
+  needs the top ten). v1.6.0 and v1.9.0 give the same result, so this predates the release; the 64 course tracks
+  are unaffected.
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.
