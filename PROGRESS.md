@@ -71,6 +71,16 @@ Rebuild: `npm install` once, then `npm run build`.
   it clears every stretch; if it cannot fit, it is left out. Render-only, so track data is unchanged.
 - Mouse cursor hides during a race after 1.2 s without mouse movement; it returns on movement and in menus/pause.
 
+## v1.5.0 (2026-11-06)
+- Version: one source (`package.json`), shown in the browser tab title, on the title screen and in benchmark reports.
+  Numbering: 1.0 first complete build, +0.1 per playtest round of fixes.
+- Touch controls: steering (◀ ▶) on the left, BRAKE / GAS on the right, gear ▲ ▼ above GAS with the manual gearbox,
+  pause in the top-left corner. Multi-touch; thumbs can slide between steer buttons or between pedals. Shown in a race
+  when touch is the input in use (from the start on phones/tablets, after the first touch on a touch-screen PC;
+  keyboard or gamepad use hides them again). HUD makes room for them; portrait shows a "turn sideways" hint.
+  Menus already work by tapping. Touch-first devices start on the Medium preset if nothing was saved yet.
+  Tested with Chromium phone emulation (layout, multi-touch, accelerate/steer/brake/gears); not tried on a real device.
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.

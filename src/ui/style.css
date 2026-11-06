@@ -159,3 +159,28 @@ table.t tr.cut td{border-top:2px dashed var(--sun)}
 .keys{display:grid;grid-template-columns:auto 1fr 1fr;gap:.2rem .8rem;font-size:.82rem;align-items:center}
 .kb{display:inline-block;padding:.05rem .4rem;margin:.1rem .2rem .1rem 0;border:1px solid rgba(5,217,232,.5);font-family:'Share Tech Mono';font-size:.78rem;background:rgba(0,0,0,.3)}
 body.nocursor,body.nocursor *{cursor:none!important}
+.title .ver{position:absolute;right:1.2rem;bottom:1rem;font:13px 'Share Tech Mono',monospace;letter-spacing:.12em;color:rgba(255,255,255,.45)}
+/* touch controls */
+.touch{position:fixed;inset:0;z-index:40;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;font-family:'Russo One','Chakra Petch',sans-serif}
+.tc-btn{position:absolute;display:flex;align-items:center;justify-content:center;border-radius:1.1rem;border:2px solid rgba(255,255,255,.28);background:rgba(10,8,24,.28);color:rgba(255,255,255,.78);font-size:clamp(14px,2.4vmin,22px);letter-spacing:.12em;box-shadow:inset 0 0 1.2rem rgba(5,217,232,.12);transition:background .06s,border-color .06s,transform .06s;pointer-events:none}
+.tc-btn span{pointer-events:none}
+.tc-btn.on{background:rgba(5,217,232,.32);border-color:rgba(5,217,232,.9);transform:scale(.96)}
+.tc-left,.tc-right{bottom:max(4vmin,env(safe-area-inset-bottom));width:16vw;max-width:9.5rem;height:34vmin;max-height:12rem;font-size:clamp(22px,5vmin,40px)}
+.tc-left{left:max(3vmin,env(safe-area-inset-left))}
+.tc-right{left:calc(max(3vmin,env(safe-area-inset-left)) + min(16vw,9.5rem) + 2.5vmin)}
+.tc-accel,.tc-brake{bottom:max(4vmin,env(safe-area-inset-bottom));width:15vw;max-width:9rem}
+.tc-accel{right:max(3vmin,env(safe-area-inset-right));height:44vmin;max-height:15rem;border-color:rgba(124,255,159,.45)}
+.tc-accel.on{background:rgba(124,255,159,.3);border-color:rgba(124,255,159,.95)}
+.tc-brake{right:calc(max(3vmin,env(safe-area-inset-right)) + min(15vw,9rem) + 2.5vmin);height:30vmin;max-height:10rem;border-color:rgba(255,45,149,.45)}
+.tc-brake.on{background:rgba(255,45,149,.3);border-color:rgba(255,45,149,.95)}
+.tc-gup,.tc-gdn{right:max(3vmin,env(safe-area-inset-right));width:15vw;max-width:9rem;height:11vmin;max-height:4rem;font-size:clamp(16px,3.4vmin,26px)}
+.tc-gup{bottom:calc(max(4vmin,env(safe-area-inset-bottom)) + min(44vmin,15rem) + 2.5vmin + min(11vmin,4rem) + 1.5vmin)}
+.tc-gdn{bottom:calc(max(4vmin,env(safe-area-inset-bottom)) + min(44vmin,15rem) + 2.5vmin)}
+.tc-pause{top:max(3vmin,env(safe-area-inset-top));left:max(3vmin,env(safe-area-inset-left));width:11vmin;height:9vmin;max-width:4.5rem;max-height:3.4rem;border-radius:.8rem;font-size:clamp(14px,3vmin,22px)}
+/* while the touch controls are up, the HUD makes room: position moves right of the pause button,
+   speed and fuel move up out from under the pedals and steering */
+body.touchui .hud .tl{left:calc(4vmin + min(11vmin,4.5rem))}
+body.touchui .hud .br{bottom:auto;top:22%}
+body.touchui .hud .bl{bottom:auto;top:30%}
+.tc-rotate{display:none;position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);padding:.8rem 1.2rem;background:rgba(0,0,0,.7);border:1px solid var(--cyan);color:#fff;font:700 16px 'Chakra Petch',sans-serif;letter-spacing:.1em;pointer-events:none}
+@media (orientation:portrait){.tc-rotate{display:block}}

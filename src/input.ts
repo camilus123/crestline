@@ -44,6 +44,10 @@ export class Input {
   private padPrev: boolean[][] = [];
   private padAxPrev: number[][] = [];
   menuQueue: MenuKey[] = [];
+  /** on-screen touch controls (player 1), 0..1 per action */
+  touch: Partial<Record<Action, number>> = {};
+  /** set when a gamepad button was pressed since the game last looked (to hide the touch controls) */
+  padUsed = false;
   private repeatT = new Map<string, number>();
   listening: ((code: string) => void) | null = null;
   typing = false;
@@ -105,7 +109,7 @@ export class Input {
       if (!p || !p.connected) continue;
       const prev = this.padPrev[p.index] || [];
       const pressed = p.buttons.map((b) => b.pressed || b.value > 0.5);
-      if (pressed.some((b, i) => b && !prev[i])) this.first();
+      if (pressed.some((b, i) => b && !prev[i])) { this.first(); this.padUsed = true; }
       if (this.listening) {
         const i = pressed.findIndex((b, k) => b && !prev[k]);
         if (i >= 0) {
@@ -186,7 +190,7 @@ export class Input {
     return s > dz ? Math.min(1, (s - dz) / (1 - dz)) : 0;
   }
   act(a: Action, player: number): number {
-    let v = 0;
+    let v = player === 0 ? this.touch[a] ?? 0 : 0;
     for (const b of this.bindings[player][a]) v = Math.max(v, this.value(b, player));
     return v;
   }

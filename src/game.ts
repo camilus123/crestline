@@ -13,6 +13,7 @@ import { hashString } from './core/rng';
 import { QUALITY, Renderer, View } from './render/renderer';
 import { LOOKS } from './render/looks';
 import { Hud, ord } from './ui/hud';
+import { TouchControls } from './ui/touch';
 import { h, installStyle, store, toast } from './ui/dom';
 import * as Screens from './ui/screens';
 
@@ -98,6 +99,7 @@ export class Game {
   // fullscreen: Keyboard Lock lets Esc reach the game (hold Esc to leave fullscreen); without it the browser
   // spends the first Esc press on leaving fullscreen, so that exit is treated as the press it was
   private fsExitByUs = false;
+  touch: TouchControls;
   private mouseIdle = 0; // seconds since the mouse last moved; the cursor hides in a race when it isn't in use
   private escLocked = false;
   bench: { t: number; frames: number[]; done: (r: string) => void } | null = null;
@@ -113,6 +115,9 @@ export class Game {
     if (b && b.length === 2) this.input.bindings = b;
     this.bestScores = store.get('bestScores', {});
     this.bestTimes = store.get('bestTimes', {});
+    // touch-first devices (phones, tablets) start on a lighter preset if nothing was saved yet
+    if (!store.get('settings', null) && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) this.settings.quality = 1;
+    this.touch = new TouchControls(this.input, () => this.setPaused(true));
     this.f3 = h('div', { class: 'f3', style: 'display:none' });
     document.body.appendChild(this.f3);
     this.input.onFirstInput = () => {
@@ -560,6 +565,9 @@ export class Game {
       this.renderer.render({ race: a, alpha: this.acc / DT, time: this.time, dt, views: [{ car, rect: [0, 0, this.canvas.clientWidth, this.canvas.clientHeight], shake: 0.5 }], fade: 0, hit: [0], attract: true, orbit });
       if (this.screenId === 'setup' && this.idle > 45) this.show('title');
     }
+    const padUsed = this.input.padUsed;
+    this.input.padUsed = false;
+    this.touch.update(this.screenId === 'race' && !this.paused && !!this.race, this.settings.manual[0], padUsed);
     this.mouseIdle += raw;
     const hideCursor = this.screenId === 'race' && !this.paused && this.mouseIdle > 1.2;
     if (hideCursor !== document.body.classList.contains('nocursor')) document.body.classList.toggle('nocursor', hideCursor);
@@ -697,7 +705,7 @@ export class Game {
       const gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
       const R = this.renderer;
       const report = [
-        `CRESTLINE benchmark (30 s)`,
+        `CRESTLINE v${__VERSION__} benchmark (30 s)`,
         `average      ${(1 / avg).toFixed(1)} fps   ${(avg * 1000).toFixed(2)} ms`,
         `1% low       ${low1fps.toFixed(1)} fps`,
         `99th pct     ${(p99 * 1000).toFixed(2)} ms`,
