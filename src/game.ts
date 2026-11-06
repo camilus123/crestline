@@ -98,6 +98,7 @@ export class Game {
   // fullscreen: Keyboard Lock lets Esc reach the game (hold Esc to leave fullscreen); without it the browser
   // spends the first Esc press on leaving fullscreen, so that exit is treated as the press it was
   private fsExitByUs = false;
+  private mouseIdle = 0; // seconds since the mouse last moved; the cursor hides in a race when it isn't in use
   private escLocked = false;
   bench: { t: number; frames: number[]; done: (r: string) => void } | null = null;
   private trackCache = new Map<string, TrackData>();
@@ -145,6 +146,9 @@ export class Game {
       this.escLocked = false;
     });
     window.addEventListener('resize', () => this.layout());
+    const wake = () => { this.mouseIdle = 0; document.body.classList.remove('nocursor'); };
+    window.addEventListener('pointermove', wake);
+    window.addEventListener('pointerdown', wake);
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -556,6 +560,9 @@ export class Game {
       this.renderer.render({ race: a, alpha: this.acc / DT, time: this.time, dt, views: [{ car, rect: [0, 0, this.canvas.clientWidth, this.canvas.clientHeight], shake: 0.5 }], fade: 0, hit: [0], attract: true, orbit });
       if (this.screenId === 'setup' && this.idle > 45) this.show('title');
     }
+    this.mouseIdle += raw;
+    const hideCursor = this.screenId === 'race' && !this.paused && this.mouseIdle > 1.2;
+    if (hideCursor !== document.body.classList.contains('nocursor')) document.body.classList.toggle('nocursor', hideCursor);
     this.dynamicResolution(raw);
     if (monitor) {
       this.gpuEnd();

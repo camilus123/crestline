@@ -158,3 +158,4 @@ table.t tr.cut td{border-top:2px dashed var(--sun)}
 .code{font-family:'Share Tech Mono';font-size:2.2rem;letter-spacing:.18em;color:var(--gold);text-shadow:0 0 .5em rgba(255,210,63,.5)}
 .keys{display:grid;grid-template-columns:auto 1fr 1fr;gap:.2rem .8rem;font-size:.82rem;align-items:center}
 .kb{display:inline-block;padding:.05rem .4rem;margin:.1rem .2rem .1rem 0;border:1px solid rgba(5,217,232,.5);font-family:'Share Tech Mono';font-size:.78rem;background:rgba(0,0,0,.3)}
+body.nocursor,body.nocursor *{cursor:none!important}

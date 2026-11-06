@@ -64,6 +64,13 @@ Rebuild: `npm install` once, then `npm run build`.
 - Benchmark: live on-screen counter (elapsed / 30 s, current fps), anything left over the race is removed,
   focus loss no longer pauses it, report adds CPU and GPU time per frame.
 
+## Fixes after fourth playtest (2026-11-06)
+- Driving through Desert mesas (and other big landmarks): a landmark was placed clear of the road beside it,
+  but the road could curve back through it further on (and a mesa could be wider than its placement distance).
+  Each rigid landmark now checks the road ahead for several footprints either side and moves outwards until
+  it clears every stretch; if it cannot fit, it is left out. Render-only, so track data is unchanged.
+- Mouse cursor hides during a race after 1.2 s without mouse movement; it returns on movement and in menus/pause.
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.

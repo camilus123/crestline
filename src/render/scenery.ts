@@ -40,6 +40,36 @@ void main(){
     float keep = min(abs(iSUR.y), edge + uFoot * iSHX.x + 1.0);
     u = side * max(mix(ext, abs(u), 0.85), keep);
   }
+  if (uLandmark == 1 && uBend == 0 && uSpan == 0 && u != 0.0) {
+    // A landmark is placed beside one stretch of road, but the road may curve back towards it further on.
+    // Check the road for a few footprints either side and push the landmark outwards until it clears
+    // every stretch (same result for every vertex of the instance, so the model moves as one piece).
+    float R = uFoot * iSHX.x + 8.0;
+    vec2 c0 = bentPos(p, u, 0.0).xz;
+    vec2 rt = vec2(cos(p.phi), -sin(p.phi)) * side;
+    float stepD = max(R * 0.3, 10.0);
+    float t = 0.0;
+    for (int pass = 0; pass < 2; pass++)
+    for (int k = -10; k <= 10; k++) {
+      float dk = d + float(k) * stepD;
+      if (dk < uPathInfo.x || dk > uPathInfo.w) continue;
+      PathS q = pathAt(dk);
+      float L = R + max(q.hwL, q.hwR) + 4.0;
+      vec2 a = c0 + rt * t - q.xz;
+      float b = dot(a, rt);
+      if (dot(a, a) < L * L) t += sqrt(b * b - dot(a, a) + L * L) - b; // out to the far edge of this stretch's keep-out circle
+    }
+    // still overlapping some stretch (squeezed between two of them): leave it out rather than show the road inside it
+    for (int k = -10; k <= 10; k++) {
+      float dk = d + float(k) * stepD;
+      if (dk < uPathInfo.x || dk > uPathInfo.w) continue;
+      PathS q = pathAt(dk);
+      float L = R + max(q.hwL, q.hwR) + 2.0;
+      vec2 a = c0 + rt * t - q.xz;
+      if (dot(a, a) < L * L) hide = 1.0;
+    }
+    u += side * t;
+  }
   float off = max(abs(u) - edge, 0.0);
   float base = uSpan == 1 ? 0.0 : terrainH(p, u, off);
   if (uLandmark == 1 && abs(iSUR.y) > ext) base -= 6.0;
