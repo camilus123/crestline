@@ -122,7 +122,9 @@ vec3 fogApply(vec3 col, vec3 wpos){
   float dens = uFog.x * exp(-hgt * uFog.y);
   float f = 1.0 - exp(-dist * dens);
   f = min(f, uFog.w);
-  float sunA = pow(max(dot(dir, uSunDir), 0.0), 6.0);
+  // in-scattered sunlight is concentrated close around the sun; a wide glow would wash out (and seem to light)
+  // anything standing between the camera and a low sun
+  float sunA = pow(max(dot(dir, uSunDir), 0.0), 24.0);
   vec3 fc = uFogCol + uFogSun * sunA;
   fc += vec3(0.6,0.65,0.8) * uFlash * 0.6;
   return mix(col, fc, f);
@@ -136,6 +138,11 @@ vec3 lightSurf(vec3 albedo, vec3 N, vec3 wpos, float rough, float specK, float a
   float sp = pow(max(dot(N, H), 0.0), shin) * (shin + 8.0) / 25.0 * specK;
   float fres = pow(1.0 - max(dot(N, V), 0.0), 5.0);
   vec3 amb = mix(uAmbBot, uAmbTop, N.y * 0.5 + 0.5) * ao;
+  // the sky is bright on the sun's side and dim opposite it, most of all with a low sun: faces turned away
+  // from the sun get less fill light (backlit buildings read as shaded), faces towards it a little more
+  vec2 sunH = uSunDir.xz / max(length(uSunDir.xz), 1e-3);
+  float toSun = dot(N.xz, sunH) * (1.0 - abs(N.y));
+  amb *= 1.0 + toSun * 0.45 * (1.0 - clamp(uSunDir.y * 1.6, 0.0, 1.0));
   amb += vec3(0.55, 0.6, 0.85) * uFlash * 1.5;
   vec3 c = albedo * (amb + uSunCol * ndl * shadow) + uSunCol * sp * ndl * shadow;
   c += mix(uAmbBot, uAmbTop, 0.8) * fres * specK * 0.25 * ao;

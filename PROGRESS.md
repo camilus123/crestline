@@ -102,6 +102,14 @@ Rebuild: `npm install` once, then `npm run build`.
   a hard shoulder behind a solid edge line.
 - Tested: all 32 Championship races — every car pits, nobody runs dry; Arcade results unchanged.
 
+## v1.8.0 (2026-11-06) — backlit buildings
+- Buildings between the camera and a low sun looked sunlit. Direct sunlight was correct (verified with a debug
+  render: camera-facing faces got no sun); the brightness came from the haze — fog in-scatter used a wide glow
+  around the sun, washing anything in front of it to the sky colour — plus uniform sky fill light.
+- Fog sun in-scatter now concentrated close around the sun (pow 24 instead of 6); sky fill light is directional
+  with a low sun (faces turned away from the sun get less, faces towards it more; flat ground unchanged);
+  Motorway haze slightly thinner and its fill light lower. Checked Motorway, Marsh, Snow.
+
 ## Known issues / not verified
 - Frame rate not measured on the target PC (headless uses a software GPU). Use F3 and Settings → Benchmark.
 - Firefox browser itself not run (only its JS engine); audio not listened to; gamepads not physically tested.

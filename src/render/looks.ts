@@ -266,8 +266,8 @@ export const LOOKS: Look[] = [
   base({
     skyZenith: hex('#253f80'), skyHorizon: hex('#ffb070'), skyGlow: hex('#ffd090'),
     sunAz: 8, sunEl: 7, sunColor: hex('#ffc890', 3.0), sunSize: 1.6,
-    ambTop: hex('#8aa0d8', 0.6), ambBot: hex('#8a6a4a', 0.35),
-    fogColor: hex('#e8b890'), fogDensity: 0.0007, fogSun: hex('#ffb070', 0.9),
+    ambTop: hex('#8aa0d8', 0.52), ambBot: hex('#8a6a4a', 0.32),
+    fogColor: hex('#d8a882'), fogDensity: 0.00055, fogSun: hex('#ffb070', 0.7),
     cloudCover: 0.35, cloudColor: hex('#ffd0b0', 1.1), cloudShade: hex('#7a6080'),
     layers: [
       { color: hex('#8a7aa0'), height: 5, rough: 1, kind: 2 },
