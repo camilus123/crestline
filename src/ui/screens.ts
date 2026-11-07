@@ -625,6 +625,8 @@ function bench(g: Game): Screen {
   bind(menu, backB, 0, 3, { activate: () => g.show('settings') });
   menu.setFocus(startB);
   menu.onBack = () => g.show('settings');
-  const el = h('div', { class: 'scr bg scan' }, hdr('BENCHMARK'), h('div', { class: 'body', style: 'justify-content:center' }, panel), STD_HINT.cloneNode(true) as HTMLElement);
-  return { el, onKey: (k) => menu.key(k) };
+  // the report is long: the body grows with it (never squeezed to the window) and the screen scrolls
+  const el = h('div', { class: 'scr bg scan' }, hdr('BENCHMARK'), h('div', { class: 'body', style: 'justify-content:center;flex:1 0 auto' }, panel), STD_HINT.cloneNode(true) as HTMLElement);
+  // the buttons are one row, so up / down scroll the report (keyboard and gamepad)
+  return { el, onKey: (k) => { if (k === 'up' || k === 'down') el.scrollTop += (k === 'up' ? -0.4 : 0.4) * el.clientHeight; else menu.key(k); } };
 }

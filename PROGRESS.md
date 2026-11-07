@@ -146,6 +146,27 @@ Rebuild: `npm install` once, then `npm run build`.
 - The presets are now Ultra Low, Low, Medium, High (default), Ultra and Psycho. Saved settings are migrated so a
   stored preset keeps its name.
 
+## v2.0.1 (2026-11-07) — no more driving inside mesas and peaks; benchmark report scrolls
+- Big rigid landmarks (Desert mesas up to 350 m across, Mountains peaks up to 900 m) could cover the road at the
+  camera, so the player drove "inside" them (dark red ceiling over the road in Desert).
+  - Cause: the vertex shader checked a landmark against the road only within about three footprints of its own
+    stretch, and sampled the road as sparsely as 0.3 of its size. A mesa placed 1.1–1.9 km ahead, beside a stretch
+    the bent view brought round towards the camera, was never tested against the road under the car. Psycho's longer
+    view distance made this more common.
+  - Fix (`src/render/landmarks.ts`): every frame the CPU places each landmark in view against the whole visible
+    path, sampled every 10 m at fixed track positions plus both ends of the path. The landmark is pushed outwards
+    until it clears every stretch, and left out if it cannot. The shader only reads the result, so the GPU does less
+    work than before.
+  - Test `tests/inside.test.ts` drives every course with landmarks in 6 m steps at Psycho view distance and checks
+    the camera and the first 120 m of road against every landmark footprint. The old placement fails on 4 tracks
+    (worst: 240 m inside a mesa on POLONNVHN21); the new one on none. Landmarks are never left out, and they never
+    switch between shown and hidden.
+  - `review/fix12/desert_mesa_before.png` / `_after.png`: the same frame on both builds.
+- Benchmark screen on windows roughly 620–1100 px tall (most laptops, and full HD with browser bars): the screen
+  body was squeezed to the window height and the panel's clipped corners hid the rest of the report, so there was
+  nothing to scroll to. The body now grows with the report and the screen scrolls (mouse wheel, touch). Up / Down
+  scroll it with keyboard or gamepad.
+
 ## Known issues / not verified
 - Not measured: whether Ultra Low reaches ~60 fps on a mid-range phone, or what Psycho costs on the target PC.
   Only relative costs on a software GPU are known, per frame on an emulated phone: Ultra Low 1.4 s, Low 2.0 s,

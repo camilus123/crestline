@@ -636,7 +636,7 @@ export class Renderer {
       tp.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
       this.ground.terr.draw();
       if (this.hazards) this.hazards.drawProps(prepS, sCar, F.time);
-      if (this.scenery) this.scenery.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK);
+      if (this.scenery) this.scenery.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK, path);
       this.drawTraffic(prepS, race.traffic, sCar, Math.min(maxD, 600), a, F.time);
       this.cars.draw(prepS, draws, [0.2, 0.9, 1.0]);
       gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -734,7 +734,7 @@ export class Renderer {
     }
     pf.end();
     pf.begin('scenery');
-    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK);
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path);
     pf.end();
     pf.begin('cars, traffic');
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);

@@ -7,6 +7,8 @@ import { TrackData } from '../track/generator';
 import { GL, Mesh, Program } from './gl';
 import { LIGHT, NOISE, PATH, PRELUDE } from './glsl';
 import { buildModel, LAMPS, LANDMARK, SPANNING } from './models';
+import { LandmarkPlacer } from './landmarks';
+import { BentPath } from './path';
 
 export const OBJ_VS = PRELUDE + NOISE + PATH + `
 layout(location=0) in vec3 aPos;
@@ -15,6 +17,7 @@ layout(location=2) in vec4 aCol;
 layout(location=3) in vec4 aAux;
 layout(location=4) in vec3 iSUR;
 layout(location=5) in vec3 iSHX;
+layout(location=6) in vec2 iAdj; // rigid landmarks: lateral offset to draw at this frame, and 'leave out' (worked out on the CPU)
 uniform mat4 uViewProj;
 uniform float uSCar;
 uniform int uLandmark;
@@ -35,40 +38,14 @@ void main(){
   float edge = side < 0.0 ? p.hwL : p.hwR;
   float ext = side < 0.0 ? p.extL : p.extR;
   if (uLandmark == 0 && abs(u) > ext + 1.0 && uSpan == 0) hide = 1.0;
-  if (uLandmark == 1 && abs(u) > ext) {
+  if (uLandmark == 1 && uBend == 0 && uSpan == 0) {
+    // pushed clear of every stretch of road in view (see landmarks.ts)
+    u = iAdj.x;
+    if (iAdj.y > 0.5) hide = 1.0;
+  } else if (uLandmark == 1 && abs(u) > ext) {
     // squeeze far landmarks inside the folding limit, but never closer to the road than they were placed
     float keep = min(abs(iSUR.y), edge + uFoot * iSHX.x + 1.0);
     u = side * max(mix(ext, abs(u), 0.85), keep);
-  }
-  if (uLandmark == 1 && uBend == 0 && uSpan == 0 && u != 0.0) {
-    // A landmark is placed beside one stretch of road, but the road may curve back towards it further on.
-    // Check the road for a few footprints either side and push the landmark outwards until it clears
-    // every stretch (same result for every vertex of the instance, so the model moves as one piece).
-    float R = uFoot * iSHX.x + 8.0;
-    vec2 c0 = bentPos(p, u, 0.0).xz;
-    vec2 rt = vec2(cos(p.phi), -sin(p.phi)) * side;
-    float stepD = max(R * 0.3, 10.0);
-    float t = 0.0;
-    for (int pass = 0; pass < 2; pass++)
-    for (int k = -10; k <= 10; k++) {
-      float dk = d + float(k) * stepD;
-      if (dk < uPathInfo.x || dk > uPathInfo.w) continue;
-      PathS q = pathAt(dk);
-      float L = R + max(q.hwL, q.hwR) + 4.0;
-      vec2 a = c0 + rt * t - q.xz;
-      float b = dot(a, rt);
-      if (dot(a, a) < L * L) t += sqrt(b * b - dot(a, a) + L * L) - b; // out to the far edge of this stretch's keep-out circle
-    }
-    // still overlapping some stretch (squeezed between two of them): leave it out rather than show the road inside it
-    for (int k = -10; k <= 10; k++) {
-      float dk = d + float(k) * stepD;
-      if (dk < uPathInfo.x || dk > uPathInfo.w) continue;
-      PathS q = pathAt(dk);
-      float L = R + max(q.hwL, q.hwR) + 2.0;
-      vec2 a = c0 + rt * t - q.xz;
-      if (dot(a, a) < L * L) hide = 1.0;
-    }
-    u += side * t;
   }
   float off = max(abs(u) - edge, 0.0);
   float base = uSpan == 1 ? 0.0 : terrainH(p, u, off);
@@ -192,6 +169,7 @@ interface TypeSet {
   foot: number;
   bend: boolean;
   backdrop: boolean; // deep woodland behind the roadside: visual only, shorter draw distance
+  adj: boolean; // rigid landmark placed on the CPU every frame (instance data has 2 extra floats)
 }
 
 /**
@@ -300,10 +278,15 @@ export class Scenery {
           { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
           { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
         ], mb.vertexCount);
-        const data = new Float32Array(idx.length * 6);
+        const landmark = LANDMARK.has(type);
+        const bend = !landmark || type === O.TOWER;
+        const adj = landmark && !bend && !SPANNING.has(type);
+        const F = adj ? 8 : 6;
+        const data = new Float32Array(idx.length * F);
         const ss = new Float32Array(idx.length);
         idx.forEach((i, k) => {
-          data.set([o.s[i], o.u[i], o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * 6);
+          data.set([o.s[i], o.u[i], o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
+          if (adj) data[k * F + 6] = o.u[i];
           ss[k] = o.s[i];
           if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i], h: type === O.LAMP_DOUBLE ? 10 : 7, type });
         });
@@ -311,17 +294,17 @@ export class Scenery {
           { loc: 4, size: 3, type: gl.FLOAT, offset: 0 },
           { loc: 5, size: 3, type: gl.FLOAT, offset: 12 },
         ];
-        mesh.setInstances(data, 24, inst);
+        if (adj) inst.push({ loc: 6, size: 2, type: gl.FLOAT, offset: 24 });
+        mesh.setInstances(data, F * 4, inst, adj ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
         let shadow: Mesh | null = null;
         const r = SHADOW_R[type];
         if (r) {
           shadow = new Mesh(gl, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), 8, [{ loc: 0, size: 2, type: gl.FLOAT, offset: 0 }], 6);
-          shadow.setInstances(data, 24, inst);
+          shadow.setInstances(data, F * 4, inst.slice(0, 2));
         }
         let foot = 0;
         for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
-        const landmark = LANDMARK.has(type);
-        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0, foot, bend: !landmark || type === O.TOWER, backdrop: false });
+        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj });
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
@@ -353,7 +336,7 @@ export class Scenery {
       mesh.setInstances(data, 24, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }]);
       let foot = 0;
       for (let q = 0; q < mb.pos.length; q += 3) foot = Math.max(foot, Math.hypot(mb.pos[q], mb.pos[q + 2]));
-      this.sets.push({ type, mesh, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true });
+      this.sets.push({ type, mesh, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false });
     }
   }
 
@@ -386,7 +369,27 @@ export class Scenery {
     return out;
   }
 
-  draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number): void {
+  private placer = new LandmarkPlacer();
+  private placed = { u: 0, hide: false };
+
+  /** place the rigid landmarks in view against the current bent path (see landmarks.ts) */
+  private placeLandmarks(set: TypeSet, path: BentPath, sCar: number, loop: number, r: number[]): void {
+    const D = set.data, o = this.placed;
+    for (let k = 0; k < r.length; k += 2) {
+      for (let j = r[k]; j < r[k] + r[k + 1]; j++) {
+        const b = j * 8;
+        let d = D[b] - sCar;
+        if (loop > 0) d = ((d + loop * 0.5) % loop + loop) % loop - loop * 0.5;
+        if (d < path.dFirst + 4 || d > path.maxD) { D[b + 7] = 1; continue; }
+        this.placer.place(path, d, D[b + 1], set.foot * D[b + 3], o);
+        D[b + 6] = o.u;
+        D[b + 7] = o.hide ? 1 : 0;
+      }
+    }
+    set.mesh.updateInstances(D);
+  }
+
+  draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath): void {
     const gl = this.gl;
     const p = this.prog.use();
     prep(p);
@@ -396,6 +399,7 @@ export class Scenery {
     for (const set of this.sets) {
       p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0).i('uBend', set.bend ? 1 : 0).f('uFoot', set.foot);
       this.ranges(set, sCar, 60, set.landmark ? maxD + 400 : set.backdrop ? maxD * this.backdropDist : maxD, loop, r);
+      if (set.adj) this.placeLandmarks(set, path, sCar, loop, r);
       for (let k = 0; k < r.length; k += 2) set.mesh.drawInstances(r[k], r[k + 1]);
     }
   }
