@@ -155,6 +155,9 @@ vec3 fogApply(vec3 col, vec3 wpos){
   float sunA = pow(max(dot(dir, uSunDir), 0.0), 24.0);
   vec3 fc = uFogCol + uFogSun * sunA;
   fc += vec3(0.6,0.65,0.8) * uFlash * 0.6;
+  // safety net: a NaN or infinite colour (from a degenerate normal, say) would be spread by bloom and motion blur
+  // into a glowing column, so show the fog colour there instead
+  if (any(isnan(col)) || any(isinf(col))) col = fc;
   return mix(col, fc, f);
 }
 

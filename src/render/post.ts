@@ -18,6 +18,7 @@ void main(){
   vec3 c = S(vUv) * 4.0 + S(vUv + vec2(-t.x, -t.y)) + S(vUv + vec2(t.x, -t.y)) + S(vUv + vec2(-t.x, t.y)) + S(vUv + vec2(t.x, t.y));
   c /= 8.0;
   if (uFirst == 1) {
+    if (any(isnan(c)) || any(isinf(c))) c = vec3(0.0); // never let one bad pixel bloom across the screen
     float l = max(max(c.r, c.g), c.b);
     float k = max(0.0, l - uThreshold) / max(l, 1e-4);
     c *= k;

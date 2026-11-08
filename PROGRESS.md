@@ -167,6 +167,19 @@ Rebuild: `npm install` once, then `npm run build`.
   nothing to scroll to. The body now grows with the report and the screen scrolls (mouse wheel, touch). Up / Down
   scroll it with keyboard or gamepad.
 
+## v2.0.2 (2026-11-08) — no glowing columns on mountain tracks
+- Glowing white columns standing in the air on Mountains (and anywhere terrain on the inside of a tight bend is
+  squeezed hard). Cause: far out, the squeeze collapses neighbouring terrain points onto the same spot, so the normal
+  was normalize(0) = NaN. The NaN lit a thin line along the cut end of the squeezed mountainside, and bloom and
+  motion blur smeared it into a glowing column. Isolated by turning passes off one at a time: the column survives
+  without particles, glows, hazards or scenery; it goes with the terrain off; with motion blur off it is a 1-pixel
+  line.
+- Fix: where the squeezed slope has collapsed, the terrain normal comes from the slope as it would be unsqueezed, so
+  the cut end is shaded like the rock face it belongs to ("up" if even that is degenerate).
+- Safety net: any NaN or infinite surface colour shows as fog colour, and the bloom's first stage drops non-finite
+  pixels, so one bad pixel can never again bloom across the screen.
+- `review/fix13/column_before_noblur.png` (the bright line, motion blur off) / `column_after.png`.
+
 ## Known issues / not verified
 - Not measured: whether Ultra Low reaches ~60 fps on a mid-range phone, or what Psycho costs on the target PC.
   Only relative costs on a software GPU are known, per frame on an emulated phone: Ultra Low 1.4 s, Low 2.0 s,

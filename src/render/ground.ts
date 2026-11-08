@@ -216,6 +216,13 @@ vec3 terrPoint(float d, float off, float side, bool sink, out PathS p, out float
   float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) - dip;
   return bentPos(p, u, h);
 }
+// the same point with no squeeze (only for normals where the squeeze has collapsed the ground)
+vec3 natPoint(float d, float off, float side){
+  PathS p = pathAt(d);
+  float edge = side < 0.0 ? p.hwL : p.hwR;
+  float uu = edge + off;
+  return bentPos(p, side * uu, off <= 0.0 ? 0.0 : terrainH(p, side * uu, off));
+}
 void main(){
   float d = rowD(aRCS.x);
   float off = aRCS.y, side = aRCS.z;
@@ -229,7 +236,19 @@ void main(){
   vec3 wa = terrPoint(d + 1.5, off, side, false, q, tmp);
   vec3 wb = terrPoint(d, off + e, side, false, q, tmp);
   vec3 tA = wa - w0, tB = (wb - w0) * side;
-  vec3 n = normalize(cross(tA, tB));
+  // where the squeeze has collapsed the ground sideways (far beyond a tight bend) both samples land on the same
+  // point and the cross product is zero or rounding noise: normalize() of that gave NaN, which lit a thin line
+  // along the edge of the collapsed strip that bloom and motion blur smeared into a glowing column. Use 'up' there.
+  vec3 cr = cross(tA, tB);
+  float lc = length(cr);
+  if (lc <= 1e-3 * length(tA) * max(e, 1.0)) {
+    // take the slope of the ground as it would be unsqueezed, so the cut end of a squeezed mountainside is
+    // shaded like the rock face it belongs to
+    vec3 n0 = natPoint(d, off, side), na = natPoint(d + 1.5, off, side), nb = natPoint(d, off + e, side);
+    cr = cross(na - n0, (nb - n0) * side);
+    lc = length(cr);
+  }
+  vec3 n = lc > 1e-6 ? cr / lc : vec3(0.0, 1.0, 0.0);
   if (n.y < 0.0) n = -n;
   // texture and ground-type lookups use where the vertex ends up (squeezed), not where it would have been
   vW = w; vN = n; vSU = vec2(p.s, side * uu); vOff = max(0.0, uu - (side < 0.0 ? p.hwL : p.hwR)); vSlope = 1.0 - n.y; vFlags = p.flags;
