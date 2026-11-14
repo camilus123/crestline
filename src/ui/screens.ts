@@ -63,7 +63,7 @@ function title(g: Game): Screen {
     h('div', { class: 'sub', style: 'font-size:1.6rem;margin-top:1.4vh' }, 'MAXIMUM DRIVE'),
     h('div', { class: 'press blink' }, 'PRESS ANY KEY'),
     h('div', { class: 'foot' }, 'KEYBOARD · GAMEPAD · MOUSE · TOUCH    ·    F2 FULLSCREEN    ·    F3 PERFORMANCE'),
-    h('div', { class: 'ver' }, 'v' + __VERSION__),
+    h('div', { class: 'ver' }, 'v' + __VERSION__ + '  ·  build ' + __BUILD_TIME__.slice(0, 16).replace('T', ' ') + ' UTC'),
   );
   const born = performance.now();
   const go = () => {

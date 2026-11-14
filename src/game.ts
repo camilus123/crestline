@@ -711,6 +711,7 @@ export class Game {
       `headroom   ${gpu >= 0 ? Math.max(0, (1 - Math.max(cpu, gpu) / (avg * 1000)) * 100).toFixed(0) + ' %' : 'n/a'}\n` +
       `render     ${R.renderW}×${R.renderH}  (${Math.round((R.renderW / this.canvas.width) * 100)}%)\n` +
       `output     ${this.canvas.width}×${this.canvas.height}\n` +
+      `version    ${__VERSION__}  build ${__BUILD_TIME__.slice(5, 16).replace('T', ' ')} UTC\n` +
       `preset     ${R.quality.name}${this.settings.dynRes ? '  dyn-res' : ''}  MSAA ${R.quality.msaa}x\n` +
       `refresh    ~${(1 / this.refresh).toFixed(0)} Hz  (estimated from frame timing)`;
   }
