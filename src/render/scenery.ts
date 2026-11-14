@@ -332,9 +332,14 @@ export class Scenery {
         const data = new Float32Array(idx.length * F);
         const ss = new Float32Array(idx.length);
         idx.forEach((i, k) => {
-          data.set([o.s[i], o.u[i], o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
-          data[k * F + 6] = o.u[i];
-          data[k * F + 8] = span ? 0 : this.terrain.h(o.s[i], o.u[i]);
+          // Peaks are backdrop: the terrain itself forms the mountains beside the road now. The track places them
+          // 500-1200 m out, but they are 800-1800 m across, so they ended up pushed only just clear of the road,
+          // looming over it with their base in mid-air above the valley. Stand them 1.7-2.8 km away instead
+          // (drawing only: the track data is unchanged).
+          const u = type === O.PEAK ? Math.sign(o.u[i]) * (Math.abs(o.u[i]) * 1.6 + 900) : o.u[i];
+          data.set([o.s[i], u, o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
+          data[k * F + 6] = u;
+          data[k * F + 8] = span ? 0 : this.terrain.h(o.s[i], u);
           ss[k] = o.s[i];
           if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i], h: type === O.LAMP_DOUBLE ? 10 : 7, type });
         });

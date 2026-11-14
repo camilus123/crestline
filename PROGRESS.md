@@ -191,6 +191,9 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   road), and on the other side a steep drop below the guard rail easing into a valley whose far side rises again.
   The side changes over smoothly across about 200 m (`Track.tilt`). Meadow low down, rock on steep ground and
   higher up, snow above the snow line. The peak landmark is a faceted, snow-capped mountain instead of a cone.
+- Peak landmarks are drawn 1.7-2.8 km from the road as backdrop, with a base buried far below their foot. The
+  track places them 500-1200 m out, but they are 800-1800 m across, so the keep-off-the-road placement left
+  them looming right beside the road with their base in mid-air over the valley (a flat blue slab in shade).
 - Inside bends, where the bent view folds, the ground now tapers back to road level before the fold limit
   (`foldTaper`), so the inside of a bend is a rounded spur. The old squeezed strip ended in a vertical curtain
   with smeared texture and nothing behind it. This applies to every scenario.

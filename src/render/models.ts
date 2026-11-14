@@ -382,7 +382,8 @@ const LIB: Partial<Record<O, Builder>> = {
     // a faceted mountain: ridges and gullies run from foot to summit (each spoke keeps its own reach all the way
     // up), the summit sits off-centre, and the snow line is ragged
     const segs = 12;
-    const rings: [number, number][] = [[410, -30], [315, 60], [225, 150], [145, 240], [75, 325], [0, 420]];
+    // (the lowest ring is a skirt far below the foot, so the base is buried whatever the ground does under it)
+    const rings: [number, number][] = [[470, -320], [410, -30], [315, 60], [225, 150], [145, 240], [75, 325], [0, 420]];
     const reach = Array.from({ length: segs }, (_, i) => (i % 2 ? 0.74 : 1.12) * (0.85 + b.rng.float() * 0.3));
     const lean = [(b.rng.float() - 0.5) * 120, (b.rng.float() - 0.5) * 120];
     const rock = [M('#59605a', { hue: 0 }), M('#666a6c', { hue: 0 }), M('#74777c', { hue: 0 })];
@@ -396,7 +397,7 @@ const LIB: Partial<Record<O, Builder>> = {
     for (let k = 0; k < rings.length - 1; k++) {
       for (let i = 0; i < segs; i++) {
         const j = (i + 1) % segs;
-        const white = k >= 3 || (k === 2 && i % 3 === 0);
+        const white = k >= 4 || (k === 3 && i % 3 === 0);
         const mat = white ? snow : rock[(k + i) % 3];
         const ctr: V3 = [lean[0] * 0.5, rings[k][1], lean[1] * 0.5];
         if (k === rings.length - 2) b.tri(pt(k, i), pt(k, j), pt(k + 1, 0), mat, ctr);
