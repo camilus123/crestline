@@ -58,7 +58,10 @@ export class Track {
     const nc = Math.ceil(n / C);
     const eL = new Float32Array(nc).fill(MAXE), eR = new Float32Array(nc).fill(MAXE);
     const X = d.X, Z = d.Z, H = d.heading;
-    const span = Math.ceil(2000 / (C * DELTA)); // only stretches that can be in view together
+    // Only the road within 500 m along the track counts (a hairpin doubling back on itself). The track's map
+    // geometry is not a real place: circuits do not close and distant stretches can cross on the map, though the
+    // bent view never shows them together. Distant stretches are left to the per-frame limit.
+    const span = Math.ceil(500 / (C * DELTA));
     for (let i = 0; i < nc; i++) {
       const ki = Math.min(n - 1, i * C);
       // heading as the bent path has it: x += sin, z += cos
@@ -68,9 +71,8 @@ export class Track {
       let r = MAXE, l = MAXE;
       for (let o = -span; o <= span; o++) {
         if (o > -4 && o < 4) continue;
-        let j = i + o;
-        if (d.circuit) j = ((j % nc) + nc) % nc;
-        else if (j < 0 || j >= nc) continue;
+        const j = i + o;
+        if (j < 0 || j >= nc) continue; // (never across a circuit's seam: the map does not join up there)
         const kj = Math.min(n - 1, j * C);
         const vx = X[kj] - xi, vz = Z[kj] - zi;
         const a = vx * nx + vz * nz, b = vx * fx + vz * fz;

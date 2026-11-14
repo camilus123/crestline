@@ -277,6 +277,15 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   gully streaks, and snow decided per pixel (ragged line, lower in gullies) instead of per facet.
 - Street lamps beyond the nearest point lights paint a pool of light on the road under them.
 
+**v3.0.4 (2026-11-14)**
+- v3.0.2's ground-fixed fold limit (`Track.fold`) compared every stretch of road with every other on the track's
+  map. The map is not a real place: circuits do not close (1.6 km gap on KJGJHHMLH04) and distant stretches cross
+  on it, so the limit collapsed to 6 m on straights and the ground ended a few metres from the road with nothing
+  beyond. It now only considers road within 500 m along the track and never across a circuit's seam.
+- That also means the Desert figure quoted for v3.0.2 was an artefact: `tests/groundstill.test.ts` shows the ground
+  within 160 m of the road beside the car was already stable on Desert (0.2 m worst shift). Dunes that seem to
+  move in bends are not explained yet.
+
 ## Known issues / not verified
 - v3 frame rates are not measured on real hardware (no GPU here). What is measured: vertex counts, and that
   every stage runs on a software GPU. Whether Low holds 60 fps on a given slow device needs a benchmark run there.
