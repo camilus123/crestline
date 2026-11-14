@@ -7,27 +7,47 @@ export class Program {
   readonly p: WebGLProgram;
   private loc = new Map<string, WebGLUniformLocation | null>();
   private units = new Map<string, number>();
-  constructor(private gl: GL, vs: string, fs: string, name: string) {
+  private checked = false;
+  private sh: { s: WebGLShader; type: number; src: string }[] = [];
+  /**
+   * Compiling and linking only START here; nothing asks for the result until the program is first used.
+   * Asking (COMPILE_STATUS, LINK_STATUS, uniform locations) makes the browser wait for that one shader, so
+   * checking each program as it is created compiles them strictly one after another, which on Windows (where
+   * every shader goes through the Direct3D compiler) made the game take a long time to start. Created like this,
+   * the browser compiles all of them at once on its worker threads.
+   */
+  constructor(private gl: GL, vs: string, fs: string, private name: string) {
     const mk = (type: number, src: string) => {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, src);
       gl.compileShader(sh);
-      if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-        const log = gl.getShaderInfoLog(sh) || '';
-        const lines = src.split('\n').map((l, i) => `${i + 1}: ${l}`);
-        const m = /0:(\d+)/.exec(log);
-        const ln = m ? +m[1] : 0;
-        throw new Error(`Shader ${name} (${type === gl.VERTEX_SHADER ? 'vs' : 'fs'}) error: ${log}\n${lines.slice(Math.max(0, ln - 4), ln + 2).join('\n')}`);
-      }
+      this.sh.push({ s: sh, type, src });
       return sh;
     };
     const p = gl.createProgram()!;
     gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
     gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
     gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`Link ${name}: ${gl.getProgramInfoLog(p)}`);
     this.p = p;
-    // the sun shadow map always lives on texture unit 6 (a 1x1 'fully lit' depth texture when shadows are off)
+  }
+  /** first use: report compile / link errors, set the fixed sampler units */
+  private check(): void {
+    this.checked = true;
+    const gl = this.gl, p = this.p;
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      for (const { s, type, src } of this.sh) {
+        if (gl.getShaderParameter(s, gl.COMPILE_STATUS)) continue;
+        const log = gl.getShaderInfoLog(s) || '';
+        const lines = src.split('\n').map((l, i) => `${i + 1}: ${l}`);
+        const m = /0:(\d+)/.exec(log);
+        const ln = m ? +m[1] : 0;
+        throw new Error(`Shader ${this.name} (${type === gl.VERTEX_SHADER ? 'vs' : 'fs'}) error: ${log}\n${lines.slice(Math.max(0, ln - 4), ln + 2).join('\n')}`);
+      }
+      throw new Error(`Link ${this.name}: ${gl.getProgramInfoLog(p)}`);
+    }
+    for (const { s } of this.sh) gl.deleteShader(s);
+    this.sh.length = 0;
+    // the sun shadow maps always live on fixed texture units (a 1x1 'fully lit' depth texture when shadows are off)
     const sl = gl.getUniformLocation(p, 'uShadowMap');
     if (sl) {
       const cur = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -39,6 +59,7 @@ export class Program {
     }
   }
   use(): this {
+    if (!this.checked) this.check();
     this.gl.useProgram(this.p);
     return this;
   }
@@ -235,10 +256,12 @@ export class MSTarget {
     this.color = gl.createRenderbuffer()!;
     this.depth = gl.createRenderbuffer()!;
   }
+  private maxSamples: number | undefined;
   resize(w: number, h: number, samples: number): void {
     const gl = this.gl;
-    const max = gl.getParameter(gl.MAX_SAMPLES) as number;
-    samples = Math.min(samples, max);
+    // (asked once: every getParameter makes the page wait for the GPU process, and this runs each frame)
+    this.maxSamples ??= gl.getParameter(gl.MAX_SAMPLES) as number;
+    samples = Math.min(samples, this.maxSamples);
     if (w === this.w && h === this.h && samples === this.samples) return;
     this.w = w;
     this.h = h;

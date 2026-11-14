@@ -379,29 +379,43 @@ const LIB: Partial<Record<O, Builder>> = {
     b.blob(0, 232, 0, 2.5, 2.5, 2.5, glassLit('#ff3050', 8), 0, 1);
   },
   [O.PEAK]: (b) => {
-    // a faceted mountain: ridges and gullies run from foot to summit (each spoke keeps its own reach all the way
-    // up), the summit sits off-centre, and the snow line is ragged
-    const segs = 12;
-    // (the lowest ring is a skirt far below the foot, so the base is buried whatever the ground does under it)
-    const rings: [number, number][] = [[470, -320], [410, -30], [315, 60], [225, 150], [145, 240], [75, 325], [0, 420]];
-    const reach = Array.from({ length: segs }, (_, i) => (i % 2 ? 0.74 : 1.12) * (0.85 + b.rng.float() * 0.3));
-    const lean = [(b.rng.float() - 0.5) * 120, (b.rng.float() - 0.5) * 120];
-    const rock = [M('#59605a', { hue: 0 }), M('#666a6c', { hue: 0 }), M('#74777c', { hue: 0 })];
-    const snow = M('#eef2fa', { spec: 0.3, hue: 0 });
+    // A mountain for the horizon: ridges and gullies run from foot to summit, the flanks step in shoulders, the
+    // summit sits off-centre, rock changes tone with height and aspect, and snow lies above a ragged snow line
+    // that reaches lower in the gullies. About 2,000 triangles; only a handful are ever in view.
+    const segs = 30, K = 13, H = 420;
+    const r = () => b.rng.float();
+    const ph = [r() * 6.28, r() * 6.28, r() * 6.28, r() * 6.28, r() * 6.28];
+    const ridge = (a: number) => 0.5 * Math.abs(Math.sin(a * 1.5 + ph[0])) + 0.3 * Math.abs(Math.sin(a * 2.5 + ph[1])) + 0.2 * Math.abs(Math.sin(a * 5.5 + ph[2]));
+    const lean = [(r() - 0.5) * 150, (r() - 0.5) * 150];
+    const jit = Array.from({ length: (K + 1) * segs }, () => r());
     const pt = (k: number, i: number): V3 => {
-      const [r, y] = rings[k];
-      const t = y / 420, a = (i / segs) * Math.PI * 2;
-      const rr = r * reach[i % segs] * (0.92 + ((i * 7 + k * 13) % 5) * 0.04);
-      return [lean[0] * t + Math.cos(a) * rr, y, lean[1] * t + Math.sin(a) * rr];
+      i %= segs;
+      const a = (i / segs) * Math.PI * 2;
+      if (k < 0) return [Math.cos(a) * 470, -320, Math.sin(a) * 470]; // skirt, far below the foot
+      const t = k / (K - 1);
+      const y = H * t - 30 * (1 - t);
+      const prof = 410 * Math.pow(1 - t, 0.9) * (1 + 0.1 * Math.sin(t * 8 + ph[3])) + 6 * (1 - t);
+      const rr = k === K - 1 ? 0 : prof * (0.66 + 0.62 * ridge(a) * (1 - 0.45 * t)) * (0.95 + 0.1 * jit[k * segs + i]);
+      return [lean[0] * t + Math.cos(a) * rr, y + (k > 0 && k < K - 1 ? (jit[k * segs + i] - 0.5) * 14 : 0), lean[1] * t + Math.sin(a) * rr];
     };
-    for (let k = 0; k < rings.length - 1; k++) {
+    const lo = hex('#5b5f50'), mid = hex('#6b6d6e'), hi = hex('#80838a'), warm = hex('#7a6f60'), snowC = hex('#f1f4fb');
+    const mixc = (x: V3, y: V3, t: number): V3 => [x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t];
+    for (let k = -1; k < K - 1; k++) {
       for (let i = 0; i < segs; i++) {
-        const j = (i + 1) % segs;
-        const white = k >= 4 || (k === 3 && i % 3 === 0);
-        const mat = white ? snow : rock[(k + i) % 3];
-        const ctr: V3 = [lean[0] * 0.5, rings[k][1], lean[1] * 0.5];
-        if (k === rings.length - 2) b.tri(pt(k, i), pt(k, j), pt(k + 1, 0), mat, ctr);
-        else b.quad(pt(k, i), pt(k, j), pt(k + 1, j), pt(k + 1, i), mat, ctr);
+        const a = ((i + 0.5) / segs) * Math.PI * 2;
+        const t = Math.max(0, (k + 0.5) / (K - 1));
+        const rg = ridge(a);
+        // rock: scree and grass low down, grey higher, warmer on some aspects, darker in the gullies
+        let c = t < 0.4 ? mixc(lo, mid, t / 0.4) : mixc(mid, hi, (t - 0.4) / 0.6);
+        c = mixc(c, warm, 0.35 * Math.max(0, Math.sin(a * 2 + ph[4])));
+        const shade = 0.72 + 0.4 * rg + (jit[Math.max(0, k) * segs + i] - 0.5) * 0.16;
+        c = [c[0] * shade, c[1] * shade, c[2] * shade];
+        const snowLine = 0.5 + 0.1 * Math.sin(a * 3 + ph[1]) + 0.16 * (rg - 0.5) + (jit[(Math.max(0, k) * segs + i + 7) % jit.length] - 0.5) * 0.08;
+        const white = t > snowLine;
+        const mat: Mat = white ? { c: mixc(snowC, c, 0.06), spec: 0.3, hue: 0 } : { c, spec: 0.06, hue: 0 };
+        const ctr: V3 = [lean[0] * t, Math.max(0, H * t), lean[1] * t];
+        if (k === K - 2) b.tri(pt(k, i), pt(k, i + 1), pt(k + 1, 0), mat, ctr);
+        else b.quad(pt(k, i), pt(k, i + 1), pt(k + 1, i + 1), pt(k + 1, i), mat, ctr);
       }
     }
   },

@@ -253,8 +253,8 @@ function carSelect(g: Game, player: number): Screen {
   g.showroom = { car, livery, angle: 2.4 };
   const name = h('div', { class: 'carname' });
   const make = h('div', { class: 'carmake' });
-  const blurb = h('div', { class: 'info', style: 'max-width:28rem;margin-top:.8rem;font-size:.95rem' });
-  const stats = h('div', { style: 'margin-top:1.2rem;width:30rem' });
+  const blurb = h('div', { class: 'info carblurb' });
+  const stats = h('div', { class: 'carstats' });
   const sw = h('div', { class: 'swatches' });
   const paint = () => {
     const c = CARS[car];
@@ -272,19 +272,45 @@ function carSelect(g: Game, player: number): Screen {
     ];
     for (const [l, v, txt] of rows) stats.append(h('div', { class: 'stat' }, h('span', {}, l), h('div', { class: 'bar' }, h('i', { style: `width:${v * 100}%` })), h('span', { class: 'mono' }, txt)));
     sw.innerHTML = '';
-    LIVERIES.slice(0, 12).forEach((L, i) => sw.append(h('i', { class: i === livery ? 'on' : '', style: `background:linear-gradient(135deg,${css(L[0])} 60%,${css(L[1])} 60%)` })));
+    LIVERIES.slice(0, 12).forEach((L, i) => {
+      const taken = st.players > 1 && player === 1 && i === st.colors[0];
+      sw.append(h('i', {
+        class: (i === livery ? 'on' : '') + (taken ? ' taken' : ''), style: `background:linear-gradient(135deg,${css(L[0])} 60%,${css(L[1])} 60%)`,
+        onclick: () => { if (taken) return; livery = i; g.sfx('move'); paint(); },
+      }));
+    });
   };
-  const el = h('div', { class: 'scr scan' },
+  const step = (d: number) => { car = (car + (d < 0 ? 2 : 1)) % 3; g.sfx('move'); paint(); };
+  const back = () => {
+    g.sfx('back');
+    if (player > 0) g.show('cars', { player: player - 1 });
+    else { g.showroom = null; g.show('music'); }
+  };
+  // everything here works by mouse and by touch as well as keys: tap the arrows (or swipe) for the car,
+  // tap a swatch for the colour
+  const el = h('div', { class: 'scr scan carsel' },
     hdr(st.players > 1 ? `PLAYER ${player + 1} · CHOOSE YOUR CAR` : 'CHOOSE YOUR CAR'),
-    h('div', { style: 'position:absolute;left:3rem;bottom:14vh' }, make, name, blurb, stats, sw),
-    h('div', { style: 'position:absolute;right:3rem;bottom:14vh;text-align:right' },
-      h('div', { class: 'info' }, `${CARS.map((c, i) => (i === car ? '' : '')).join('')}`),
+    h('div', { class: 'carinfo' }, make, name, blurb, stats, sw),
+    h('div', { class: 'carbtns' },
+      h('div', { class: 'btn', onclick: () => back() }, h('span', {}, 'Back')),
       h('div', { class: 'btn go', onclick: () => confirm() }, h('span', {}, 'Select'))),
-    h('div', { style: 'position:absolute;left:0;right:0;bottom:0' }, hint(['←→', 'CAR'], ['↑↓', 'COLOUR'], ['ENTER / A', 'SELECT'], ['ESC / B', 'BACK'])),
+    h('div', { class: 'carhint' }, hint(['←→', 'CAR'], ['↑↓', 'COLOUR'], ['ENTER / A', 'SELECT'], ['ESC / B', 'BACK'])),
   );
-  const arrows = h('div', { style: 'position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 2rem;font-family:Russo One;font-size:4rem;color:var(--cyan);pointer-events:none;opacity:.7' }, h('span', {}, '◀'), h('span', {}, '▶'));
-  el.append(arrows);
+  el.append(
+    h('div', { class: 'cararrow l', onclick: () => step(-1) }, h('span', {}, '◀')),
+    h('div', { class: 'cararrow r', onclick: () => step(1) }, h('span', {}, '▶')),
+  );
   el.addEventListener('wheel', (e) => { car = (car + (e.deltaY > 0 ? 1 : 2)) % 3; paint(); });
+  // swipe left / right across the car
+  let sx = 0, sy = 0, sid = -1;
+  el.addEventListener('pointerdown', (e) => { if (e.pointerType !== 'mouse') { sid = e.pointerId; sx = e.clientX; sy = e.clientY; } });
+  el.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== sid) return;
+    sid = -1;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) step(dx < 0 ? 1 : -1);
+  });
+  el.addEventListener('pointercancel', () => { sid = -1; });
   const confirm = () => {
     st.cars[player] = car;
     st.colors[player] = livery;
@@ -300,18 +326,14 @@ function carSelect(g: Game, player: number): Screen {
   return {
     el,
     onKey: (k) => {
-      if (k === 'left' || k === 'right') { car = (car + (k === 'left' ? 2 : 1)) % 3; g.sfx('move'); paint(); }
+      if (k === 'left' || k === 'right') step(k === 'left' ? -1 : 1);
       if (k === 'up' || k === 'down') {
         do { livery = (livery + (k === 'up' ? 11 : 1)) % 12; } while (st.players > 1 && livery === st.colors[1 - player] && player === 1);
         g.sfx('move');
         paint();
       }
       if (k === 'ok') confirm();
-      if (k === 'back') {
-        g.sfx('back');
-        if (player > 0) g.show('cars', { player: player - 1 });
-        else { g.showroom = null; g.show('music'); }
-      }
+      if (k === 'back') back();
     },
     destroy: () => {},
   };

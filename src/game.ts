@@ -592,6 +592,8 @@ export class Game {
       this.cpuMs.push(performance.now() - t0);
       if (this.cpuMs.length > 240) this.cpuMs.shift();
     }
+    // start-up time: page start to the end of the third frame (by then every shader has been compiled and used)
+    if (this.startFrames < 3 && ++this.startFrames === 3) { this.renderer.prof.sync(); this.startupMs = performance.now(); }
     this.overlay();
     if (this.bench) {
       const b = this.bench;
@@ -636,6 +638,9 @@ export class Game {
     T.open = false;
   }
 
+  private startFrames = 0;
+  /** milliseconds from page start until the game had drawn three frames (0 until then) */
+  startupMs = 0;
   private refreshBest = 1 / 30;
   private dynHold = 0;
   private dynBackoff = 2;

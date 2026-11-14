@@ -191,9 +191,13 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   road), and on the other side a steep drop below the guard rail easing into a valley whose far side rises again.
   The side changes over smoothly across about 200 m (`Track.tilt`). Meadow low down, rock on steep ground and
   higher up, snow above the snow line. The peak landmark is a faceted, snow-capped mountain instead of a cone.
-- Peak landmarks are drawn 1.7-2.8 km from the road as backdrop, with a base buried far below their foot. The
-  track places them 500-1200 m out, but they are 800-1800 m across, so the keep-off-the-road placement left
-  them looming right beside the road with their base in mid-air over the valley (a flat blue slab in shade).
+- Peak landmarks are backdrop mountains at fixed compass bearings, 2.3-3 km away, turned against the car's true
+  heading each frame the way the sky is (`Scenery.placeSky`). They used to be placed sideways off the road, and
+  in the bent view a sideways offset of more than a few hundred metres means nothing: inside a bend the peak
+  swung back beside the near road (a flat slab, blue when in shade) or hung in the air with its underside
+  showing. Moving them further out sideways (first attempt) could not fix that. The model is now about 2,000
+  triangles with ridges, gullies, shoulders and a ragged snow line, and has rock and snow texture in its own
+  coordinates.
 - Inside bends, where the bent view folds, the ground now tapers back to road level before the fold limit
   (`foldTaper`), so the inside of a bend is a rounded spur. The old squeezed strip ended in a vertical curtain
   with smeared texture and nothing behind it. This applies to every scenario.
@@ -233,6 +237,20 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   resolution on the devices that needed it most. It now remembers the best frame interval the device has
   sustained, lowers resolution as soon as frames drop (in proportion), and raises it again only by cautious
   probes that back off. Ultra Low and Low aim for 60 fps even on a 120 Hz screen.
+
+**Later v3 fixes (2026-11-14)**
+- Car selection could not be used by touch: the arrows ignored taps and the colours were not clickable (only the
+  mouse wheel and keys changed anything). Arrows and swatches are tappable, a swipe changes car, there is a Back
+  button, and the screen fits a phone. `tests/cartouch.mjs` taps through it on a 780x360 touch screen.
+- Start-up: shaders were compiled and checked one at a time (each check makes the browser wait for that shader).
+  They are now all started first and checked on first use, so the browser compiles them in parallel. The terrain
+  vertex shader calls the terrain function from one place in a loop instead of six. Start-up time is shown in the
+  benchmark report. Not measured on Windows, where the Direct3D shader compiler is the slow part.
+- Phones: the canvas no longer asks for low-latency ('desynchronized') presentation on touch devices; that mode
+  can show a frame that is still being drawn. This is the likely cause of the brief garbage seen in Brave on
+  Android, but it is not confirmed.
+- CPU per frame: three WebGL state queries per view in the Psycho shadow pass and one per frame for MSAA made the
+  page wait for the GPU process; they are gone. The bent path reads track arrays directly (0.50 -> 0.34 ms).
 
 ## Known issues / not verified
 - v3 frame rates are not measured on real hardware (no GPU here). What is measured: vertex counts, and that

@@ -104,6 +104,7 @@ export class Renderer {
   private shadowTex: WebGLTexture | null = null;
   private shadowFB: WebGLFramebuffer | null = null;
   private shadowSize = 0;
+  private viewBox = [0, 0, 1, 1];
   private shadowVP = new Float32Array(16);
   private shadowTex2: WebGLTexture | null = null;
   private shadowFB2: WebGLFramebuffer | null = null;
@@ -174,7 +175,11 @@ export class Renderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false, desynchronized: true }) as GL | null;
+    // Low-latency ('desynchronized') presentation lets the canvas skip the browser's compositor. On a desktop that
+    // trims a frame of lag; on phones the screen can then show a frame that is still being drawn (brief blocks
+    // of garbage, like failing video memory), so it is only asked for where there is a mouse.
+    const lowLatency = !(typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
+    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false, desynchronized: lowLatency }) as GL | null;
     if (!gl) throw new Error('WebGL2 is not available');
     this.gl = gl;
     this.prof = new Profiler(gl);
@@ -405,6 +410,7 @@ export class Renderer {
       gl.viewport(vx, vy, vw, vhh);
       gl.enable(gl.SCISSOR_TEST);
       gl.scissor(vx, vy, vw, vhh);
+      this.viewBox = [vx, vy, vw, vhh];
       const cam = this.drawView(view, F, vw / vhh);
       gl.disable(gl.SCISSOR_TEST);
       vpsUv.push([cx / this.canvas.clientWidth, 1 - (cy + ch) / this.canvas.clientHeight, cw / this.canvas.clientWidth, ch / this.canvas.clientHeight]);
@@ -543,6 +549,7 @@ export class Renderer {
 
     // ---------- lighting set-up ----------
     const heading = this.headingAt(dist);
+    if (this.scenery) { this.scenery.skyHeading = heading; this.scenery.skyRise = tr.y(sCar) - this.meanY; }
     const sw = this.sunWorld();
     const ch = Math.cos(heading), shh = Math.sin(heading);
     const sunB = [sw[0] * ch - sw[2] * shh, sw[1], sw[0] * shh + sw[2] * ch];
@@ -647,9 +654,9 @@ export class Renderer {
       const H2 = 1200, back2 = 1800;
       lightVP(this.shadowVP2, H2, 950, back2, S2);
       this.shadowP2 = [1 / S2, 1.6 / (back2 * 2 + 50), (2 * H2 / S2) * 1.6, 0];
-      const vpBox = gl.getParameter(gl.VIEWPORT) as Int32Array;
-      const scBox = gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
-      const scOn = gl.isEnabled(gl.SCISSOR_TEST);
+      // (the view's rectangle is remembered by render(): asking WebGL for the current viewport makes the page
+      // wait for the GPU process, which cost more than the whole rest of the frame's JavaScript)
+      const vpBox = this.viewBox;
       // never sample a map while it is being drawn
       this.bindShadowUnit(this.dummyShadow);
       this.bindShadowUnit(this.dummyShadow, SHADOW_UNIT2);
@@ -681,8 +688,8 @@ export class Renderer {
       gl.disable(gl.POLYGON_OFFSET_FILL);
       this.curTarget!.bind();
       gl.viewport(vpBox[0], vpBox[1], vpBox[2], vpBox[3]);
-      gl.scissor(scBox[0], scBox[1], scBox[2], scBox[3]);
-      if (scOn) gl.enable(gl.SCISSOR_TEST);
+      gl.scissor(vpBox[0], vpBox[1], vpBox[2], vpBox[3]);
+      gl.enable(gl.SCISSOR_TEST);
       this.bindShadowUnit(this.shadowTex!);
       this.bindShadowUnit(this.shadowTex2!, SHADOW_UNIT2);
       this.shadowLive = true;

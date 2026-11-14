@@ -230,6 +230,7 @@ export class Benchmark {
     line('output', `${R.canvas.width}x${R.canvas.height} px (device pixel ratio ${devicePixelRatio})   screen ${screen.width}x${screen.height}`);
     line('CPU threads / memory', `${nav.hardwareConcurrency ?? '?'} / ${nav.deviceMemory ? nav.deviceMemory + ' GB' : '?'}`);
     line('browser', navigator.userAgent);
+    line('start-up', `${(this.g.startupMs / 1000).toFixed(1)} s from opening the page to the third frame drawn (shader compilation included)`);
     L.push('');
     L.push('fps per second: ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
     return { text: L.join('\n'), timeline: this.timeline, scaleLine: this.scaleLine, refresh };

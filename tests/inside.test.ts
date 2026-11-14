@@ -88,7 +88,7 @@ for (const code of codes) {
   const tr = new Track(td);
   const o = td.objects;
   const lm: number[] = [];
-  for (let i = 0; i < o.count; i++) if (LANDMARK.has(o.type[i]) && o.type[i] !== O.TOWER /* bends with the road */) lm.push(i);
+  for (let i = 0; i < o.count; i++) if (LANDMARK.has(o.type[i]) && o.type[i] !== O.TOWER /* bends with the road */ && o.type[i] !== O.PEAK /* backdrop, placed by compass bearing */) lm.push(i);
   if (!lm.length) continue;
   const loop = td.circuit ? td.lapLen : 0;
   const L = td.circuit ? td.lapLen : td.raceLen;

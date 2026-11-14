@@ -216,39 +216,27 @@ vec3 terrPoint(float d, float off, float side, bool sink, out PathS p, out float
   float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) * foldTaper(uu, edge, ext) - dip;
   return bentPos(p, u, h);
 }
-// the same point with no squeeze (only for normals where the squeeze has collapsed the ground)
-vec3 natPoint(float d, float off, float side){
-  PathS p = pathAt(d);
-  float edge = side < 0.0 ? p.hwL : p.hwR;
-  float uu = edge + off;
-  return bentPos(p, side * uu, off <= 0.0 ? 0.0 : terrainH(p, side * uu, off));
-}
 void main(){
   float d = rowD(aRCS.x);
   float off = aRCS.y, side = aRCS.z;
-  PathS p;
+  PathS p, q;
   float uu, tmp;
-  vec3 w = terrPoint(d, off, side, true, p, uu);
-  // normal by finite differences (on the unsunk surface)
-  PathS q;
+  // The point itself and two neighbours for the normal (finite differences). One call site in a loop rather
+  // than three calls: the terrain function is large and shader compilers inline every call, which made this
+  // shader several times bigger and slower to compile than it needs to be.
   float e = max(0.8, off * 0.08);
-  vec3 w0 = w; // (nothing sinks any more, so the drawn point is the surface point)
-  vec3 wa = terrPoint(d + 1.5, off, side, false, q, tmp);
-  vec3 wb = terrPoint(d, off + e, side, false, q, tmp);
-  vec3 tA = wa - w0, tB = (wb - w0) * side;
-  // where the squeeze has collapsed the ground sideways (far beyond a tight bend) both samples land on the same
-  // point and the cross product is zero or rounding noise: normalize() of that gave NaN, which lit a thin line
-  // along the edge of the collapsed strip that bloom and motion blur smeared into a glowing column. Use 'up' there.
+  vec3 pt[3];
+  for (int i = 0; i < 3; i++) {
+    pt[i] = terrPoint(d + (i == 1 ? 1.5 : 0.0), off + (i == 2 ? e : 0.0), side, false, q, tmp);
+    if (i == 0) { p = q; uu = tmp; }
+  }
+  vec3 w = pt[0];
+  vec3 tA = pt[1] - w, tB = (pt[2] - w) * side;
+  // where the squeeze has collapsed the ground sideways all samples land on the same point (flat, at road level,
+  // see foldTaper): the cross product is zero or rounding noise and normalize() of it would be NaN, so use 'up'
   vec3 cr = cross(tA, tB);
   float lc = length(cr);
-  if (lc <= 1e-3 * length(tA) * max(e, 1.0)) {
-    // take the slope of the ground as it would be unsqueezed, so the cut end of a squeezed mountainside is
-    // shaded like the rock face it belongs to
-    vec3 n0 = natPoint(d, off, side), na = natPoint(d + 1.5, off, side), nb = natPoint(d, off + e, side);
-    cr = cross(na - n0, (nb - n0) * side);
-    lc = length(cr);
-  }
-  vec3 n = lc > 1e-6 ? cr / lc : vec3(0.0, 1.0, 0.0);
+  vec3 n = lc > 1e-3 * length(tA) * max(e, 1.0) ? cr / lc : vec3(0.0, 1.0, 0.0);
   if (n.y < 0.0) n = -n;
   // texture and ground-type lookups use where the vertex ends up (squeezed), not where it would have been
   vW = w; vN = n; vSU = vec2(p.s, side * uu); vOff = max(0.0, uu - (side < 0.0 ? p.hwL : p.hwR)); vSlope = 1.0 - n.y; vFlags = p.flags;

@@ -25,17 +25,20 @@ uniform float uSCar;
 uniform int uLandmark;
 uniform int uSpan;
 uniform int uRotor;
+uniform int uSkyObj;   // 1: a backdrop mountain placed in view space by compass bearing (iSUR = x, z, rotation)
 uniform int uBend;     // follow the road's curve along the object's length (keeps long buildings off the road)
 uniform float uFoot;   // model footprint radius (unscaled)
 uniform float uTime;
 uniform vec3 uWind; // dirX (lateral), strength, gust
-out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide;
+out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide; out vec3 vL;
 void main(){
-  float d = iSUR.x - uSCar;
+  vL = aPos * iSHX.x;
+  float d = uSkyObj == 1 ? 0.0 : iSUR.x - uSCar;
   if (uLoopLen > 0.0) d = mod(d + uLoopLen * 0.5, uLoopLen) - uLoopLen * 0.5;
   PathS p = pathAt(d);
   float hide = (d < uPathInfo.x + 4.0 || d > uPathInfo.w) ? 1.0 : 0.0;
-  float u = iSUR.y;
+  if (uSkyObj == 1) hide = iAdj.y;
+  float u = uSkyObj == 1 ? 0.0 : iSUR.y;
   float side = u < 0.0 ? -1.0 : 1.0;
   float edge = side < 0.0 ? p.hwL : p.hwR;
   float ext = side < 0.0 ? p.extL : p.extR;
@@ -85,6 +88,7 @@ void main(){
   vec3 o = bentPos(p, u, base);
   vec3 right = vec3(cos(p.phi), 0.0, -sin(p.phi));
   vec3 fwd = vec3(sin(p.phi), 0.0, cos(p.phi));
+  if (uSkyObj == 1) { o = vec3(iSUR.x, iAdj.z, iSUR.y); right = vec3(1.0, 0.0, 0.0); fwd = vec3(0.0, 0.0, 1.0); }
   vec3 w = o + right * lp.x + vec3(0, 1, 0) * lp.y + fwd * lp.z;
   vec3 nrm = right * ln.x + vec3(0, 1, 0) * ln.y + fwd * ln.z;
   if (uBend == 1 && uSpan == 0) {
@@ -111,17 +115,32 @@ void main(){
 }`;
 
 export const OBJ_FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec3 vN; in vec4 vCol; in vec2 vAux; in float vHide;
+in vec3 vW; in vec3 vN; in vec4 vCol; in vec2 vAux; in float vHide; in vec3 vL;
 out vec4 o;
 uniform float uEmisMul;
+uniform float uRocky; // backdrop mountains: rock texture fixed to the model, lighter fog
 void main(){
   if (vHide > 0.5) discard;
   vec3 N = normalize(vN);
   if (!gl_FrontFacing) N = -N;
   float ao = clamp(0.55 + vW.y * 0.0 + 0.45, 0.0, 1.0);
-  vec3 col = lightSurf(vCol.rgb, N, vW, 1.0 - vCol.a, vCol.a, ao, 1.0);
+  vec3 alb = vCol.rgb;
+  if (uRocky > 0.5) {
+    // rock and snow texture in the mountain's own coordinates (so it stays put as the view turns): broad
+    // mottling, tilted strata on the rock, fine grain, wind-scoured streaks on the snow
+    float snow = step(0.55, min(alb.r, min(alb.g, alb.b)));
+    float big = fbm(vL.xz * 0.006 + vL.y * 0.004);
+    float fine = fbm(vL.xz * 0.045 + vec2(vL.y * 0.06, 3.7));
+    float strata = sin(vL.y * 0.085 + vL.x * 0.012 + big * 7.0);
+    vec3 rock = alb * (0.55 + 0.9 * big) * (0.8 + 0.4 * fine) * (0.9 + 0.12 * strata);
+    vec3 snowC = alb * (0.86 + 0.2 * fine) * (0.94 + 0.08 * sin(vL.y * 0.05 + big * 9.0));
+    alb = mix(rock, snowC, snow);
+    N = normalize(N + (vec3(fine, 0.0, big) - 0.5) * 0.35);
+  }
+  vec3 col = lightSurf(alb, N, vW, 1.0 - vCol.a, vCol.a, ao, 1.0);
   col += vCol.rgb * vAux.x * uEmisMul * 4.0;
-  o = vec4(fogApply(col, vW), blurW(vW));
+  vec3 fogged = fogApply(col, vW);
+  o = vec4(uRocky > 0.5 ? mix(col, fogged, 0.62) : fogged, blurW(vW));
 }`;
 
 const SHADOW_VS = PRELUDE + NOISE + PATH + `
@@ -176,6 +195,8 @@ interface TypeSet {
   bend: boolean;
   backdrop: boolean; // deep woodland behind the roadside: visual only, shorter draw distance
   adj: boolean; // rigid landmark placed on the CPU every frame (instance data has 2 extra floats)
+  /** backdrop mountains: placed in view space by compass bearing every frame, like the sky (see placeSky) */
+  sky: { bearing: Float32Array; dist: Float32Array; rot: Float32Array } | null;
 }
 
 interface FarTree { s: number; u: number; h: number; type: number; scale: number; rot: number; hue: number }
@@ -313,7 +334,9 @@ export class Scenery {
     for (const [type, all] of byType) {
       const V = VARIANTS.has(type) ? 3 : 1;
       for (let v = 0; v < V; v++) {
-        const idx = V === 1 ? all : all.filter((i) => ((Math.imul(i + 7, 2654435761) >>> 0) % V) === v);
+        let idx = V === 1 ? all : all.filter((i) => ((Math.imul(i + 7, 2654435761) >>> 0) % V) === v);
+        // backdrop mountains: seven around the horizon, however many the track lists
+        if (type === O.PEAK) idx = idx.slice(0, 7);
         if (!idx.length) continue;
         const mb = buildModel(type, v);
         const vbuf = mb.pack();
@@ -326,17 +349,14 @@ export class Scenery {
         const lb = buildModel(type, v, true);
         const landmark = LANDMARK.has(type);
         const bend = !landmark || type === O.TOWER;
-        const adj = landmark && !bend && !SPANNING.has(type);
+        const isSky = type === O.PEAK;
+        const adj = landmark && !bend && !SPANNING.has(type) && !isSky;
         const F = 9;
         const span = SPANNING.has(type);
         const data = new Float32Array(idx.length * F);
         const ss = new Float32Array(idx.length);
         idx.forEach((i, k) => {
-          // Peaks are backdrop: the terrain itself forms the mountains beside the road now. The track places them
-          // 500-1200 m out, but they are 800-1800 m across, so they ended up pushed only just clear of the road,
-          // looming over it with their base in mid-air above the valley. Stand them 1.7-2.8 km away instead
-          // (drawing only: the track data is unchanged).
-          const u = type === O.PEAK ? Math.sign(o.u[i]) * (Math.abs(o.u[i]) * 1.6 + 900) : o.u[i];
+          const u = o.u[i];
           data.set([o.s[i], u, o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
           data[k * F + 6] = u;
           data[k * F + 8] = span ? 0 : this.terrain.h(o.s[i], u);
@@ -378,7 +398,21 @@ export class Scenery {
         }
         let foot = 0;
         for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
-        this.sets.push({ type, mesh, far, far2, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj });
+        this.sets.push({ type, mesh, far, far2, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj, sky: null });
+        if (isSky) {
+          // Fixed compass bearings spread round the horizon, 2.3-3 km away: beyond the road and its scenery (drawn
+          // to 1.95 km at most), near enough to read as mountains rather than dissolve into the haze.
+          const n = idx.length, rng = new Rng(hashString(track.code + '/peaks'));
+          const sky = { bearing: new Float32Array(n), dist: new Float32Array(n), rot: new Float32Array(n) };
+          const turn = rng.float() * Math.PI * 2;
+          for (let k = 0; k < n; k++) {
+            sky.bearing[k] = turn + ((k + 0.15 + rng.float() * 0.7) / n) * Math.PI * 2;
+            sky.dist[k] = 2300 + rng.float() * 700;
+            sky.rot[k] = rng.float() * Math.PI * 2;
+            data[k * F + 3] = 1.25 + rng.float() * 0.55;
+          }
+          this.sets[this.sets.length - 1].sky = sky;
+        }
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
@@ -413,7 +447,7 @@ export class Scenery {
       mesh.setInstances(data, 36, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }, { loc: 6, size: 3, type: gl.FLOAT, offset: 24 }]);
       let foot = 0;
       for (let q = 0; q < mb.pos.length; q += 3) foot = Math.max(foot, Math.hypot(mb.pos[q], mb.pos[q + 2]));
-      this.sets.push({ type, mesh, far: null, far2: null, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false });
+      this.sets.push({ type, mesh, far: null, far2: null, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false, sky: null });
     }
   }
 
@@ -446,6 +480,23 @@ export class Scenery {
     return out;
   }
 
+  /** the car's true compass heading and its height above the track's mean height (set by the renderer each view) */
+  skyHeading = 0;
+  skyRise = 0;
+  /** backdrop mountains stand at fixed compass bearings: turn them against the car's heading, as the sky is */
+  private placeSky(set: TypeSet): void {
+    const D = set.data, sk = set.sky!;
+    for (let k = 0; k < set.count; k++) {
+      const rel = sk.bearing[k] - this.skyHeading, b = k * 9;
+      D[b] = Math.sin(rel) * sk.dist[k];
+      D[b + 1] = Math.cos(rel) * sk.dist[k];
+      D[b + 2] = sk.rot[k] - this.skyHeading;
+      D[b + 7] = 0;
+      D[b + 8] = -70 - this.skyRise * 0.3; // a little vertical parallax as the road climbs
+    }
+    set.mesh.updateInstances(D);
+  }
+
   private placer = new LandmarkPlacer();
   private placed = { u: 0, hide: false };
 
@@ -476,7 +527,13 @@ export class Scenery {
     const r: number[] = [];
     gl.disable(gl.CULL_FACE);
     for (const set of this.sets) {
-      if (landmarksOnly && !set.landmark) continue;
+      if (landmarksOnly && (!set.landmark || set.sky)) continue;
+      p.i('uSkyObj', set.sky ? 1 : 0).f('uRocky', set.sky ? 1 : 0);
+      if (set.sky) {
+        this.placeSky(set);
+        set.mesh.drawInstances(0, set.count);
+        continue;
+      }
       p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0).i('uBend', set.bend ? 1 : 0).f('uFoot', set.foot);
       const ahead = set.landmark ? maxD + 400 : set.backdrop ? maxD * this.backdropDist : maxD;
       const split = set.far ? Math.min(this.lodDist, ahead) : ahead;
@@ -493,6 +550,7 @@ export class Scenery {
         }
       }
     }
+    p.i('uSkyObj', 0).f('uRocky', 0); // (traffic and cones are drawn with this program too)
   }
 
   drawShadows(prep: (p: Program) => void, sCar: number, loop: number, sunOff: number[], strength: number): void {
