@@ -14,6 +14,9 @@ export class MB {
   private stack: Float64Array[] = [];
   private m = ident();
   rng: Rng;
+  /** build the distance version: blobs as plain icosahedra and cones without their undersides. The random
+   *  numbers are drawn exactly as for the full model, so it is the same tree with fewer triangles. */
+  lod = false;
   constructor(seed = 1) {
     this.rng = new Rng(seed);
   }
@@ -88,7 +91,7 @@ export class MB {
       if (r1 > 1e-4) this.quad(A[i], A[j], B[j], B[i], mat, ctr);
       else this.tri(A[i], A[j], [x, y + h, z], mat, ctr);
     }
-    if (caps) {
+    if (caps && !(this.lod && (r1 < r0 * 0.25 || segs <= 6))) {
       for (let i = 1; i < segs - 1; i++) {
         this.tri(A[0], A[i], A[i + 1], mat, ctr);
         if (r1 > 1e-4) this.tri(B[0], B[i], B[i + 1], mat, ctr);
@@ -98,11 +101,11 @@ export class MB {
   }
   /** low-poly blob (subdivided icosahedron) with jitter */
   blob(x: number, y: number, z: number, sx: number, sy: number, sz: number, mat: Mat, jitter = 0.18, detail = 1): this {
-    const { v, f } = ico(detail);
-    const pts = v.map((p) => {
-      const j = 1 + (this.rng.float() - 0.5) * 2 * jitter;
-      return [x + p[0] * sx * j, y + p[1] * sy * j, z + p[2] * sz * j] as V3;
-    });
+    const full = ico(detail);
+    // (an icosahedron's 12 corners are the first 12 points of every subdivision of it)
+    const { v, f } = this.lod ? ico(0) : full;
+    const js = full.v.map(() => 1 + (this.rng.float() - 0.5) * 2 * jitter);
+    const pts = v.map((p, i) => [x + p[0] * sx * js[i], y + p[1] * sy * js[i], z + p[2] * sz * js[i]] as V3);
     const ctr: V3 = [x, y, z];
     for (const t of f) this.tri(pts[t[0]], pts[t[1]], pts[t[2]], mat, ctr);
     return this;

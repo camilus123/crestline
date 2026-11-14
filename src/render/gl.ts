@@ -33,6 +33,8 @@ export class Program {
       const cur = gl.getParameter(gl.CURRENT_PROGRAM);
       gl.useProgram(p);
       gl.uniform1i(sl, SHADOW_UNIT);
+      const sl2 = gl.getUniformLocation(p, 'uShadowMap2');
+      if (sl2) gl.uniform1i(sl2, SHADOW_UNIT2);
       gl.useProgram(cur);
     }
   }
@@ -266,6 +268,8 @@ export class MSTarget {
 }
 
 export const SHADOW_UNIT = 6;
+/** the far shadow cascade */
+export const SHADOW_UNIT2 = 5;
 
 // --- tiny matrix helpers (column-major) ---
 export function ortho(out: Float32Array, l: number, r: number, b: number, t: number, n: number, f: number): Float32Array {

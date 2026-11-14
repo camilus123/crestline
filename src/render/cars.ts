@@ -126,6 +126,8 @@ in vec2 vQ; out vec4 o; uniform float uStrength;
 void main(){ vec2 q = abs(vQ); float a = (1.0 - smoothstep(0.55, 1.0, q.x)) * (1.0 - smoothstep(0.7, 1.0, q.y)); o = vec4(vec3(1.0 - a * uStrength), 1.0); }`;
 
 export interface CarDraw {
+  /** draw the lighter model (cars some way off) */
+  far?: boolean;
   model: Float32Array;
   geo: number;
   paint: number[];
@@ -140,6 +142,7 @@ export interface CarDraw {
 
 export class CarRenderer {
   meshes: Mesh[] = [];
+  farMeshes: Mesh[] = [];
   geos: CarGeo[] = [];
   prog: Program;
   sh: Program;
@@ -154,6 +157,13 @@ export class CarRenderer {
         { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
         { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
       ], 0, g.idx));
+      const f = buildCar(i, true);
+      this.farMeshes.push(new Mesh(gl, f.data, 32, [
+        { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
+        { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
+        { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
+        { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
+      ], 0, f.idx));
     }
     this.prog = new Program(gl, VS, FS, 'car');
     this.sh = new Program(gl, SH_VS, SH_FS, 'carshadow');
@@ -179,7 +189,7 @@ export class CarRenderer {
       for (let i = 0; i < 16; i++) w[i] = g.wheels[i];
       p.m4('uModel', c.model).v4a('uWheel', w).f('uSpin', c.spin).f('uSteer', c.steer);
       p.v3('uPaint', c.paint).v3('uAccent', c.accent).f('uBrake', c.brake).f('uLights', c.lights).f('uTail', c.tail).v2('uRear', g.tailY, -g.length * 0.5);
-      this.meshes[c.geo].draw();
+      (c.far ? this.farMeshes : this.meshes)[c.geo].draw();
     }
   }
 }

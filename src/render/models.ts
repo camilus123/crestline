@@ -554,8 +554,9 @@ export const SPANNING = new Set<number>([O.ARCH, O.GANTRY, O.HOLO_ARCH, O.OVERPA
 /** lamps that light the road at night */
 export const LAMPS = new Set<number>([O.LAMP, O.LAMP_DOUBLE, O.NEON_PYLON, O.LIGHT_TOWER]);
 
-export function buildModel(type: number, variant = 0): MB {
+export function buildModel(type: number, variant = 0, lod = false): MB {
   const b = new MB(type * 131 + variant * 7 + 1);
+  b.lod = lod;
   const f = LIB[type as O];
   if (f) f(b);
   else b.box(0, 0, 0, 1, 1, 1, M('#ff00ff'));

@@ -180,7 +180,63 @@ Rebuild: `npm install` once, then `npm run build`.
   pixels, so one bad pixel can never again bloom across the screen.
 - `review/fix13/column_before_noblur.png` (the bright line, motion blur off) / `column_after.png`.
 
+## v3.0.0 (2026-11-14) — branch `v3`: mountains rebuilt, woodland everywhere, far shadows, performance
+Developed on the `v3` branch; `main` stays at v2.0.2.
+
+**Mountains terrain**
+- Was: the mountain side a constant 69 degree ramp that never stopped (about 1,500 m up at the mesh edge), the
+  valley side an endless drop, and the two swapping sides from one road sample to the next every 1.2-3 km, which
+  left a sheer sheet across the view (the "holes").
+- Now: a cut rock face at the road, a concave slope easing up to a ridge 170-430 m above (height varies along the
+  road), and on the other side a steep drop below the guard rail easing into a valley whose far side rises again.
+  The side changes over smoothly across about 200 m (`Track.tilt`). Meadow low down, rock on steep ground and
+  higher up, snow above the snow line. The peak landmark is a faceted, snow-capped mountain instead of a cone.
+- Inside bends, where the bent view folds, the ground now tapers back to road level before the fold limit
+  (`foldTaper`), so the inside of a bend is a rounded spur. The old squeezed strip ended in a vertical curtain
+  with smeared texture and nothing behind it. This applies to every scenario.
+- "Texture flowing down": rock banding and rock noise were keyed on height relative to the car, so they slid up
+  and down the walls as the road climbed. They now use true altitude, and steep faces are textured by
+  (distance along road, altitude) instead of the flat mapping that stretched into vertical streaks.
+
+**Woodland beyond the roadside** (`woodland()` in scenery.ts, `tests/woods.test.ts`)
+- Every scenario with trees now has woods further out: Rally, Night, Marsh, Mountains, Snow, Storm, Fog, and a
+  deeper Forest (150 m instead of 85 m). Open scenarios get separate woods and copses from a ground-fixed noise
+  field; Forest stays solid.
+- Trees stand only where it makes sense: clear of every other stretch of road, not on rock faces or steep
+  ground, not in water (Marsh), and on Mountains below the tree line. The test checks every tree on one track per
+  scenario.
+- Visual only (no collisions, track codes unchanged), built from the track code so it is the same every time.
+
+**Lighting and shadows (Psycho)**
+- "Bright in the distance, shaded when closer": the sun shadow map covered a 230 m box at the camera, so a
+  mountain's shadow on the road did not exist until the road came inside it. A second, far cascade (2048 texels
+  over 2.4 km, terrain and landmarks) now shades distant ground, blended into the detailed map at its edge.
+- Not fixed, and inherent to the bent view: far geometry moves a little relative to the sun as a bend sweeps
+  round, so a distant shadow can still drift slightly. It no longer pops.
+
+**Performance**
+- Scenery vertices no longer evaluate terrain noise: each object's ground height is worked out once on the CPU
+  (`src/render/terrain.ts`, a mirror of the GLSL `terrainH`) and stored per instance.
+- Level of detail: trees, bushes, hedges and rocks beyond a per-preset distance use the same model with fewer
+  triangles (blobs as plain icosahedra), trees further still a simple distance tree; woodland always uses the
+  distance trees; cars some way off use a model with half the ring resolution.
+- Vertices per frame (index count, `tests/vertcost.mjs`), v2.0.2 -> v3.0.0, with the new woodland included:
+  Forest High 6.66 M -> 1.16 M, Forest Low 2.85 M -> 0.43 M, Mountains Low 0.54 M -> 0.33 M,
+  Rally Low 0.46 M -> 0.28 M; Mountains and Rally High about level (0.7 M, 0.6 M) despite thousands more trees.
+- Light presets (Ultra Low, Low): terrain mesh with about 40 % of the vertices; Low now uses the simplified sky
+  and post-processing, 6 lamps and pixel ratio 1.25, and starts at 80 % render scale instead of 60 %.
+- Dynamic resolution rewritten (game.ts): it used to act only below 80 % of the refresh rate (48 fps on a 60 Hz
+  screen) and took a slow device's own frame time for the screen's refresh rate, so it never lowered the
+  resolution on the devices that needed it most. It now remembers the best frame interval the device has
+  sustained, lowers resolution as soon as frames drop (in proportion), and raises it again only by cautious
+  probes that back off. Ultra Low and Low aim for 60 fps even on a 120 Hz screen.
+
 ## Known issues / not verified
+- v3 frame rates are not measured on real hardware (no GPU here). What is measured: vertex counts, and that
+  every stage runs on a software GPU. Whether Low holds 60 fps on a given slow device needs a benchmark run there.
+- v3: beyond the level-of-detail distance a tree swaps to its lighter model; the shapes match, but the swap to
+  the simple distance tree further out (2.2x that distance) can be noticed if you look for it.
+- v3: the shape of the ground inside a bend changes a little as you drive through it (the fold limit moves).
 - Not measured: whether Ultra Low reaches ~60 fps on a mid-range phone, or what Psycho costs on the target PC.
   Only relative costs on a software GPU are known, per frame on an emulated phone: Ultra Low 1.4 s, Low 2.0 s,
   High 11.4 s, Psycho 45 s.

@@ -8,7 +8,7 @@ import { TrackData } from '../track/generator';
 import { gustWarning, hazardActive, laserWarning, Track } from '../track/track';
 import { CarDraw, CarRenderer } from './cars';
 import { FX, PT } from './fx';
-import { createTexture, GL, Mesh, MSTarget, perspective, Program, Target, viewFromBasis, mul4, invert4, ortho, SHADOW_UNIT } from './gl';
+import { createTexture, GL, Mesh, MSTarget, perspective, Program, Target, viewFromBasis, mul4, invert4, ortho, SHADOW_UNIT, SHADOW_UNIT2 } from './gl';
 import { Ground, ROWS } from './ground';
 import { HazardRenderer } from './hazards';
 import { Look, LOOKS } from './looks';
@@ -36,14 +36,17 @@ export interface Quality {
   shadows: number; // sun shadow map size in texels (0 = blob shadows only)
   ssao: boolean; // screen-space ambient occlusion
   dpr: number; // device-pixel-ratio cap for the 3D view (phones: fewer pixels, the HUD stays sharp)
+  lod: number; // metres ahead beyond which trees, bushes and rocks are drawn with their lighter models
+  terrLite: boolean; // terrain mesh with about 40 % of the vertices
+  cap60: boolean; // the resolution scaler aims for 60 fps even on a faster screen (a 120 Hz phone)
 }
 export const QUALITY: Quality[] = [
-  { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1 },
-  { name: 'Low', scale: 0.6, minScale: 0.4, msaa: 0, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4, scenery: 0.8, woods: 0.45, lamps: 8, lite: false, shadows: 0, ssao: false, dpr: 1.5 },
-  { name: 'Medium', scale: 0.8, minScale: 0.5, msaa: 2, bloom: 4, dist: 0.8, particles: 0.7, weather: 0.7, scenery: 1, woods: 0.65, lamps: 12, lite: false, shadows: 0, ssao: false, dpr: 2 },
-  { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, bloom: 5, dist: 1.0, particles: 1, weather: 1, scenery: 1, woods: 0.8, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2 },
-  { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 0.9, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2 },
-  { name: 'Psycho', scale: 1.0, minScale: 0.85, msaa: 8, bloom: 6, dist: 1.45, particles: 1.5, weather: 1.4, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2 },
+  { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1, lod: 40, terrLite: true, cap60: true },
+  { name: 'Low', scale: 0.8, minScale: 0.4, msaa: 0, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4, scenery: 0.8, woods: 0.4, lamps: 6, lite: true, shadows: 0, ssao: false, dpr: 1.25, lod: 70, terrLite: true, cap60: true },
+  { name: 'Medium', scale: 0.8, minScale: 0.5, msaa: 2, bloom: 4, dist: 0.8, particles: 0.7, weather: 0.7, scenery: 1, woods: 0.65, lamps: 12, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 110, terrLite: false, cap60: false },
+  { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, bloom: 5, dist: 1.0, particles: 1, weather: 1, scenery: 1, woods: 0.8, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 170, terrLite: false, cap60: false },
+  { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 0.9, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 260, terrLite: false, cap60: false },
+  { name: 'Psycho', scale: 1.0, minScale: 0.85, msaa: 8, bloom: 6, dist: 1.45, particles: 1.5, weather: 1.4, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
 ];
 /** index of the default preset (High) */
 export const Q_DEFAULT = 3;
@@ -102,6 +105,10 @@ export class Renderer {
   private shadowFB: WebGLFramebuffer | null = null;
   private shadowSize = 0;
   private shadowVP = new Float32Array(16);
+  private shadowTex2: WebGLTexture | null = null;
+  private shadowFB2: WebGLFramebuffer | null = null;
+  private shadowVP2 = new Float32Array(16);
+  private shadowP2 = [0, 0, 0, 0];
   private shadowLive = false;
   private curTarget: { bind(): void } | null = null;
   // scene depth copy for ambient occlusion (Psycho)
@@ -125,22 +132,27 @@ export class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_COMPARE_FUNC, gl.LEQUAL);
     return t;
   }
-  private bindShadowUnit(t: WebGLTexture): void {
+  private bindShadowUnit(t: WebGLTexture, unit = SHADOW_UNIT): void {
     const gl = this.gl;
-    gl.activeTexture(gl.TEXTURE0 + SHADOW_UNIT);
+    gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, t);
     gl.activeTexture(gl.TEXTURE0); // so later uploads never land on the shadow unit
   }
-  private ensureShadow(size: number): void {
+  private ensureShadow(size: number, size2: number): void {
     if (this.shadowSize === size && this.shadowTex) return;
     const gl = this.gl;
-    if (this.shadowTex) gl.deleteTexture(this.shadowTex);
-    this.shadowTex = this.depthTexture(size, null);
-    this.shadowFB ??= gl.createFramebuffer()!;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.shadowTex, 0);
-    gl.drawBuffers([gl.NONE]);
-    gl.readBuffer(gl.NONE);
+    const make = (old: WebGLTexture | null, fb: WebGLFramebuffer | null, sz: number): [WebGLTexture, WebGLFramebuffer] => {
+      if (old) gl.deleteTexture(old);
+      const t = this.depthTexture(sz, null);
+      const f = fb ?? gl.createFramebuffer()!;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, t, 0);
+      gl.drawBuffers([gl.NONE]);
+      gl.readBuffer(gl.NONE);
+      return [t, f];
+    };
+    [this.shadowTex, this.shadowFB] = make(this.shadowTex, this.shadowFB, size);
+    [this.shadowTex2, this.shadowFB2] = make(this.shadowTex2, this.shadowFB2, size2);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.shadowSize = size;
   }
@@ -184,6 +196,7 @@ export class Renderer {
     // shadow unit: a 1x1 depth texture reading 'fully lit' until a real shadow map exists
     this.dummyShadow = this.depthTexture(1, new Uint32Array([0xffffffff]));
     this.bindShadowUnit(this.dummyShadow);
+    this.bindShadowUnit(this.dummyShadow, SHADOW_UNIT2);
     this.pathTex = createTexture(gl, PATH_N, 3, gl.RGBA32F, gl.RGBA, gl.FLOAT, null, gl.NEAREST);
     for (let k = 0; k < 3; k++) {
       const mb = buildTraffic(k);
@@ -209,12 +222,15 @@ export class Renderer {
     if (this.track && this.scenery && (prev.scenery !== q.scenery || (prev.woods > 0) !== (q.woods > 0))) {
       this.scenery = this.buildScenery(this.track, q);
     } else if (this.scenery) this.scenery.backdropDist = q.woods;
+    if (this.scenery) this.scenery.lodDist = q.lod;
   }
 
   private buildScenery(track: Track, q: Quality): Scenery {
     const look = LOOKS[track.d.params.scenario];
     const terrain = new Terrain(track, look.terr, look.terr2);
-    return new Scenery(this.gl, track.d, terrain, look.terr2[3] > -20 ? look.terr2[3] : -1e9, this.pits, q.scenery, q.woods);
+    const sc = new Scenery(this.gl, track.d, terrain, look.terr2[3] > -20 ? look.terr2[3] : -1e9, this.pits, q.scenery, q.woods);
+    sc.lodDist = q.lod;
+    return sc;
   }
 
   /** pits: the race uses fuel stops (pit-lane markings and signs are drawn); otherwise the strip is a plain lay-by */
@@ -582,6 +598,7 @@ export class Renderer {
       p.v4a('uBand', bandU);
       p.v3('uSkyRef', skyRef).v3('uSkyRef2', skyRef2).v3('uGroundRef', look.ground[0]);
       p.m4('uShadowVP', this.shadowVP).v4('uShadowP', this.shadowLive ? 1 : 0, 1 / Math.max(1, this.shadowSize), 0, 0.00022);
+      p.m4('uShadowVP2', this.shadowVP2).v4('uShadowP2', this.shadowP2);
     };
     const draws = this.carDraws(race, sCar, xCar, a, maxD, lightsOn);
     const windStr = race.scen === Scn.WIND ? 1.3 : race.scen === Scn.STORM ? 1.0 : 0.25;
@@ -596,18 +613,17 @@ export class Renderer {
     const wind = [gustDir, windStr + gust * 1.5, gust * 1.2 * gustDir];
     const emisK = night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25;
 
-    // ---------- sun shadow map (Psycho) ----------
+    // ---------- sun shadow maps (Psycho) ----------
+    // Two cascades. Near: everything, a 230 m box at the camera. Far: terrain and landmarks over 2.4 km, so a
+    // mountain's shadow already lies on the distant road before it comes inside the detailed map.
     this.shadowLive = false;
     if (this.quality.shadows > 0 && sunB[1] > 0.03 && night < 0.5) {
       pf.begin('sun shadow map');
-      const S = this.quality.shadows;
-      this.ensureShadow(S);
-      // a 230 m box around and ahead of the camera, seen from the sun
-      const H = 115;
+      const S = this.quality.shadows, S2 = 2048;
+      this.ensureShadow(S, S2);
       const fh = [fwd[0], 0, fwd[2]];
       const fhl = Math.hypot(fh[0], fh[2]) || 1;
       fh[0] /= fhl; fh[2] /= fhl;
-      const c = [eye[0] + fh[0] * 75, eye[1] - 1.6, eye[2] + fh[2] * 75];
       const sl = Math.hypot(sunB[0], sunB[1], sunB[2]);
       const lf = [-sunB[0] / sl, -sunB[1] / sl, -sunB[2] / sl];
       // right = ref x f, up = f x right (the same handedness as the camera basis)
@@ -615,44 +631,60 @@ export class Renderer {
       const lrl = Math.hypot(lr[0], lr[1], lr[2]) || 1;
       lr = [lr[0] / lrl, lr[1] / lrl, lr[2] / lrl];
       const lu = [lf[1] * lr[2] - lf[2] * lr[1], lf[2] * lr[0] - lf[0] * lr[2], lf[0] * lr[1] - lf[1] * lr[0]];
-      // snap the box to whole shadow texels so edges do not crawl
-      const texel = (2 * H) / S;
-      const cr = c[0] * lr[0] + c[1] * lr[1] + c[2] * lr[2], cu = c[0] * lu[0] + c[1] * lu[1] + c[2] * lu[2];
-      const dr = Math.round(cr / texel) * texel - cr, du = Math.round(cu / texel) * texel - cu;
-      const le = [c[0] - lf[0] * 450 + lr[0] * dr + lu[0] * du, c[1] - lf[1] * 450 + lr[1] * dr + lu[1] * du, c[2] - lf[2] * 450 + lr[2] * dr + lu[2] * du];
-      const lv = viewFromBasis(new Float32Array(16), le, lr, lu, lf);
-      const lp = ortho(new Float32Array(16), -H, H, -H, H, 1, 950);
-      mul4(this.shadowVP, lp, lv);
+      /** light view-projection for a box of half-size H centred `ahead` metres in front of the camera */
+      const lightVP = (out: Float32Array, H: number, ahead: number, back: number, size: number) => {
+        const c = [eye[0] + fh[0] * ahead, eye[1] - 1.6, eye[2] + fh[2] * ahead];
+        // snap the box to whole shadow texels so edges do not crawl
+        const texel = (2 * H) / size;
+        const cr = c[0] * lr[0] + c[1] * lr[1] + c[2] * lr[2], cu = c[0] * lu[0] + c[1] * lu[1] + c[2] * lu[2];
+        const dr = Math.round(cr / texel) * texel - cr, du = Math.round(cu / texel) * texel - cu;
+        const le = [c[0] - lf[0] * back + lr[0] * dr + lu[0] * du, c[1] - lf[1] * back + lr[1] * dr + lu[1] * du, c[2] - lf[2] * back + lr[2] * dr + lu[2] * du];
+        const lv = viewFromBasis(new Float32Array(16), le, lr, lu, lf);
+        const lp = ortho(new Float32Array(16), -H, H, -H, H, 1, back * 2 + 50);
+        mul4(out, lp, lv);
+      };
+      lightVP(this.shadowVP, 115, 75, 450, S);
+      const H2 = 1200, back2 = 1800;
+      lightVP(this.shadowVP2, H2, 950, back2, S2);
+      this.shadowP2 = [1 / S2, 1.6 / (back2 * 2 + 50), (2 * H2 / S2) * 1.6, 0];
       const vpBox = gl.getParameter(gl.VIEWPORT) as Int32Array;
       const scBox = gl.getParameter(gl.SCISSOR_BOX) as Int32Array;
       const scOn = gl.isEnabled(gl.SCISSOR_TEST);
-      this.bindShadowUnit(this.dummyShadow); // never sample the map being drawn
-      gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFB);
+      // never sample a map while it is being drawn
+      this.bindShadowUnit(this.dummyShadow);
+      this.bindShadowUnit(this.dummyShadow, SHADOW_UNIT2);
       gl.disable(gl.SCISSOR_TEST);
-      gl.viewport(0, 0, S, S);
       gl.depthMask(true);
-      gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST);
       gl.depthFunc(gl.LEQUAL);
       gl.disable(gl.BLEND);
       gl.enable(gl.POLYGON_OFFSET_FILL);
       gl.polygonOffset(1.5, 3);
-      const sv = this.shadowVP;
-      const prepS = (p: Program) => { prep(p); p.m4('uViewProj', sv); };
-      const tp = this.ground.terrP.use();
-      prepS(tp);
-      tp.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
-      this.ground.terr.draw();
-      if (this.hazards) this.hazards.drawProps(prepS, sCar, F.time);
-      if (this.scenery) this.scenery.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK, path);
-      this.drawTraffic(prepS, race.traffic, sCar, Math.min(maxD, 600), a, F.time);
-      this.cars.draw(prepS, draws, [0.2, 0.9, 1.0]);
+      for (let pass = 0; pass < 2; pass++) {
+        const sv = pass === 0 ? this.shadowVP : this.shadowVP2;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, pass === 0 ? this.shadowFB : this.shadowFB2);
+        const sz = pass === 0 ? S : S2;
+        gl.viewport(0, 0, sz, sz);
+        gl.clear(gl.DEPTH_BUFFER_BIT);
+        const prepS = (p: Program) => { prep(p); p.m4('uViewProj', sv); };
+        const tp = this.ground.terrP.use();
+        prepS(tp);
+        tp.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
+        (this.quality.terrLite ? this.ground.terrLite : this.ground.terr).draw();
+        if (pass === 0) {
+          if (this.hazards) this.hazards.drawProps(prepS, sCar, F.time);
+          if (this.scenery) this.scenery.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK, path);
+          this.drawTraffic(prepS, race.traffic, sCar, Math.min(maxD, 600), a, F.time);
+          this.cars.draw(prepS, draws, [0.2, 0.9, 1.0]);
+        } else if (this.scenery) this.scenery.draw(prepS, sCar, maxD, loop, F.time, wind, emisK, path, true);
+      }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       this.curTarget!.bind();
       gl.viewport(vpBox[0], vpBox[1], vpBox[2], vpBox[3]);
       gl.scissor(scBox[0], scBox[1], scBox[2], scBox[3]);
       if (scOn) gl.enable(gl.SCISSOR_TEST);
       this.bindShadowUnit(this.shadowTex!);
+      this.bindShadowUnit(this.shadowTex2!, SHADOW_UNIT2);
       this.shadowLive = true;
       pf.end();
     }
@@ -678,7 +710,7 @@ export class Renderer {
     p.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
     p.v3('uG0', look.ground[0]).v3('uG1', look.ground[1]).v3('uG2', look.ground[2]).i('uGType', look.groundType);
     p.v3('uShoulder', look.road.dirt > 0.5 ? look.road.base : look.groundType === 2 ? [0.8, 0.84, 0.9] : look.groundType === 1 ? look.ground[1] : [0.32, 0.3, 0.27]);
-    g.terr.draw();
+    (this.quality.terrLite ? g.terrLite : g.terr).draw();
     pf.end();
     pf.begin('road');
     p = g.roadP.use();
@@ -810,6 +842,7 @@ export class Renderer {
       const sm = modelMatrix(pos[0], pos[1] - h, pos[2], yaw, Math.atan(this.path.slope(d)), 0);
       const liv = LIVERIES[c.color % LIVERIES.length];
       out.push({
+        far: Math.abs(d) > this.quality.lod * 0.35,
         model: m, shadowModel: sm, geo: c.spec.id, paint: liv[0], accent: liv[1],
         spin: c.pwheel + (c.wheelAngle - c.pwheel) * a, steer: c.psteer + (c.steerVis - c.psteer) * a,
         brake: c.brake > 0.1 ? 1 : 0, lights: lights ? 1 : 0, tail: lights ? 1 : 0.25,

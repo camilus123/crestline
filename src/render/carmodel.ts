@@ -51,7 +51,10 @@ class CarMB {
     }
   }
   /** cylinder along x (wheels, exhausts) */
+  /** distance version: half the segments on every round part */
+  lod = false;
   cylX(c: P3, r: number, w: number, segs: number, mat: number, wheel = 0, col: P3 = [1, 1, 1], gloss = 0.5, capMat = -1, capR = 0): void {
+    if (this.lod) segs = Math.max(6, segs >> 1);
     const x0 = c[0] - w / 2, x1 = c[0] + w / 2;
     for (let i = 0; i < segs; i++) {
       const a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
@@ -241,9 +244,10 @@ export interface CarGeo {
 export interface TailGlow { p: [number, number, number]; size: number; stretch: number }
 
 /** 0 Stiletto (wedge supercar), 1 Sprite (roadster), 2 Halo (concept) */
-export function buildCar(id: number): CarGeo {
+export function buildCar(id: number, lod = false): CarGeo {
   const b = new CarMB();
-  const R = 24;
+  b.lod = lod;
+  const R = lod ? 12 : 24;
   let wheels: number[] = [];
   let tail: TailGlow[] = [];
   let tailY = 0.8;

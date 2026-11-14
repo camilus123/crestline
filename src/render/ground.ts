@@ -232,7 +232,7 @@ void main(){
   // normal by finite differences (on the unsunk surface)
   PathS q;
   float e = max(0.8, off * 0.08);
-  vec3 w0 = terrPoint(d, off, side, false, q, tmp);
+  vec3 w0 = w; // (nothing sinks any more, so the drawn point is the surface point)
   vec3 wa = terrPoint(d + 1.5, off, side, false, q, tmp);
   vec3 wb = terrPoint(d, off + e, side, false, q, tmp);
   vec3 tA = wa - w0, tB = (wb - w0) * side;
@@ -400,6 +400,8 @@ void main(){
 export class Ground {
   road: Mesh;
   terr: Mesh;
+  /** the terrain with half the rows and fewer columns (light presets): about 40 % of the vertices */
+  terrLite: Mesh;
   water: Mesh;
   rail: Mesh;
   roadP: Program;
@@ -435,6 +437,26 @@ export class Ground {
           }
       }
       this.terr = new Mesh(gl, new Float32Array(v), 12, [{ loc: 0, size: 3, type: gl.FLOAT, offset: 0 }], 0, new Uint32Array(idx));
+    }
+    {
+      const rows: number[] = [];
+      for (let r = 0; r < ROWS; r += 2) rows.push(r);
+      if (rows[rows.length - 1] !== ROWS - 1) rows.push(ROWS - 1);
+      const offs = [0, 0.5, 1.3, 2.6, 4.5, 7.5, 12, 22, 40, 70, 120, 200, 320, 480, 680, 820];
+      const v: number[] = [];
+      const C = offs.length, Rn = rows.length;
+      for (const side of [-1, 1]) for (const r of rows) for (let c = 0; c < C; c++) v.push(r, offs[c], side);
+      const idx: number[] = [];
+      for (let sI = 0; sI < 2; sI++) {
+        const base = sI * Rn * C;
+        for (let r = 0; r < Rn - 1; r++)
+          for (let c = 0; c < C - 1; c++) {
+            const a = base + r * C + c, b = a + 1, cc = a + C, d = cc + 1;
+            if (sI === 0) idx.push(a, b, cc, b, d, cc);
+            else idx.push(a, cc, b, b, cc, d);
+          }
+      }
+      this.terrLite = new Mesh(gl, new Float32Array(v), 12, [{ loc: 0, size: 3, type: gl.FLOAT, offset: 0 }], 0, new Uint32Array(idx));
     }
     // water: rows x 9 lateral
     {

@@ -1,6 +1,6 @@
 {
   "name": "crestline",
-  "version": "2.0.2",
+  "version": "3.0.0",
   "private": true,
   "description": "CRESTLINE: Maximum Drive - a browser racing game",
   "type": "module",

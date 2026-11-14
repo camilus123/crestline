@@ -135,6 +135,11 @@ uniform float uTime;
 uniform highp sampler2DShadow uShadowMap;
 uniform mat4 uShadowVP;
 uniform vec4 uShadowP; // on, texel size (uv), unused, depth bias
+// far cascade: terrain and landmarks over a couple of kilometres, so distant ground is already in shade
+// before it comes inside the detailed map (otherwise shadows pop in as you approach)
+uniform highp sampler2DShadow uShadowMap2;
+uniform mat4 uShadowVP2;
+uniform vec4 uShadowP2; // texel size (uv), depth bias, normal offset (m), unused
 
 const vec2 POISSON[12] = vec2[12](
   vec2(-0.326, -0.406), vec2(-0.840, -0.074), vec2(-0.696, 0.457), vec2(-0.203, 0.621),
@@ -149,15 +154,31 @@ float sunShadow(vec3 wpos, vec3 N, float ndl){
   vec3 wp = wpos + N * (0.05 + 0.25 * (1.0 - ndl)) * (1.0 + dist * 0.004);
   vec4 c = uShadowVP * vec4(wp, 1.0);
   vec3 sc = c.xyz / c.w * 0.5 + 0.5;
-  if (sc.x <= 0.0 || sc.y <= 0.0 || sc.x >= 1.0 || sc.y >= 1.0 || sc.z >= 1.0) return 1.0;
   float ang = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831;
   mat2 rot = mat2(cos(ang), sin(ang), -sin(ang), cos(ang));
-  float r = uShadowP.y * (1.4 + dist * 0.01);
-  float s = 0.0;
-  for (int i = 0; i < 12; i++) s += texture(uShadowMap, vec3(sc.xy + rot * POISSON[i] * r, sc.z - uShadowP.w));
-  s /= 12.0;
-  vec2 e = min(sc.xy, 1.0 - sc.xy);
-  return mix(1.0, s, smoothstep(0.0, 0.06, min(e.x, e.y)));
+  float s = 1.0, wn = 0.0;
+  if (sc.x > 0.0 && sc.y > 0.0 && sc.x < 1.0 && sc.y < 1.0 && sc.z < 1.0) {
+    float r = uShadowP.y * (1.4 + dist * 0.01);
+    s = 0.0;
+    for (int i = 0; i < 12; i++) s += texture(uShadowMap, vec3(sc.xy + rot * POISSON[i] * r, sc.z - uShadowP.w));
+    s /= 12.0;
+    vec2 e = min(sc.xy, 1.0 - sc.xy);
+    wn = smoothstep(0.0, 0.1, min(e.x, e.y));
+    if (wn >= 1.0) return s;
+  }
+  // far cascade (4 taps), blended in towards the edge of the detailed map and faded out at its own edge
+  vec4 c2 = uShadowVP2 * vec4(wpos + N * uShadowP2.z, 1.0);
+  vec3 s2 = c2.xyz / c2.w * 0.5 + 0.5;
+  float f = 1.0;
+  if (s2.x > 0.0 && s2.y > 0.0 && s2.x < 1.0 && s2.y < 1.0 && s2.z < 1.0) {
+    float r2 = uShadowP2.x * 1.5;
+    f = 0.0;
+    for (int i = 0; i < 4; i++) f += texture(uShadowMap2, vec3(s2.xy + rot * POISSON[i * 3] * r2, s2.z - uShadowP2.y));
+    f *= 0.25;
+    vec2 e2 = min(s2.xy, 1.0 - s2.xy);
+    f = mix(1.0, f, smoothstep(0.0, 0.08, min(e2.x, e2.y)));
+  }
+  return mix(f, s, wn);
 }
 
 // motion-blur weight written to the scene's alpha: forward motion streaks near things, not far ones

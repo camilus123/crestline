@@ -636,23 +636,50 @@ export class Game {
     T.open = false;
   }
 
+  private refreshBest = 1 / 30;
+  private dynHold = 0;
+  private dynBackoff = 2;
+  /**
+   * Dynamic resolution: hold the frame rate at the screen's refresh rate (60 fps on the light presets, even on a
+   * faster screen) by lowering the render resolution, and raise it again only cautiously.
+   *  - The refresh interval is the shortest frame interval the device has sustained (a slow device that never
+   *    reaches its refresh rate must not be taken for a slow screen, or the scaler would never act).
+   *  - Dropped frames lower the resolution at once, in proportion to how far behind the frame rate is.
+   *  - With vsync a frame that is on time says nothing about headroom, so raising is a probe: one small step
+   *    after a quiet spell, and every probe that ends in dropped frames makes the next one wait longer.
+   */
   private dynamicResolution(raw: number): void {
     // refresh interval estimate (always, the monitor shows it): low percentile of recent frame intervals
     const s = this.dtHist.slice().sort((a, b) => a - b);
-    if (s.length > 30) this.refresh = Math.max(1 / 500, s[Math.floor(s.length * 0.1)]);
+    if (s.length > 30) {
+      this.refresh = Math.max(1 / 500, s[Math.floor(s.length * 0.1)]);
+      this.refreshBest = Math.min(this.refreshBest, this.refresh);
+    }
     if (!this.settings.dynRes || this.manual) {
       this.renderer.dynScale = this.renderer.quality.scale;
       return;
     }
     this.dynT += raw;
     if (this.dynT < 0.25) return;
+    const step = this.dynT;
     this.dynT = 0;
     const recent = this.dtHist.slice(-20);
     const avg = recent.reduce((a, b) => a + b, 0) / Math.max(1, recent.length);
     const q = this.renderer.quality;
+    const target = Math.max(this.refreshBest, q.cap60 ? 1 / 60 : 0);
+    const over = avg / target;
     let sc = this.renderer.dynScale;
-    if (avg > this.refresh * 1.25) sc -= 0.05;
-    else if (avg < this.refresh * 1.06) sc += 0.02;
+    if (over > 1.1) {
+      sc -= Math.max(0.03, Math.min(0.12, (over - 1) * 0.25));
+      this.dynHold = this.dynBackoff;
+      this.dynBackoff = Math.min(20, this.dynBackoff * 1.6);
+    } else if (over < 1.04) {
+      this.dynHold -= step;
+      if (this.dynHold <= 0) {
+        sc += 0.02;
+        this.dynBackoff = Math.max(2, this.dynBackoff * 0.97);
+      }
+    }
     this.renderer.dynScale = Math.max(q.minScale, Math.min(q.scale, sc));
   }
 

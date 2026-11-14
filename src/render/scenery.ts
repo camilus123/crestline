@@ -160,6 +160,10 @@ const VARIANTS = new Set<number>([O.PINE, O.FIR, O.OAK, O.BENT_OAK, O.BIRCH, O.P
 interface TypeSet {
   type: number;
   mesh: Mesh;
+  /** the same model with fewer triangles, drawn beyond Scenery.lodDist (null where it would save little) */
+  far: Mesh | null;
+  /** trees only: the simple distance tree, drawn beyond 2.2 x lodDist */
+  far2: Mesh | null;
   shadow: Mesh | null;
   s: Float32Array; // sorted s
   data: Float32Array;
@@ -190,7 +194,7 @@ const WOODS: Partial<Record<number, WoodRule>> = {
   [Scn.FOREST]: { types: [O.FIR, O.FIR, O.FIR, O.OAK, O.OAK, O.BIRCH, O.PINE], near: 13, far: 150, cover: 1, perKm: 3600, maxSlope: 0.5, minH: -1e9, maxH: 1e9, size: [0.85, 1.75] },
   [Scn.RALLY]: { types: [O.PINE, O.PINE, O.PINE, O.BIRCH, O.BIRCH], near: 42, far: 230, cover: 0.5, perKm: 1500, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.7] },
   [Scn.NIGHT]: { types: [O.OAK], near: 45, far: 200, cover: 0.42, perKm: 1000, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.6] },
-  [Scn.MARSH]: { types: [O.WILLOW, O.WILLOW, O.DEAD_TREE], near: 48, far: 190, cover: 0.38, perKm: 800, maxSlope: 0.4, minH: 0.25, maxH: 1e9, size: [0.85, 1.5] },
+  [Scn.MARSH]: { types: [O.WILLOW, O.WILLOW, O.DEAD_TREE], near: 48, far: 190, cover: 0.38, perKm: 800, maxSlope: 0.4, minH: -0.15, maxH: 1e9, size: [0.85, 1.5] },
   [Scn.MOUNTAINS]: { types: [O.PINE], near: 16, far: 330, cover: 0.62, perKm: 2600, maxSlope: 0.36, minH: -1e9, maxH: 135, size: [0.9, 1.9] },
   [Scn.SNOW]: { types: [O.SNOW_PINE], near: 42, far: 210, cover: 0.55, perKm: 1500, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.7] },
   [Scn.STORM]: { types: [O.BENT_OAK], near: 42, far: 200, cover: 0.42, perKm: 1000, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.6] },
@@ -285,6 +289,8 @@ export class Scenery {
   lamps: { s: number; u: number; h: number; type: number }[] = [];
   /** draw distance of the deep woodland as a fraction of the scenery distance (lower on low quality) */
   backdropDist = 0.8;
+  /** beyond this distance ahead, models with a lighter version are drawn with it */
+  lodDist = 160;
   /** density: fraction of purely decorative roadside objects kept (collidable ones always stay);
    *  woods: deep Forest woodland draw distance factor (0 = not built) */
   constructor(private gl: GL, track: TrackData, private terrain: Terrain, waterY: number, pits = true, density = 1, woods = 0.8) {
@@ -317,6 +323,7 @@ export class Scenery {
           { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
           { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
         ], mb.vertexCount);
+        const lb = buildModel(type, v, true);
         const landmark = LANDMARK.has(type);
         const bend = !landmark || type === O.TOWER;
         const adj = landmark && !bend && !SPANNING.has(type);
@@ -337,6 +344,27 @@ export class Scenery {
         ];
         inst.push({ loc: 6, size: 3, type: gl.FLOAT, offset: 24 });
         mesh.setInstances(data, F * 4, inst, adj ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+        let far: Mesh | null = null;
+        if (!landmark && lb.vertexCount < mb.vertexCount * 0.8) {
+          far = new Mesh(gl, lb.pack(), 32, [
+            { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
+            { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
+            { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
+            { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
+          ], lb.vertexCount);
+          far.setInstances(data, F * 4, inst);
+        }
+        let far2: Mesh | null = null;
+        const tb = buildFarTree(type, v);
+        if (!landmark && tb.vertexCount < lb.vertexCount * 0.7) {
+          far2 = new Mesh(gl, tb.pack(), 32, [
+            { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
+            { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
+            { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
+            { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
+          ], tb.vertexCount);
+          far2.setInstances(data, F * 4, inst);
+        }
         let shadow: Mesh | null = null;
         const r = SHADOW_R[type];
         if (r) {
@@ -345,7 +373,7 @@ export class Scenery {
         }
         let foot = 0;
         for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
-        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj });
+        this.sets.push({ type, mesh, far, far2, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj });
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
@@ -380,7 +408,7 @@ export class Scenery {
       mesh.setInstances(data, 36, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }, { loc: 6, size: 3, type: gl.FLOAT, offset: 24 }]);
       let foot = 0;
       for (let q = 0; q < mb.pos.length; q += 3) foot = Math.max(foot, Math.hypot(mb.pos[q], mb.pos[q + 2]));
-      this.sets.push({ type, mesh, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false });
+      this.sets.push({ type, mesh, far: null, far2: null, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false });
     }
   }
 
@@ -435,7 +463,7 @@ export class Scenery {
     set.mesh.updateInstances(D);
   }
 
-  draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath): void {
+  draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath, landmarksOnly = false): void {
     const gl = this.gl;
     const p = this.prog.use();
     prep(p);
@@ -443,10 +471,22 @@ export class Scenery {
     const r: number[] = [];
     gl.disable(gl.CULL_FACE);
     for (const set of this.sets) {
+      if (landmarksOnly && !set.landmark) continue;
       p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0).i('uBend', set.bend ? 1 : 0).f('uFoot', set.foot);
-      this.ranges(set, sCar, 60, set.landmark ? maxD + 400 : set.backdrop ? maxD * this.backdropDist : maxD, loop, r);
+      const ahead = set.landmark ? maxD + 400 : set.backdrop ? maxD * this.backdropDist : maxD;
+      const split = set.far ? Math.min(this.lodDist, ahead) : ahead;
+      this.ranges(set, sCar, 60, split, loop, r);
       if (set.adj) this.placeLandmarks(set, path, sCar, loop, r);
       for (let k = 0; k < r.length; k += 2) set.mesh.drawInstances(r[k], r[k + 1]);
+      if (set.far && ahead > split) {
+        const split2 = set.far2 ? Math.min(split * 2.2, ahead) : ahead;
+        this.ranges(set, sCar, -split, split2, loop, r);
+        for (let k = 0; k < r.length; k += 2) set.far.drawInstances(r[k], r[k + 1]);
+        if (set.far2 && ahead > split2) {
+          this.ranges(set, sCar, -split2, ahead, loop, r);
+          for (let k = 0; k < r.length; k += 2) set.far2.drawInstances(r[k], r[k + 1]);
+        }
+      }
     }
   }
 
