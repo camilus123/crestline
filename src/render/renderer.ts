@@ -565,10 +565,10 @@ export class Renderer {
       for (const sx of [-0.55, 0.55]) {
         const pos = path.pos(dd + 2.2, px + sx, 0.65 + p.hAir, [0, 0, 0, 0]);
         const yaw = pos[3] + p.yawVis;
-        const intensity = night > 0 ? 32 : look.carLights ? 14 : 0;
+        const intensity = night > 0 ? 15 : look.carLights ? 6 : 0; // (retuned for the softened ground cosine and longer reach in lightSurf)
         headU.set([pos[0], pos[1], pos[2], intensity], headN * 4);
         const pitch = -0.045;
-        headD.set([Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch), 0.86], headN * 4);
+        headD.set([Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch), 0.76], headN * 4);
         headN++;
       }
     }
@@ -580,8 +580,7 @@ export class Renderer {
       const lamps: { s: number; u: number; h: number; d: number }[] = [];
       this.scenery.nearLamps(sCar, loop, this.quality.lamps, lamps);
       for (const l of lamps) {
-        const side = l.u < 0 ? 1 : -1;
-        const pos = path.pos(l.d, l.u + side * 1.7, l.h - 0.2, [0, 0, 0, 0]);
+        const pos = path.pos(l.d, l.u, l.h - 0.05, [0, 0, 0, 0]);
         pl.set([pos[0], pos[1], pos[2], 22], plN * 4);
         plc.set([1.0, 0.78, 0.5, 2.2], plN * 4);
         plN++;
@@ -797,7 +796,15 @@ export class Renderer {
     this.fx.beginGlows();
     this.carGlows(race, sCar, a, maxD, lightsOn, night);
     if (look.streetLights || race.scen === Scn.FUTURE) {
-      for (let i = 0; i < plN; i++) this.fx.glow(pl[i * 4], pl[i * 4 + 1] + 0.05, pl[i * 4 + 2], 0.65, 1.6, 1.15, 0.65);
+      // every lamp in view glows, not only the nearest few that also light the ground: without this a street
+      // looked switched off beyond about a hundred metres
+      const far: { u: number; h: number; d: number }[] = [];
+      this.scenery!.lampsAhead(sCar, loop, Math.min(maxD, 1400), 160, far);
+      for (const l of far) {
+        const pos = path.pos(l.d, l.u, l.h - 0.05, [0, 0, 0, 0]);
+        // (a little larger with distance so the far ones stay visible points of light)
+        this.fx.glow(pos[0], pos[1], pos[2], 0.55 + l.d * 0.0022, 1.6, 1.15, 0.65);
+      }
     }
     // wet-road reflections of the glows: mirror them under the road surface
     if (look.wet > 0.25) {

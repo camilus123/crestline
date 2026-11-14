@@ -252,6 +252,23 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
 - CPU per frame: three WebGL state queries per view in the Psycho shadow pass and one per frame for MSAA made the
   page wait for the GPU process; they are gone. The bent path reads track arrays directly (0.50 -> 0.34 ms).
 
+**v3.0.1 / v3.0.2 (2026-11-14)**
+- The title screen and the F3 monitor show the build date and time, so a build can be told from the last one.
+- Backdrop peaks, circuits: the peak inherited the "bend along the road" switch from whichever object type was
+  drawn before it, which on circuit tracks wrapped the 1 km mountain along the road around the camera (the sky
+  became the inside of a mountain). Every switch is now set explicitly for peaks. The stage tracks tested before
+  happened to draw a non-bending type first.
+- Ground moving beside the car in bends (dunes on Desert): the fold limit that shapes the ground inside bends was
+  recomputed from the bent view each frame and shifted as the car moved. It is now capped by a limit computed
+  once from the track's true geometry (`Track.fold`). `tests/extstable.test.ts`: average change per 4 m driven,
+  Desert 0.027 -> 0.000 m, Rally 1.6 -> 0.009 m, Mountains 3.1 -> 0.08 m (rare larger steps remain on Mountains).
+- Street lamps: arms had a random turn while their light and glow were placed over the road, so glows floated
+  away from the lamp heads. Arms now reach over the road and the light and glow sit at the head. Every lamp in
+  view glows (to 1.4 km), not only the nearest 16 that light the ground.
+- Headlights: the beam met the road at a grazing angle and plain Lambert shading left it nearly black; a 3-9 m
+  dead zone in front of the lamps left the car just ahead unlit. Softer ground cosine, longer reach, wider cone,
+  no dead zone beyond 2.5 m, intensity retuned.
+
 ## Known issues / not verified
 - v3 frame rates are not measured on real hardware (no GPU here). What is measured: vertex counts, and that
   every stage runs on a software GPU. Whether Low holds 60 fps on a given slow device needs a benchmark run there.

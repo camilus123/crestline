@@ -228,9 +228,13 @@ vec3 lightSurf(vec3 albedo, vec3 N, vec3 wpos, float rough, float specK, float a
     float d2 = dot(L, L);
     vec3 l = L * inversesqrt(d2);
     float cd = dot(-l, uHeadDir[i].xyz);
-    float cone = smoothstep(uHeadDir[i].w, uHeadDir[i].w + 0.12, cd);
-    float att = uHead[i].w * cone / (1.0 + d2 * 0.012) * smoothstep(3.0, 9.0, sqrt(d2));
-    float nl = max(dot(N, l), 0.0);
+    float cone = smoothstep(uHeadDir[i].w, uHeadDir[i].w + 0.16, cd);
+    // (no dead zone in front of the lamps beyond the first couple of metres: the car just ahead is lit too)
+    float att = uHead[i].w * cone / (1.0 + d2 * 0.006) * smoothstep(0.5, 2.5, sqrt(d2));
+    // Headlamps are 0.65 m above the road, so the beam meets the tarmac at a grazing angle and plain
+    // Lambert shading leaves the road almost black (at 20 m the cosine is 0.03). Real road surfaces are rough
+    // and scatter light back along the beam; a softened cosine stands in for that.
+    float nl = pow(max(dot(N, l), 0.0), 0.45);
     vec3 hh = normalize(l + V);
     float hs = pow(max(dot(N, hh), 0.0), shin) * specK * 2.0;
     c += (albedo * nl + hs) * att * vec3(1.0, 0.93, 0.8);

@@ -84,6 +84,15 @@ export class BentPath {
       py[k] = (direct ? td.Y[ix[k]] : track.y(s0 + k * PATH_STEP)) - yCar;
     }
     this.computeExtents(track);
+    // never beyond the limit fixed to the ground (see Track.fold): keeps the shape of the land from shifting
+    {
+      const [fL, fR] = track.fold();
+      for (let k = 0; k < n; k++) {
+        const j = direct ? ix[k] : Math.round(track.fi(s0 + k * PATH_STEP)) % tn;
+        if (fL[j] < this.extL[k]) this.extL[k] = fL[j];
+        if (fR[j] < this.extR[k]) this.extR[k] = fR[j];
+      }
+    }
     // pack texture rows
     const D = this.data;
     const row = n * 4;

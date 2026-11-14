@@ -91,7 +91,7 @@ void main(){
   if (uSkyObj == 1) { o = vec3(iSUR.x, iAdj.z, iSUR.y); right = vec3(1.0, 0.0, 0.0); fwd = vec3(0.0, 0.0, 1.0); }
   vec3 w = o + right * lp.x + vec3(0, 1, 0) * lp.y + fwd * lp.z;
   vec3 nrm = right * ln.x + vec3(0, 1, 0) * ln.y + fwd * ln.z;
-  if (uBend == 1 && uSpan == 0) {
+  if (uBend == 1 && uSpan == 0 && uSkyObj == 0) {
     // place each vertex against the road at its own distance, so a long object bends with the road
     // instead of cutting across the inside of a curve; blend back to rigid where the bent space folds
     float kb = 1.0 - smoothstep(ext * 0.75, ext, abs(u) + uFoot * iSHX.x);
@@ -357,11 +357,15 @@ export class Scenery {
         const ss = new Float32Array(idx.length);
         idx.forEach((i, k) => {
           const u = o.u[i];
-          data.set([o.s[i], u, o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
+          // street lamps reach over the road (the track gives them a random turn, which left arms pointing into
+          // the fields while their light and glow were placed over the road)
+          const rot = LAMPS.has(type) ? (u > 0 ? 0 : Math.PI) : o.rot[i];
+          data.set([o.s[i], u, rot, o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
           data[k * F + 6] = u;
           data[k * F + 8] = span ? 0 : this.terrain.h(o.s[i], u);
           ss[k] = o.s[i];
-          if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i], h: type === O.LAMP_DOUBLE ? 10 : 7, type });
+          // the lamp head: at the end of the arm (1.7 m, or 2.5 m on the tall double lamps), just under it
+          if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i] - Math.sign(o.u[i]) * (type === O.LAMP_DOUBLE ? 2.5 : 1.7) * o.scale[i], h: (type === O.LAMP_DOUBLE ? 10.13 : 7.13) * o.scale[i], type });
         });
         const inst = [
           { loc: 4, size: 3, type: gl.FLOAT, offset: 0 },
@@ -530,6 +534,9 @@ export class Scenery {
       if (landmarksOnly && (!set.landmark || set.sky)) continue;
       p.i('uSkyObj', set.sky ? 1 : 0).f('uRocky', set.sky ? 1 : 0);
       if (set.sky) {
+        // every switch set explicitly: a backdrop mountain must never inherit 'bend along the road' (or anything
+        // else) from whichever object type was drawn before it
+        p.i('uLandmark', 1).i('uSpan', 0).i('uRotor', 0).i('uBend', 0).f('uFoot', set.foot);
         this.placeSky(set);
         set.mesh.drawInstances(0, set.count);
         continue;
@@ -564,6 +571,28 @@ export class Scenery {
       p.f('uRadius', set.radius);
       this.ranges(set, sCar, 30, 260, loop, r);
       for (let k = 0; k < r.length; k += 2) set.shadow.drawInstances(r[k], r[k + 1]);
+    }
+  }
+
+  /** every lamp from just behind the car out to `ahead` metres (for the glows of distant lamps), at most `max` */
+  lampsAhead(sCar: number, loop: number, ahead: number, max: number, out: { u: number; h: number; d: number }[]): void {
+    out.length = 0;
+    const L = this.lamps;
+    if (!L.length) return;
+    let lo = 0, hi = L.length;
+    const key = loop > 0 ? (((sCar - 20) % loop) + loop) % loop : sCar - 20;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (L[m].s < key) lo = m + 1;
+      else hi = m;
+    }
+    for (let k = 0; k < L.length && out.length < max; k++) {
+      if (loop <= 0 && lo + k >= L.length) break;
+      const l = L[(lo + k) % L.length];
+      let d = l.s - sCar;
+      if (loop > 0) d = ((d + loop * 0.5) % loop + loop) % loop - loop * 0.5;
+      if (d > ahead || d < -20) break;
+      out.push({ u: l.u, h: l.h, d });
     }
   }
 

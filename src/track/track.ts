@@ -43,6 +43,74 @@ export class Track {
       this.tiltArr = a;
     }
   }
+  /**
+   * How far the ground can extend to each side before it would run into the inside of the bend or another
+   * stretch of road, from the track's true geometry: fixed for each place on the track. The renderer also
+   * works this out every frame for the bent view, but that value shifts as the car moves (the view straightens
+   * the road ahead), and ground shaped by it visibly moved as you drove round a bend (dunes sliding and
+   * deflating beside the car). The renderer now uses the smaller of the two, which is almost always this one.
+   */
+  private foldL: Float32Array | null = null;
+  private foldR: Float32Array | null = null;
+  fold(): [Float32Array, Float32Array] {
+    if (this.foldL && this.foldR) return [this.foldL, this.foldR];
+    const d = this.d, n = d.n, C = 8, MAXE = 700;
+    const nc = Math.ceil(n / C);
+    const eL = new Float32Array(nc).fill(MAXE), eR = new Float32Array(nc).fill(MAXE);
+    const X = d.X, Z = d.Z, H = d.heading;
+    const span = Math.ceil(2000 / (C * DELTA)); // only stretches that can be in view together
+    for (let i = 0; i < nc; i++) {
+      const ki = Math.min(n - 1, i * C);
+      // heading as the bent path has it: x += sin, z += cos
+      const fx = Math.sin(H[ki]), fz = Math.cos(H[ki]);
+      const nx = fz, nz = -fx;
+      const xi = X[ki], zi = Z[ki];
+      let r = MAXE, l = MAXE;
+      for (let o = -span; o <= span; o++) {
+        if (o > -4 && o < 4) continue;
+        let j = i + o;
+        if (d.circuit) j = ((j % nc) + nc) % nc;
+        else if (j < 0 || j >= nc) continue;
+        const kj = Math.min(n - 1, j * C);
+        const vx = X[kj] - xi, vz = Z[kj] - zi;
+        const a = vx * nx + vz * nz, b = vx * fx + vz * fz;
+        if (Math.abs(b) > Math.abs(a) * 1.1) continue;
+        if (a > 0) r = Math.min(r, a * 0.5 - 14);
+        else l = Math.min(l, -a * 0.5 - 14);
+      }
+      eR[i] = Math.max(6, r);
+      eL[i] = Math.max(6, l);
+      const c = d.curv[ki];
+      if (Math.abs(c) > 1e-5) {
+        const R = Math.max(6, (1 / Math.abs(c)) * 0.85);
+        if (c > 0) eR[i] = Math.min(eR[i], R);
+        else eL[i] = Math.min(eL[i], R);
+      }
+    }
+    const spread = (e: Float32Array) => {
+      const o = new Float32Array(n);
+      const m = new Float32Array(nc);
+      for (let i = 0; i < nc; i++) {
+        let v = e[i];
+        for (let k = -2; k <= 2; k++) {
+          let j = i + k;
+          if (d.circuit) j = ((j % nc) + nc) % nc;
+          else if (j < 0 || j >= nc) continue;
+          v = Math.min(v, e[j] + Math.abs(k) * 6);
+        }
+        m[i] = v;
+      }
+      for (let k = 0; k < n; k++) {
+        const f = k / C, i = Math.min(nc - 1, Math.floor(f));
+        const j = d.circuit ? (i + 1) % nc : Math.min(nc - 1, i + 1);
+        o[k] = m[i] + (m[j] - m[i]) * (f - Math.floor(f));
+      }
+      return o;
+    };
+    this.foldL = spread(eL);
+    this.foldR = spread(eR);
+    return [this.foldL, this.foldR];
+  }
   tilt(s: number): number { return this.tiltArr ? this.lerpArr(this.tiltArr, s) : 0; }
   /** race distance -> track s */
   trackS(dist: number): number {
