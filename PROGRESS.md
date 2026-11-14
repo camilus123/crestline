@@ -297,6 +297,22 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   clutter, woodland, detail distance, terrain mesh, lamp lights, particles, weather, dynamic-resolution floor and
   target). Changed options are marked; picking a preset resets them. `tests/gfxopts.mjs`.
 
+## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
+- **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
+  make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
+  track then loads; it reads as a hang. Fix: say on screen what is happening, or measure off screen / shorter.
+- **Benchmark frame cost is overstated on Firefox.** Measured 237 fps on Forest High while "cost" says 6.56 ms
+  (152 fps max): the read-back used to finish the GPU costs about 2 ms itself there. Needs a cheaper way to wait
+  (fence sync), or calibration against an empty frame.
+- **Track load leaks into the measured run.** Mountains Low and High show one 670-730 ms frame (1% low 14-15 fps);
+  the 1.5 s warm-up is not always enough for the 28,000-tree woodland build. Wait for a few steady frames.
+- **Graphics options should take free values** where that makes sense (draw distance, particles, rain and snow,
+  full-detail distance, woodland, render resolution, lamp lights), not only the steps the presets use.
+- Sky is the largest single stage on every preset at 3440x1440 (2.1-3.2 ms with full effects, 1.1-1.8 ms simple).
+  It is drawn first over the whole screen and then mostly covered; drawing it after the opaque scene, only where
+  nothing else is, should recover most of that.
+- Start-up was 10.7 s on Firefox / Windows.
+
 ## Known issues / not verified
 - **Mountains has known visual issues that are staying.** The world is a strip of terrain about 800 m either side
   of the road, bent each frame so the road ahead straightens, with a painted sky behind. On flat scenarios the
