@@ -105,6 +105,10 @@ float foldTaper(float uu, float edge, float ext){
   float tk = 1.0 - smoothstep(350.0, 650.0, ext);
   return 1.0 - tk * smoothstep(edge + (ext - edge) * 0.45, ext, uu);
 }
+// The land ends where the draw distance ends. Hills and mountainsides there used to stop dead, and from a bend
+// their cut end showed in cross-section against the sky (a 'hole' with the backdrop visible behind it). Heights
+// now ease down to road level over the last third of the distance, so the land sinks into the haze instead.
+float farTaper(float d){ return 1.0 - smoothstep(uPathInfo.w * 0.62, uPathInfo.w * 0.985, d); }
 vec3 bentPos(PathS p, float u, float h){
   vec2 rt = vec2(cos(p.phi), -sin(p.phi));
   vec2 xz = p.xz + rt * u;

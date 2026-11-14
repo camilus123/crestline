@@ -412,11 +412,25 @@ const LIB: Partial<Record<O, Builder>> = {
         c = [c[0] * shade, c[1] * shade, c[2] * shade];
         const snowLine = 0.5 + 0.1 * Math.sin(a * 3 + ph[1]) + 0.16 * (rg - 0.5) + (jit[(Math.max(0, k) * segs + i + 7) % jit.length] - 0.5) * 0.08;
         const white = t > snowLine;
-        const mat: Mat = white ? { c: mixc(snowC, c, 0.06), spec: 0.3, hue: 0 } : { c, spec: 0.06, hue: 0 };
+        void white; void snowC; // (snow is drawn per pixel in the shader, so its edge is not facet-shaped)
+        const mat: Mat = { c, spec: 0.05, hue: 0 };
         const ctr: V3 = [lean[0] * t, Math.max(0, H * t), lean[1] * t];
         if (k === K - 2) b.tri(pt(k, i), pt(k, i + 1), pt(k + 1, 0), mat, ctr);
         else b.quad(pt(k, i), pt(k, i + 1), pt(k + 1, i + 1), pt(k + 1, i), mat, ctr);
       }
+    }
+    // smooth the normals (the builder makes flat facets): average over every vertex at the same position
+    const acc = new Map<string, number[]>();
+    const key = (i: number) => `${Math.round(b.pos[i])},${Math.round(b.pos[i + 1])},${Math.round(b.pos[i + 2])}`;
+    for (let i = 0; i < b.pos.length; i += 3) {
+      let v = acc.get(key(i));
+      if (!v) acc.set(key(i), (v = [0, 0, 0]));
+      v[0] += b.nrm[i]; v[1] += b.nrm[i + 1]; v[2] += b.nrm[i + 2];
+    }
+    for (let i = 0; i < b.pos.length; i += 3) {
+      const v = acc.get(key(i))!;
+      const l = Math.hypot(v[0], v[1], v[2]) || 1;
+      b.nrm[i] = v[0] / l; b.nrm[i + 1] = v[1] / l; b.nrm[i + 2] = v[2] / l;
     }
   },
   [O.MESA]: (b) => {

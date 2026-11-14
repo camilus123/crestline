@@ -805,6 +805,16 @@ export class Renderer {
         // (a little larger with distance so the far ones stay visible points of light)
         this.fx.glow(pos[0], pos[1], pos[2], 0.55 + l.d * 0.0022, 1.6, 1.15, 0.65);
       }
+      // The nearest lamps light the ground properly (point lights). Beyond them each lamp gets a pool of light
+      // painted on the road under it: a flat ellipse, as a 9 m circle on the ground looks from the driver's
+      // seat, so the street reads as lit all the way down instead of going dark past the last real light.
+      for (let i = plN; i < far.length; i++) {
+        const l = far[i];
+        const g = path.pos(l.d, l.u * 0.55, 0, [0, 0, 0, 0]);
+        const dist = Math.hypot(g[0] - eye[0], g[2] - eye[2]);
+        const vs = Math.max(0.1, (9 * Math.max(0.5, eye[1] - g[1])) / Math.max(dist, 20));
+        this.fx.glow(g[0], g[1] + vs * 0.35, g[2], vs, 0.5, 0.36, 0.2, -9 / vs);
+      }
     }
     // wet-road reflections of the glows: mirror them under the road surface
     if (look.wet > 0.25) {

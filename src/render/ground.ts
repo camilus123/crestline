@@ -213,7 +213,7 @@ vec3 terrPoint(float d, float off, float side, bool sink, out PathS p, out float
   }
   float u = side * uu;
   uuOut = uu;
-  float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) * foldTaper(uu, edge, ext) - dip;
+  float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) * foldTaper(uu, edge, ext) * farTaper(d) - dip;
   return bentPos(p, u, h);
 }
 void main(){

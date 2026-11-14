@@ -269,6 +269,14 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   dead zone in front of the lamps left the car just ahead unlit. Softer ground cosine, longer reach, wider cone,
   no dead zone beyond 2.5 m, intensity retuned.
 
+**v3.0.3 (2026-11-14)**
+- "Holes" in the mountains with the backdrop showing behind: the land stopped dead at the end of the draw
+  distance, and from a bend the cut end of a hillside showed in cross-section. Terrain heights (and the objects
+  standing on them) now ease down to road level over the last third of the draw distance (`farTaper`).
+- Backdrop peaks: smooth normals with a relief bump instead of flat facets, stronger rock texture with strata and
+  gully streaks, and snow decided per pixel (ragged line, lower in gullies) instead of per facet.
+- Street lamps beyond the nearest point lights paint a pool of light on the road under them.
+
 ## Known issues / not verified
 - v3 frame rates are not measured on real hardware (no GPU here). What is measured: vertex counts, and that
   every stage runs on a software GPU. Whether Low holds 60 fps on a given slow device needs a benchmark run there.

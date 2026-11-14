@@ -32,7 +32,7 @@ uniform float uTime;
 uniform vec3 uWind; // dirX (lateral), strength, gust
 out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide; out vec3 vL;
 void main(){
-  vL = aPos * iSHX.x;
+  vL = aPos;
   float d = uSkyObj == 1 ? 0.0 : iSUR.x - uSCar;
   if (uLoopLen > 0.0) d = mod(d + uLoopLen * 0.5, uLoopLen) - uLoopLen * 0.5;
   PathS p = pathAt(d);
@@ -53,7 +53,7 @@ void main(){
     u = side * max(mix(ext, abs(u), 0.85), keep);
   }
   float off = max(abs(u) - edge, 0.0);
-  float base = uSpan == 1 ? 0.0 : iAdj.z * foldTaper(abs(u), edge, ext);
+  float base = uSpan == 1 ? 0.0 : iAdj.z * foldTaper(abs(u), edge, ext) * farTaper(d);
   if (uLandmark == 1 && abs(iSUR.y) > ext) base -= 6.0;
   vec3 lp = aPos;
   vec3 ln = aNrm;
@@ -128,14 +128,23 @@ void main(){
   if (uRocky > 0.5) {
     // rock and snow texture in the mountain's own coordinates (so it stays put as the view turns): broad
     // mottling, tilted strata on the rock, fine grain, wind-scoured streaks on the snow
-    float snow = step(0.55, min(alb.r, min(alb.g, alb.b)));
-    float big = fbm(vL.xz * 0.006 + vL.y * 0.004);
-    float fine = fbm(vL.xz * 0.045 + vec2(vL.y * 0.06, 3.7));
-    float strata = sin(vL.y * 0.085 + vL.x * 0.012 + big * 7.0);
-    vec3 rock = alb * (0.55 + 0.9 * big) * (0.8 + 0.4 * fine) * (0.9 + 0.12 * strata);
-    vec3 snowC = alb * (0.86 + 0.2 * fine) * (0.94 + 0.08 * sin(vL.y * 0.05 + big * 9.0));
+    float big = fbm(vL.xz * 0.008 + vL.y * 0.005);
+    float mid = fbm(vL.xz * 0.03 + vec2(vL.y * 0.04, 1.3));
+    float fine = fbm(vL.xz * 0.11 + vec2(vL.y * 0.15, 3.7));
+    // bump the smooth normal with the rock's own relief, so light picks out ribs and gullies, not flat facets
+    N = normalize(N + vec3(mid - 0.5, 0.0, fbm(vL.zx * 0.03 + 7.1) - 0.5) * 0.9 + vec3(fine - 0.5, 0.0, big - 0.5) * 0.35);
+    // tilted strata and dark gully streaks running down the fall line
+    float strata = sin(vL.y * 0.11 + vL.x * 0.02 + big * 8.0);
+    float ang = atan(vL.z, vL.x);
+    float gully = fbm(vec2(ang * 9.0, vL.y * 0.004 + 2.0));
+    vec3 rock = alb * (0.5 + 1.0 * big) * (0.72 + 0.56 * mid) * (0.88 + 0.24 * fine) * (0.9 + 0.14 * strata) * (0.7 + 0.6 * gully);
+    // snow: above a ragged line, lower in the gullies and on gentler ground, none on the steepest rock
+    float t = vL.y / 420.0;
+    float line = 0.6 + (big - 0.5) * 0.3 + (gully - 0.5) * 0.35 + (mid - 0.5) * 0.12;
+    float snow = smoothstep(line - 0.025, line + 0.025, t + (N.y - 0.55) * 0.3);
+    snow = max(snow, smoothstep(0.86, 0.93, t));
+    vec3 snowC = vec3(0.9, 0.93, 0.98) * (0.9 + 0.14 * fine) * (0.93 + 0.1 * mid);
     alb = mix(rock, snowC, snow);
-    N = normalize(N + (vec3(fine, 0.0, big) - 0.5) * 0.35);
   }
   vec3 col = lightSurf(alb, N, vW, 1.0 - vCol.a, vCol.a, ao, 1.0);
   col += vCol.rgb * vAux.x * uEmisMul * 4.0;
@@ -164,7 +173,7 @@ void main(){
   PathS q = pathAt(dd);
   float e2 = uu < 0.0 ? q.hwL : q.hwR;
   float off = max(abs(uu) - e2, 0.0);
-  vec3 w = bentPos(q, uu, terrainH(q, uu, off) * foldTaper(abs(uu), e2, uu < 0.0 ? q.extL : q.extR) + 0.06);
+  vec3 w = bentPos(q, uu, terrainH(q, uu, off) * foldTaper(abs(uu), e2, uu < 0.0 ? q.extL : q.extR) * farTaper(dd) + 0.06);
   vQ = aQ; vHide = hide; vW = w;
   gl_Position = hide > 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : uViewProj * vec4(w, 1.0);
 }`;
