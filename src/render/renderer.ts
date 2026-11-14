@@ -14,6 +14,7 @@ import { HazardRenderer } from './hazards';
 import { Look, LOOKS } from './looks';
 import { buildTraffic } from './models';
 import { BentPath, PATH_N, PATH_STEP } from './path';
+import { Terrain } from './terrain';
 import { Post, PostParams } from './post';
 import { Scenery } from './scenery';
 import { Sky } from './sky';
@@ -206,8 +207,14 @@ export class Renderer {
     this.dynScale = q.scale;
     // scenery thinning and the deep woodland are built per track: rebuild if they changed
     if (this.track && this.scenery && (prev.scenery !== q.scenery || (prev.woods > 0) !== (q.woods > 0))) {
-      this.scenery = new Scenery(this.gl, this.track.d, this.pits, q.scenery, q.woods);
+      this.scenery = this.buildScenery(this.track, q);
     } else if (this.scenery) this.scenery.backdropDist = q.woods;
+  }
+
+  private buildScenery(track: Track, q: Quality): Scenery {
+    const look = LOOKS[track.d.params.scenario];
+    const terrain = new Terrain(track, look.terr, look.terr2);
+    return new Scenery(this.gl, track.d, terrain, look.terr2[3] > -20 ? look.terr2[3] : -1e9, this.pits, q.scenery, q.woods);
   }
 
   /** pits: the race uses fuel stops (pit-lane markings and signs are drawn); otherwise the strip is a plain lay-by */
@@ -217,7 +224,7 @@ export class Renderer {
     this.track = new Track(t);
     this.look = LOOKS[t.params.scenario];
     this.tex.setGround(this.look.groundType);
-    this.scenery = new Scenery(this.gl, t, pits, this.quality.scenery, this.quality.woods);
+    this.scenery = this.buildScenery(this.track, this.quality);
     this.hazards = new HazardRenderer(this.gl, t);
     this.fx.parts.length = 0;
     let sum = 0;
@@ -563,9 +570,10 @@ export class Renderer {
     const bandU = this.ground.bands(sCar, maxD);
     const pathInfo = [path.dFirst, PATH_STEP, PATH_N, maxD];
     const T = look.terr, T2 = look.terr2;
+    const yCar = tr.y(sCar);
     const prep = (p: Program) => {
       p.m4('uViewProj', vp).tex('uPath', this.pathTex, 7).v4('uPathInfo', pathInfo).f('uLoopLen', loop);
-      p.v4('uTerr', T).v4('uTerr2', T2);
+      p.v4('uTerr', T).v4('uTerr2', T2).f('uYCar', yCar);
       p.v3('uSunDir', sunB).v3('uSunCol', look.sunColor).v3('uAmbTop', look.ambTop).v3('uAmbBot', look.ambBot);
       p.v3('uFogCol', look.fogColor).v3('uFogSun', look.fogSun).v4('uFog', fogDen, look.fogHeight, -20, look.fogMax).v3('uCamPos', eye);
       p.v4a('uHead', headU).v4a('uHeadDir', headD).i('uHeadN', headN);

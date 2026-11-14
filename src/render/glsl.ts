@@ -55,6 +55,7 @@ float terrNoise(float s, float u, float fr){
   return fbm(vec2(s*fr, u*fr));
 }
 // terrain height relative to the road centre at lateral position u (signed), side = sign(u), off = metres beyond edge
+// (mirrored on the CPU in terrain.ts, which places scenery: keep the two in step)
 float terrainH(PathS p, float u, float off){
   float side = u < 0.0 ? -1.0 : 1.0;
   float fr = uTerr.y;
@@ -69,20 +70,40 @@ float terrainH(PathS p, float u, float off){
     float dn = sin((p.s * 0.021 + u * 0.034) + n * 3.0) * 0.5 + 0.5;
     h += dn * dn * uTerr2.z * smoothstep(4.0, 40.0, off);
   }
-  bool wall = side < 0.0 ? flag(p.flags, 8) : flag(p.flags, 16);
-  bool cliff = side < 0.0 ? flag(p.flags, 32) : flag(p.flags, 64);
-  if (wall && ty == 4) { // mountain rock wall
-    float r = smoothstep(0.4, 1.4, off);
-    h = r * (2.0 + (off - 0.4) * 2.6) + r * (n2 * 4.0 + n * 10.0) + smoothstep(10.0, 60.0, off) * uTerr2.x;
-  }
-  if (cliff && ty == 4) {
-    float r = smoothstep(1.4, 3.2, off);
-    h = -0.1 - r * (off - 1.4) * 3.5 + r * n * 8.0 - smoothstep(12.0, 120.0, off) * uTerr2.y;
+  if (ty == 4) {
+    // Mountains. p.sand carries the tilt here: +1 mountainside on the right and valley on the left, -1 the other
+    // way round, changing over smoothly along the road. Everything is a function of the place on the ground only.
+    float w = p.sand * side;
+    float big = terrNoise(p.s + 311.0, u * 0.7, 0.0022);      // 0..1, features several hundred metres across
+    float up = smoothstep(0.0, 0.7, w), dn = smoothstep(0.0, 0.7, -w);
+    // mountainside: a cut rock face at the road, then a concave slope easing off towards a ridge
+    float cutH = 6.0 + 9.0 * clamp(n + 0.45, 0.0, 1.0);
+    float face = cutH * smoothstep(0.4, 0.4 + cutH * 0.55, off);
+    float x = max(off - 3.0, 0.0);
+    float M = uTerr2.x * (0.55 + 0.9 * big);
+    float mount = face + M * (1.0 - exp(-x / (M * 1.15)))
+      + (big - 0.47) * 150.0 * smoothstep(40.0, 320.0, x) + n * 22.0 * smoothstep(6.0, 90.0, x) + n2 * 3.0 * smoothstep(2.0, 12.0, x);
+    // valley side: a steep drop below the guard rail easing into the valley floor, and the far side rising again
+    float xv = max(off - 1.4, 0.0);
+    float Dv = uTerr2.y * (0.65 + 0.7 * big);
+    float valley = -0.1 * smoothstep(1.0, 1.4, off) - Dv * (1.0 - exp(-xv / (Dv * 0.5))) * smoothstep(0.0, 2.5, xv)
+      + n * 14.0 * smoothstep(4.0, 60.0, xv) + n2 * 2.0 * smoothstep(3.0, 12.0, xv)
+      + smoothstep(280.0, 700.0, off) * (Dv + uTerr2.x * 0.55);
+    h = mix(h, mount, up);
+    h = mix(h, valley, dn);
   }
   if (ty == 6) { // motorway: embankment then flat land
     h = -0.1 - smoothstep(3.8, 9.0, off) * 2.2 + n * uTerr.x * far;
   }
   return h;
+}
+// Inside a bend the bent space folds at the fold limit (ext), so ground cannot exist beyond it. Heights are
+// tapered back to road level over the outer half of the way there: the inside of a bend becomes a rounded spur
+// (or hollow) shared by the stretches of road around it, instead of a hillside cut off by a vertical curtain.
+// Only where the space really folds; with the limit far away (straights, outsides of bends) nothing changes.
+float foldTaper(float uu, float edge, float ext){
+  float tk = 1.0 - smoothstep(350.0, 650.0, ext);
+  return 1.0 - tk * smoothstep(edge + (ext - edge) * 0.45, ext, uu);
 }
 vec3 bentPos(PathS p, float u, float h){
   vec2 rt = vec2(cos(p.phi), -sin(p.phi));

@@ -177,7 +177,7 @@ export const LOOKS: Look[] = [
     ],
     snowCaps: 1, ambBot: hex('#a08a68', 0.75), ambTop: hex('#9ab8e8', 0.75),
     ground: [hex('#3e5a2a'), hex('#7a7a6a'), hex('#9a9a92')], groundType: 4,
-    terr: [10, 0.01, 1.5, 4], terr2: [40, 160, 0, -60],
+    terr: [10, 0.01, 0.6, 4], terr2: [300, 170, 0, -60], // terr2: ridge height, valley depth
     road: { base: hex('#36373b'), line: hex('#f6d23a'), edge: true, center: 2, rumbleA: hex('#d22'), rumbleB: hex('#fff'), dirt: 0, snow: 0, patch: 0.15, gloss: 0.2 },
   }),
   // 5 Snow – frozen forest, driving snow

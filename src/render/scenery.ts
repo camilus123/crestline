@@ -6,9 +6,10 @@ import { hashString, Rng } from '../core/rng';
 import { TrackData } from '../track/generator';
 import { GL, Mesh, Program } from './gl';
 import { LIGHT, NOISE, PATH, PRELUDE } from './glsl';
-import { buildModel, LAMPS, LANDMARK, SPANNING } from './models';
+import { buildFarTree, buildModel, LAMPS, LANDMARK, SPANNING } from './models';
 import { LandmarkPlacer } from './landmarks';
 import { BentPath } from './path';
+import { Terrain } from './terrain';
 
 export const OBJ_VS = PRELUDE + NOISE + PATH + `
 layout(location=0) in vec3 aPos;
@@ -17,7 +18,8 @@ layout(location=2) in vec4 aCol;
 layout(location=3) in vec4 aAux;
 layout(location=4) in vec3 iSUR;
 layout(location=5) in vec3 iSHX;
-layout(location=6) in vec2 iAdj; // rigid landmarks: lateral offset to draw at this frame, and 'leave out' (worked out on the CPU)
+layout(location=6) in vec3 iAdj; // z: ground height under the object (worked out on the CPU, see terrain.ts);
+                                  // rigid landmarks also x: lateral offset to draw at this frame, y: 'leave out'
 uniform mat4 uViewProj;
 uniform float uSCar;
 uniform int uLandmark;
@@ -48,7 +50,7 @@ void main(){
     u = side * max(mix(ext, abs(u), 0.85), keep);
   }
   float off = max(abs(u) - edge, 0.0);
-  float base = uSpan == 1 ? 0.0 : terrainH(p, u, off);
+  float base = uSpan == 1 ? 0.0 : iAdj.z * foldTaper(abs(u), edge, ext);
   if (uLandmark == 1 && abs(iSUR.y) > ext) base -= 6.0;
   vec3 lp = aPos;
   vec3 ln = aNrm;
@@ -143,7 +145,7 @@ void main(){
   PathS q = pathAt(dd);
   float e2 = uu < 0.0 ? q.hwL : q.hwR;
   float off = max(abs(uu) - e2, 0.0);
-  vec3 w = bentPos(q, uu, terrainH(q, uu, off) + 0.06);
+  vec3 w = bentPos(q, uu, terrainH(q, uu, off) * foldTaper(abs(uu), e2, uu < 0.0 ? q.extL : q.extR) + 0.06);
   vQ = aQ; vHide = hide; vW = w;
   gl_Position = hide > 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : uViewProj * vec4(w, 1.0);
 }`;
@@ -172,13 +174,33 @@ interface TypeSet {
   adj: boolean; // rigid landmark placed on the CPU every frame (instance data has 2 extra floats)
 }
 
+interface FarTree { s: number; u: number; h: number; type: number; scale: number; rot: number; hue: number }
+
 /**
- * Deep woodland for the Forest scenario: a dense, purely visual band of trees behind the roadside scenery.
- * Generated from the track code (deterministic), kept off every other stretch of road, never collides
- * (it starts well beyond the reach of the cars), and lives only in the renderer so track data is unchanged.
+ * Woodland beyond the roadside, for every scenario that has trees. Purely visual: it starts beyond the reach of
+ * the cars, lives only in the renderer (track data and track codes are unchanged) and is generated from the
+ * track code, so it is the same every time.
+ *  - band: how far from the road edge it runs; cover: how much of that band is wooded (1 = solid forest; lower
+ *    values give separate woods and copses with open ground between, from a ground-fixed noise field)
+ *  - trees only stand where it makes sense: clear of every other stretch of road, not on rock faces or slopes
+ *    too steep to hold soil, not in water, and on Mountains not above the tree line or down the valley cliff
  */
-function woodland(track: TrackData): { s: number; u: number; type: number; scale: number; rot: number; hue: number }[] {
-  const out: { s: number; u: number; type: number; scale: number; rot: number; hue: number }[] = [];
+interface WoodRule { types: number[]; near: number; far: number; cover: number; perKm: number; maxSlope: number; minH: number; maxH: number; size: [number, number] }
+const WOODS: Partial<Record<number, WoodRule>> = {
+  [Scn.FOREST]: { types: [O.FIR, O.FIR, O.FIR, O.OAK, O.OAK, O.BIRCH, O.PINE], near: 13, far: 150, cover: 1, perKm: 3600, maxSlope: 0.5, minH: -1e9, maxH: 1e9, size: [0.85, 1.75] },
+  [Scn.RALLY]: { types: [O.PINE, O.PINE, O.PINE, O.BIRCH, O.BIRCH], near: 42, far: 230, cover: 0.5, perKm: 1500, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.7] },
+  [Scn.NIGHT]: { types: [O.OAK], near: 45, far: 200, cover: 0.42, perKm: 1000, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.6] },
+  [Scn.MARSH]: { types: [O.WILLOW, O.WILLOW, O.DEAD_TREE], near: 48, far: 190, cover: 0.38, perKm: 800, maxSlope: 0.4, minH: 0.25, maxH: 1e9, size: [0.85, 1.5] },
+  [Scn.MOUNTAINS]: { types: [O.PINE], near: 16, far: 330, cover: 0.62, perKm: 2600, maxSlope: 0.36, minH: -1e9, maxH: 135, size: [0.9, 1.9] },
+  [Scn.SNOW]: { types: [O.SNOW_PINE], near: 42, far: 210, cover: 0.55, perKm: 1500, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.7] },
+  [Scn.STORM]: { types: [O.BENT_OAK], near: 42, far: 200, cover: 0.42, perKm: 1000, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.6] },
+  [Scn.FOG]: { types: [O.OAK, O.OAK, O.POPLAR], near: 45, far: 170, cover: 0.42, perKm: 900, maxSlope: 0.45, minH: -1e9, maxH: 1e9, size: [0.9, 1.6] },
+};
+
+function woodland(track: TrackData, terrain: Terrain, waterY: number): FarTree[] {
+  const out: FarTree[] = [];
+  const rule = WOODS[track.params.scenario];
+  if (!rule) return out;
   const rng = new Rng(hashString(track.code + '/woods'));
   const n = track.n, D = 2, X = track.X, Z = track.Z, H = track.heading;
   // spatial hash of road samples, to keep trees off other parts of the road
@@ -207,25 +229,42 @@ function woodland(track: TrackData): { s: number; u: number; type: number; scale
     }
     return true;
   };
-  const types = [O.FIR, O.FIR, O.FIR, O.OAK, O.OAK, O.BIRCH, O.PINE];
-  const STEP = 3.2, NEAR = 13, FAR = 85;
-  for (let i0 = 0; i0 < n - 1; i0++) {
-    // a few trees per side for every STEP metres of road
-    if ((i0 * D) % STEP >= D) continue;
+  // which patches of ground are wooded: smooth value noise fixed to the ground, about 90 m across
+  const hsh = (a: number, b: number) => { let h = (Math.imul(a, 374761393) + Math.imul(b, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+  const patch = (s: number, u: number) => {
+    const px = s / 90, py = u / 90, ix = Math.floor(px), iy = Math.floor(py), fx = px - ix, fy = py - iy;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const a = hsh(ix, iy), b = hsh(ix + 1, iy), c = hsh(ix, iy + 1), d = hsh(ix + 1, iy + 1);
+    return a + (b - a) * ux + (c + (d - c) * ux - a - (b - a) * ux) * uy;
+  };
+  const STEP = 4;
+  const perStep = (rule.perKm / 1000) * STEP / 2; // candidates per side per step, before the rules thin them
+  for (let i0 = 0; i0 < n - 1; i0 += STEP / D) {
     for (const side of [-1, 1]) {
-      const k = 4 + Math.floor(rng.float() * 4);
+      let k = Math.floor(perStep / Math.max(rule.cover, 0.3));
+      if (rng.float() < perStep / Math.max(rule.cover, 0.3) - k) k++;
       for (let c = 0; c < k; c++) {
-        const i = Math.min(n - 1, i0 + Math.floor(rng.float() * (STEP / D + 1)));
+        const i = Math.min(n - 1, i0 + Math.floor(rng.float() * (STEP / D)));
         const f = rng.float();
+        const type = rule.types[Math.floor(rng.float() * rule.types.length)];
+        const scale = rule.size[0] + rng.float() * (rule.size[1] - rule.size[0]), rot = rng.float() * Math.PI * 2, hue = rng.float() * 2 - 1;
+        const keep = rng.float();
         const edge = side < 0 ? track.hwL[i] : track.hwR[i];
-        const off = edge + NEAR + (FAR - NEAR) * (f * 0.6 + f * f * 0.4);
+        // denser near the road, thinning with distance
+        const off = edge + rule.near + (rule.far - rule.near) * (f * 0.45 + f * f * 0.55);
         const u = side * off;
+        const s = i * D - track.sOff;
+        if (rule.cover < 1) {
+          // wooded patches, with ragged edges
+          const m = patch(s, u);
+          if (m < 1 - rule.cover - 0.06 + keep * 0.12) continue;
+        }
         const th = H[i];
-        const x = X[i] + Math.cos(th) * u, z = Z[i] - Math.sin(th) * u;
-        const type = types[Math.floor(rng.float() * types.length)];
-        const scale = 0.85 + rng.float() * 0.9, rot = rng.float() * Math.PI * 2, hue = rng.float() * 2 - 1;
-        if (!clearOfRoad(x, z, i)) continue;
-        out.push({ s: i * D - track.sOff, u, type, scale, rot, hue });
+        if (!clearOfRoad(X[i] + Math.cos(th) * u, Z[i] - Math.sin(th) * u, i)) continue;
+        const h = terrain.h(s, u);
+        if (h < rule.minH || h > rule.maxH - keep * 30 || h < waterY + 0.3) continue;
+        if (terrain.slope(s, u) > rule.maxSlope) continue;
+        out.push({ s, u, h, type, scale, rot, hue });
       }
     }
   }
@@ -248,7 +287,7 @@ export class Scenery {
   backdropDist = 0.8;
   /** density: fraction of purely decorative roadside objects kept (collidable ones always stay);
    *  woods: deep Forest woodland draw distance factor (0 = not built) */
-  constructor(private gl: GL, track: TrackData, pits = true, density = 1, woods = 0.8) {
+  constructor(private gl: GL, track: TrackData, private terrain: Terrain, waterY: number, pits = true, density = 1, woods = 0.8) {
     this.prog = new Program(gl, OBJ_VS, OBJ_FS, 'objects');
     this.shProg = new Program(gl, SHADOW_VS, SHADOW_FS, 'blobshadow');
     this.quad = gl.createBuffer()!;
@@ -281,12 +320,14 @@ export class Scenery {
         const landmark = LANDMARK.has(type);
         const bend = !landmark || type === O.TOWER;
         const adj = landmark && !bend && !SPANNING.has(type);
-        const F = adj ? 8 : 6;
+        const F = 9;
+        const span = SPANNING.has(type);
         const data = new Float32Array(idx.length * F);
         const ss = new Float32Array(idx.length);
         idx.forEach((i, k) => {
           data.set([o.s[i], o.u[i], o.rot[i], o.scale[i], o.hue[i], ((i * 2654435761) >>> 0) / 4294967296], k * F);
-          if (adj) data[k * F + 6] = o.u[i];
+          data[k * F + 6] = o.u[i];
+          data[k * F + 8] = span ? 0 : this.terrain.h(o.s[i], o.u[i]);
           ss[k] = o.s[i];
           if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i], h: type === O.LAMP_DOUBLE ? 10 : 7, type });
         });
@@ -294,7 +335,7 @@ export class Scenery {
           { loc: 4, size: 3, type: gl.FLOAT, offset: 0 },
           { loc: 5, size: 3, type: gl.FLOAT, offset: 12 },
         ];
-        if (adj) inst.push({ loc: 6, size: 2, type: gl.FLOAT, offset: 24 });
+        inst.push({ loc: 6, size: 3, type: gl.FLOAT, offset: 24 });
         mesh.setInstances(data, F * 4, inst, adj ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
         let shadow: Mesh | null = null;
         const r = SHADOW_R[type];
@@ -304,16 +345,19 @@ export class Scenery {
         }
         let foot = 0;
         for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
-        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span: SPANNING.has(type), rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj });
+        this.sets.push({ type, mesh, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj });
       }
     }
     this.lamps.sort((a, b) => a.s - b.s);
     this.backdropDist = woods;
-    if (track.params.scenario === Scn.FOREST && woods > 0) this.addBackdrop(woodland(track));
+    if (woods > 0) this.addBackdrop(woodland(track, this.terrain, waterY));
   }
 
-  private addBackdrop(trees: { s: number; u: number; type: number; scale: number; rot: number; hue: number }[]): void {
+  private addBackdrop(trees: FarTree[]): void {
     const gl = this.gl;
+    // lighter presets keep fewer of the trees (as well as drawing them less far)
+    const keep = Math.min(1, this.backdropDist * 1.25);
+    trees = trees.filter((_, i) => ((Math.imul(i + 11, 2654435761) >>> 0) / 4294967296) < keep);
     trees.sort((a, b) => a.s - b.s);
     const byKey = new Map<string, typeof trees>();
     trees.forEach((t, i) => {
@@ -324,16 +368,16 @@ export class Scenery {
     });
     for (const [k, list] of byKey) {
       const [type, v] = k.split(':').map(Number);
-      const mb = buildModel(type, v);
+      const mb = buildFarTree(type, v);
       const mesh = new Mesh(gl, mb.pack(), 32, [
         { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
         { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
         { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
         { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
       ], mb.vertexCount);
-      const data = new Float32Array(list.length * 6), ss = new Float32Array(list.length);
-      list.forEach((t, j) => { data.set([t.s, t.u, t.rot, t.scale, t.hue, (j * 0.618034) % 1], j * 6); ss[j] = t.s; });
-      mesh.setInstances(data, 24, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }]);
+      const data = new Float32Array(list.length * 9), ss = new Float32Array(list.length);
+      list.forEach((t, j) => { data.set([t.s, t.u, t.rot, t.scale, t.hue, (j * 0.618034) % 1, t.u, 0, t.h], j * 9); ss[j] = t.s; });
+      mesh.setInstances(data, 36, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }, { loc: 6, size: 3, type: gl.FLOAT, offset: 24 }]);
       let foot = 0;
       for (let q = 0; q < mb.pos.length; q += 3) foot = Math.max(foot, Math.hypot(mb.pos[q], mb.pos[q + 2]));
       this.sets.push({ type, mesh, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false });
@@ -377,13 +421,15 @@ export class Scenery {
     const D = set.data, o = this.placed;
     for (let k = 0; k < r.length; k += 2) {
       for (let j = r[k]; j < r[k] + r[k + 1]; j++) {
-        const b = j * 8;
+        const b = j * 9;
         let d = D[b] - sCar;
         if (loop > 0) d = ((d + loop * 0.5) % loop + loop) % loop - loop * 0.5;
         if (d < path.dFirst + 4 || d > path.maxD) { D[b + 7] = 1; continue; }
         this.placer.place(path, d, D[b + 1], set.foot * D[b + 3], o);
+        if (o.u !== D[b + 6]) D[b + 8] = this.terrain.h(D[b], o.u);
         D[b + 6] = o.u;
         D[b + 7] = o.hide ? 1 : 0;
+
       }
     }
     set.mesh.updateInstances(D);
@@ -441,4 +487,4 @@ export class Scenery {
     }
   }
 }
-export const woodlandCount = (t: TrackData): number => woodland(t).length;
+export const woodlandTrees = (t: TrackData, terrain: Terrain, waterY: number): FarTree[] => woodland(t, terrain, waterY);

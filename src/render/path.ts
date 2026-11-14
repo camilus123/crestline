@@ -83,7 +83,7 @@ export class BentPath {
       D[row + i + 3] = this.extR[k];
       D[2 * row + i] = s;
       D[2 * row + i + 1] = track.flags(s);
-      D[2 * row + i + 2] = track.sand(s);
+      D[2 * row + i + 2] = track.aux(s);
       D[2 * row + i + 3] = track.curv(s);
     }
   }

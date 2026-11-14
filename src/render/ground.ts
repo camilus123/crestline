@@ -12,7 +12,7 @@ const BANDS = [
 ];
 const BAND_ROWS = [116, 100, 132, 168];
 export const ROWS = BAND_ROWS.reduce((a, b) => a + b, 0);
-export const TERR_OFFS = [0, 0.5, 1.3, 2.6, 4.5, 7.5, 12, 19, 29, 44, 66, 98, 145, 210, 300, 420, 580];
+export const TERR_OFFS = [0, 0.5, 1.3, 2.6, 4.5, 7.5, 12, 19, 29, 44, 66, 98, 145, 210, 300, 410, 530, 660, 820];
 
 const ROWS_GLSL = `
 uniform vec4 uBand[4]; // dStart, spacing, rowStart, dEnd
@@ -40,7 +40,7 @@ void main(){
   PathS p = pathAt(d);
   float u = aRC.y < 0.5 ? -p.hwL : p.hwR;
   vec3 w = bentPos(p, u, 0.0);
-  vW = w; vSU = vec2(p.s, u); vHw = p.hwL; vHwR = p.hwR; vFlags = p.flags; vCurv = p.curv; vD = d; vSand = p.sand;
+  vW = w; vSU = vec2(p.s, u); vHw = p.hwL; vHwR = p.hwR; vFlags = p.flags; vCurv = p.curv; vD = d; vSand = int(uTerr.w + 0.5) == 4 ? 0.0 : p.sand;
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;
 
@@ -194,10 +194,11 @@ void main(){
 // ------------------------------------------------------------------ terrain
 const TERR_VS = COMMON_VS + `
 layout(location=0) in vec3 aRCS; // row, offset beyond edge, side
-out vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge;
+out vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge; out vec2 vAlt;
+uniform float uYCar; // true height of the road under the car (bent space is relative to it)
 // Terrain beyond the fold limit (ext, the inside of tight bends) is squeezed smoothly towards it instead of
-// being collapsed onto it, and only the far remainder sinks out of sight. Normals ignore that sinking, so the
-// lip is shaded like the ground next to it (a collapsed, near-vertical curtain showed as dark flickering bands).
+// being collapsed onto it, and its height tapers back to road level there (foldTaper), so the columns that pile
+// up at the limit all sit at the same point: no curtain, nothing to sink.
 vec3 terrPoint(float d, float off, float side, bool sink, out PathS p, out float uuOut){
   p = pathAt(d);
   float edge = side < 0.0 ? p.hwL : p.hwR;
@@ -209,11 +210,10 @@ vec3 terrPoint(float d, float off, float side, bool sink, out PathS p, out float
     float span = max(ext - es, 1.0);
     float t = uu - es;
     uu = es + span * (1.0 - exp(-t / span));
-    if (sink) dip = max(0.0, t - 2.5 * span) * 0.3;
   }
   float u = side * uu;
   uuOut = uu;
-  float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) - dip;
+  float h = off <= 0.0 ? 0.0 : terrainH(p, u, uu - edge) * foldTaper(uu, edge, ext) - dip;
   return bentPos(p, u, h);
 }
 // the same point with no squeeze (only for normals where the squeeze has collapsed the ground)
@@ -253,11 +253,14 @@ void main(){
   // texture and ground-type lookups use where the vertex ends up (squeezed), not where it would have been
   vW = w; vN = n; vSU = vec2(p.s, side * uu); vOff = max(0.0, uu - (side < 0.0 ? p.hwL : p.hwR)); vSlope = 1.0 - n.y; vFlags = p.flags;
   vEdge = side < 0.0 ? p.hwL : p.hwR;
+  // true altitude, and height above the road here: both fixed to the ground (w.y is relative to the car, so anything
+  // keyed on it slides up and down the hillsides as the road climbs)
+  vAlt = vec2(w.y + uYCar, w.y - p.y);
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;
 
 const TERR_FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec3 vN; in vec2 vSU; in float vOff; in float vSlope; in float vFlags; in float vEdge;
+in vec3 vW; in vec3 vN; in vec2 vSU; in float vOff; in float vSlope; in float vFlags; in float vEdge; in vec2 vAlt;
 out vec4 o;
 uniform sampler2D uGround; uniform sampler2D uNoiseT;
 uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2;
@@ -283,12 +286,27 @@ void main(){
   float rough = g.a;
   // steep slopes become rock
   float rock = smoothstep(0.25, 0.5, vSlope);
-  float strata = 0.75 + 0.25 * sin(vW.y * 2.2 + texture(uNoiseT, vec2(u * 0.02, s * 0.02)).r * 6.0);
-  vec3 rockC = vec3(0.23, 0.215, 0.2) * strata * (0.6 + 0.8 * texture(uNoiseT, vec2(u * 0.05, s * 0.05 + vW.y * 0.05)).r) * (0.8 + 0.4 * det);
+  float alt = vAlt.x;
+  float strata = 0.82 + 0.18 * sin(alt * 1.3 + texture(uNoiseT, vec2(u * 0.02, s * 0.02)).r * 6.0);
+  // on steep faces the flat (u, s) mapping stretches into vertical streaks: map rock by (s, altitude) there
+  float detR = det;
+  if (rock > 0.0) { vec4 gr = texture(uGround, vec2(s + u * 0.35, alt) / 6.0); detR = mix(det, gr.g, smoothstep(0.3, 0.6, vSlope)); }
+  vec3 rockC = vec3(0.23, 0.215, 0.2) * strata * (0.6 + 0.8 * texture(uNoiseT, vec2(u * 0.05, s * 0.05 + alt * 0.05)).r) * (0.8 + 0.4 * detR);
+  float snowM = 0.0;
+  if (uGType == 4) {
+    // alpine: meadow and scree low down, bare rock higher up and on anything steep, snow above the snow line
+    float rel = vAlt.y + (big - 0.5) * 60.0;
+    rock = max(smoothstep(0.2, 0.4, vSlope), smoothstep(90.0, 170.0, rel) * 0.85);
+    // broad colour variation across the face so a mountainside is not one flat grey
+    rockC *= 1.25 + 0.6 * patchy;
+    rockC = mix(rockC, rockC * vec3(1.12, 1.0, 0.86), smoothstep(0.4, 0.7, big));
+    snowM = smoothstep(200.0, 250.0, rel) * (1.0 - smoothstep(0.42, 0.6, vSlope));
+  }
   if (uGType == 2) rockC = mix(rockC, vec3(0.8, 0.85, 0.9), 0.35);
   if (uGType == 4) rockC *= vec3(1.25, 1.12, 0.95);
   if (uGType == 1) rockC = vec3(0.55, 0.3, 0.18) * (0.8 + 0.4 * det);
   c = mix(c, rockC, rock);
+  c = mix(c, vec3(0.86, 0.9, 0.96) * (0.85 + 0.2 * det), snowM);
   // shoulder / verge
   float sh = 1.0 - smoothstep(0.35, 1.2, vOff);
   c = mix(c, uShoulder * (0.7 + 0.6 * det), sh);

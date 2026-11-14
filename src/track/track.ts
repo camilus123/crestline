@@ -11,6 +11,9 @@ export class Track {
   /** collidable roadside object indices, sorted by s */
   readonly colS: Float32Array;
   readonly colIdx: Uint32Array;
+  /** Mountains: which side the mountain is on, +1 right (valley left) .. -1 left, changing over smoothly where
+   *  the generator swaps sides (the wall / cliff flags themselves flip from one sample to the next) */
+  readonly tiltArr: Float32Array | null = null;
   constructor(d: TrackData) {
     this.d = d;
     this.n = d.n;
@@ -20,7 +23,27 @@ export class Track {
     for (let i = 0; i < d.objects.count; i++) if (d.objects.radius[i] > 0) idx.push(i);
     this.colIdx = Uint32Array.from(idx);
     this.colS = Float32Array.from(idx.map((i) => d.objects.s[i]));
+    if (d.scen.walls === 'mountain') {
+      const n = d.n;
+      let a = new Float32Array(n);
+      for (let i = 0; i < n; i++) a[i] = d.flags[i] & F_WALL_R ? 1 : d.flags[i] & F_WALL_L ? -1 : 0;
+      // two box filters (a triangle 280 m wide at the base): a changeover takes about 200 m of road
+      const R = Math.round(70 / DELTA);
+      for (let pass = 0; pass < 2; pass++) {
+        const b = new Float32Array(n);
+        let sum = 0;
+        const at = (i: number) => a[d.circuit ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))];
+        for (let k = -R; k <= R; k++) sum += at(k);
+        for (let i = 0; i < n; i++) {
+          b[i] = sum / (2 * R + 1);
+          sum += at(i + R + 1) - at(i - R);
+        }
+        a = b;
+      }
+      this.tiltArr = a;
+    }
   }
+  tilt(s: number): number { return this.tiltArr ? this.lerpArr(this.tiltArr, s) : 0; }
   /** race distance -> track s */
   trackS(dist: number): number {
     if (this.circuit) {
@@ -54,6 +77,8 @@ export class Track {
   hwL(s: number): number { return this.lerpArr(this.d.hwL, s); }
   hwR(s: number): number { return this.lerpArr(this.d.hwR, s); }
   sand(s: number): number { return this.lerpArr(this.d.sand, s); }
+  /** the path texture's spare channel: sand cover (Desert) or the mountain tilt (Mountains) */
+  aux(s: number): number { return this.tiltArr ? this.lerpArr(this.tiltArr, s) : this.lerpArr(this.d.sand, s); }
   flags(s: number): number { return this.d.flags[Math.round(this.fi(s)) % this.n]; }
   /** vertical curvature d2y/ds2 (negative on crests) */
   vcurv(s: number): number { return (this.grade(s + 3) - this.grade(s - 3)) / 6; }

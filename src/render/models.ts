@@ -379,8 +379,30 @@ const LIB: Partial<Record<O, Builder>> = {
     b.blob(0, 232, 0, 2.5, 2.5, 2.5, glassLit('#ff3050', 8), 0, 1);
   },
   [O.PEAK]: (b) => {
-    b.cyl(0, -20, 0, 380, 30, 420, 9, M('#5a6a80', { hue: 0 }), false, 0.35);
-    b.cyl(0, 250, 0, 120, 8, 160, 9, M('#eef2fa', { spec: 0.3, hue: 0 }), false, 0.3);
+    // a faceted mountain: ridges and gullies run from foot to summit (each spoke keeps its own reach all the way
+    // up), the summit sits off-centre, and the snow line is ragged
+    const segs = 12;
+    const rings: [number, number][] = [[410, -30], [315, 60], [225, 150], [145, 240], [75, 325], [0, 420]];
+    const reach = Array.from({ length: segs }, (_, i) => (i % 2 ? 0.74 : 1.12) * (0.85 + b.rng.float() * 0.3));
+    const lean = [(b.rng.float() - 0.5) * 120, (b.rng.float() - 0.5) * 120];
+    const rock = [M('#59605a', { hue: 0 }), M('#666a6c', { hue: 0 }), M('#74777c', { hue: 0 })];
+    const snow = M('#eef2fa', { spec: 0.3, hue: 0 });
+    const pt = (k: number, i: number): V3 => {
+      const [r, y] = rings[k];
+      const t = y / 420, a = (i / segs) * Math.PI * 2;
+      const rr = r * reach[i % segs] * (0.92 + ((i * 7 + k * 13) % 5) * 0.04);
+      return [lean[0] * t + Math.cos(a) * rr, y, lean[1] * t + Math.sin(a) * rr];
+    };
+    for (let k = 0; k < rings.length - 1; k++) {
+      for (let i = 0; i < segs; i++) {
+        const j = (i + 1) % segs;
+        const white = k >= 3 || (k === 2 && i % 3 === 0);
+        const mat = white ? snow : rock[(k + i) % 3];
+        const ctr: V3 = [lean[0] * 0.5, rings[k][1], lean[1] * 0.5];
+        if (k === rings.length - 2) b.tri(pt(k, i), pt(k, j), pt(k + 1, 0), mat, ctr);
+        else b.quad(pt(k, i), pt(k, j), pt(k + 1, j), pt(k + 1, i), mat, ctr);
+      }
+    }
   },
   [O.MESA]: (b) => {
     b.cyl(0, -10, 0, 140, 110, 70, 10, M('#b8603a', { hue: 0.3 }), true, 0.25);
@@ -537,6 +559,44 @@ export function buildModel(type: number, variant = 0): MB {
   const f = LIB[type as O];
   if (f) f(b);
   else b.box(0, 0, 0, 1, 1, 1, M('#ff00ff'));
+  return b;
+}
+
+/**
+ * Low-polygon stand-ins for trees that are only ever seen from a distance (woodland well back from the road).
+ * A full oak is 1,560 vertices and a fir about 650; these are 100-200, and at 40 m and more they look the same.
+ */
+export function buildFarTree(type: number, variant = 0): MB {
+  const b = new MB(type * 197 + variant * 13 + 5);
+  const r = () => b.rng.float();
+  const farConifer = (col: string, snow: boolean, h: number, rad: number) => {
+    h *= 0.85 + r() * 0.35;
+    rad *= 0.85 + r() * 0.3;
+    b.cyl(0, 0, 0, 0.3, 0.2, h * 0.3, 4, bark, false);
+    for (let i = 0; i < 3; i++) {
+      const t = i / 3;
+      const y = h * (0.16 + t * 0.56), rr = rad * (1 - t * 0.6);
+      b.cyl(0, y, 0, rr, 0, h * (i === 2 ? 0.5 : 0.42), 6, leaf(col, 0.3 + t * 0.6), false, 0.15);
+      if (snow) b.cyl(0, y + h * 0.14, 0, rr * 0.7, 0, h * 0.3, 5, { c: hex('#f4f8ff'), spec: 0.3, sway: 0.3 + t * 0.6, hue: 0 }, false);
+    }
+  };
+  const farBroad = (cols: string[], h: number, spread: number, trunk: Mat = bark, tw = 0.4) => {
+    b.cyl(0, 0, 0, tw, tw * 0.6, h * 0.6, 4, trunk, false);
+    for (let i = 0; i < 2; i++) {
+      const a = r() * 6.28, rr = spread * 0.3;
+      b.blob(Math.cos(a) * rr, h * (0.66 + 0.14 * i), Math.sin(a) * rr, spread * (0.95 - 0.2 * i), spread * 0.75, spread * (0.95 - 0.2 * i), leaf(cols[i % cols.length], 0.8), 0.22, 0);
+    }
+  };
+  switch (type) {
+    case O.PINE: farConifer('#2d5a2a', false, 10, 2.8); break;
+    case O.FIR: farConifer('#1f4a2c', false, 13, 3.0); break;
+    case O.SNOW_PINE: farConifer('#2a4a3a', true, 10, 2.8); break;
+    case O.OAK: farBroad(['#3e7a28', '#4f8a2e', '#356a24'], 9, 3.8); break;
+    case O.BENT_OAK: b.push().rz(-0.18); farBroad(['#2e5a22', '#3a6a26', '#28501e'], 8.5, 3.4); b.pop(); break;
+    case O.BIRCH: farBroad(['#8ab83a', '#6a9a2e'], 9, 1.9, M('#e8e4da', { hue: 0 }), 0.2); break;
+    case O.WILLOW: farBroad(['#6a8a3a', '#7a9a42'], 5.6, 3.6, bark, 0.45); break;
+    default: return buildModel(type, variant);
+  }
   return b;
 }
 
