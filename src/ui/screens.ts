@@ -4,11 +4,11 @@ import type { Game } from '../game';
 import { MenuKey, ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS } from '../input';
 import { CARS } from '../sim/specs';
 import { fuelPlan } from '../sim/race';
-import type { BenchReport } from '../bench';
+import { BENCH_PRESETS, BENCH_TRACKS, type BenchReport } from '../bench';
 import { LIVERIES } from '../sim/roster';
 import { decodeCode, normalizeCode } from '../track/codes';
 import { SCENARIO_NAMES } from '../track/defs';
-import { QUALITY } from '../render/renderer';
+import { QUALITY, type Quality } from '../render/renderer';
 import { SONGS } from '../audio/music';
 import { choiceRow, h, Menu, sliderRow, store, toast } from './dom';
 import { fmtTime, ord } from './hud';
@@ -38,6 +38,7 @@ export function build(g: Game, id: string, arg?: any): Screen | null {
     case 'controls': return controls(g, arg?.back ?? 'setup');
     case 'constructor': return buildConstructor(g);
     case 'bench': return bench(g);
+    case 'graphics': return graphics(g, arg?.back ?? 'settings');
   }
   return null;
 }
@@ -495,7 +496,10 @@ function settings(g: Game, back: string): Screen {
   const panel = h('div', { class: 'panel', style: 'width:min(44rem,92vw)' }, h('h3', {}, 'SETTINGS'));
   let r = 0;
   const add = (el: HTMLElement, extra: any = {}) => panel.append(bind(menu, el, r++, 0, extra));
-  add(choiceRow('Quality preset', QUALITY.map((q) => q.name), () => st.quality, (i) => { st.quality = i; g.renderer.setQuality(QUALITY[i]); g.saveSettings(); }));
+  // picking a preset sets every graphics option to that preset's values; 'Graphics options' changes them one by one
+  const presetRow = choiceRow('Quality preset', QUALITY.map((q) => q.name), () => st.quality, (i) => { st.quality = i; st.qo = {}; g.applyQuality(); g.saveSettings(); });
+  add(presetRow);
+  add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Graphics options'), h('span', { class: 'val' }, (g.effectiveQuality().name.endsWith('(custom)') ? 'CUSTOM ' : '') + '▶')), { activate: () => g.show('graphics', { back }) });
   add(choiceRow('Dynamic resolution', ['Off', 'On'], () => (st.dynRes ? 1 : 0), (i) => { st.dynRes = i === 1; g.saveSettings(); }));
   add(sliderRow('Music volume', () => Math.round(st.musicVol * 20), (v) => { st.musicVol = v / 20; g.audio.setVolumes(st.musicVol, st.sfxVol); g.saveSettings(); }, 20));
   add(sliderRow('Effects volume', () => Math.round(st.sfxVol * 20), (v) => { st.sfxVol = v / 20; g.audio.setVolumes(st.musicVol, st.sfxVol); g.saveSettings(); }, 20));
@@ -503,7 +507,7 @@ function settings(g: Game, back: string): Screen {
   add(choiceRow('Performance overlay (F3)', ['Off', 'On'], () => (st.fps ? 1 : 0), (i) => { st.fps = i === 1; g.saveSettings(); }));
   add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Fullscreen (F2)'), h('span', { class: 'val' }, 'TOGGLE')), { activate: () => g.toggleFullscreen() });
   add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Controls'), h('span', { class: 'val' }, '▶')), { activate: () => g.show('controls', { back: 'settings' }) });
-  if (back !== 'pause') add(h('div', { class: 'row' }, h('span', { class: 'lab' }, '30-second benchmark'), h('span', { class: 'val' }, 'RUN ▶')), { activate: () => g.show('bench') });
+  if (back !== 'pause') add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Benchmark'), h('span', { class: 'val' }, 'RUN ▶')), { activate: () => g.show('bench') });
   add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Back'), h('span', { class: 'val' }, '')), { activate: () => g.show(back) });
   panel.append(h('div', { class: 'info', style: 'margin-top:.8rem' }, 'Speeds in km/h, distances in km and metres. Settings and best times are saved in this browser.'));
   menu.focus = 0;
@@ -511,6 +515,74 @@ function settings(g: Game, back: string): Screen {
   menu.onBack = () => g.show(back);
   const el = h('div', { class: 'scr bg scan', style: back === 'pause' ? 'background:rgba(6,3,20,.7)' : '' }, hdr('SETTINGS'), h('div', { class: 'body', style: 'justify-content:center' }, panel), STD_HINT.cloneNode(true) as HTMLElement);
   return { el, onKey: (k) => menu.key(k) };
+}
+
+// ---------------------------------------------------------------- graphics options
+/** Every option a quality preset sets, adjustable on its own. Values are the steps offered. */
+const GFX: { key: keyof Quality; label: string; vals: (number | boolean)[]; fmt: (v: any) => string; note?: string }[] = [
+  { key: 'scale', label: 'Render resolution', vals: [0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1], fmt: (v) => Math.round(v * 100) + ' %' },
+  { key: 'minScale', label: 'Dynamic resolution floor', vals: [0.4, 0.5, 0.6, 0.75, 0.85, 1], fmt: (v) => Math.round(v * 100) + ' %' },
+  { key: 'dpr', label: 'Pixel ratio limit (phones)', vals: [1, 1.25, 1.5, 2, 3], fmt: (v) => '×' + v },
+  { key: 'msaa', label: 'Anti-aliasing (MSAA)', vals: [0, 2, 4, 8], fmt: (v) => (v ? v + '×' : 'Off') },
+  { key: 'shadows', label: 'Sun shadows', vals: [0, 1024, 2048, 4096], fmt: (v) => (v ? v + ' px' : 'Off (blobs)') },
+  { key: 'ssao', label: 'Ambient occlusion', vals: [false, true], fmt: (v) => (v ? 'On' : 'Off') },
+  { key: 'bloom', label: 'Bloom', vals: [0, 3, 4, 5, 6], fmt: (v) => (v ? v + ' levels' : 'Off') },
+  { key: 'lite', label: 'Sky and screen effects', vals: [true, false], fmt: (v) => (v ? 'Simple' : 'Full') },
+  { key: 'dist', label: 'Draw distance', vals: [0.36, 0.6, 0.8, 1, 1.2, 1.45], fmt: (v) => '×' + v },
+  { key: 'scenery', label: 'Roadside clutter', vals: [0.5, 0.8, 1], fmt: (v) => Math.round(v * 100) + ' %' },
+  { key: 'woods', label: 'Woodland', vals: [0, 0.4, 0.65, 0.8, 0.9, 1.1], fmt: (v) => (v ? '×' + v : 'Off') },
+  { key: 'lod', label: 'Full-detail distance', vals: [40, 70, 110, 170, 260, 450], fmt: (v) => v + ' m' },
+  { key: 'terrLite', label: 'Terrain mesh', vals: [true, false], fmt: (v) => (v ? 'Light' : 'Full') },
+  { key: 'lamps', label: 'Street-lamp lights', vals: [4, 6, 8, 12, 16], fmt: (v) => String(v) },
+  { key: 'particles', label: 'Particles', vals: [0.25, 0.4, 0.7, 1, 1.25, 1.5], fmt: (v) => '×' + v },
+  { key: 'weather', label: 'Rain and snow', vals: [0.3, 0.4, 0.7, 1, 1.2, 1.4], fmt: (v) => '×' + v },
+  { key: 'cap60', label: 'Dynamic resolution target', vals: [true, false], fmt: (v) => (v ? '60 fps' : 'Screen refresh') },
+];
+
+function graphics(g: Game, back: string): Screen {
+  const st = g.settings;
+  const menu = new Menu(g.sfx);
+  const base = () => QUALITY[st.quality];
+  const title = h('h3', {});
+  const panel = h('div', { class: 'panel', style: 'width:min(46rem,94vw)' }, title,
+    h('div', { class: 'info', style: 'margin-bottom:.5rem' }, 'A preset sets all of these; change any of them here. Options you changed are marked ●. Picking a preset in Settings resets them.'));
+  const rows: HTMLElement[] = [];
+  const paintAll = () => {
+    const q = g.effectiveQuality();
+    title.textContent = 'GRAPHICS OPTIONS · ' + q.name.toUpperCase();
+    GFX.forEach((o, i) => {
+      (rows[i] as any)._paint();
+      rows[i].querySelector('.lab')!.textContent = (q[o.key] !== base()[o.key] ? '● ' : '') + o.label;
+    });
+  };
+  let r = 0;
+  for (const o of GFX) {
+    const idx = () => {
+      const v = g.effectiveQuality()[o.key];
+      let best = 0;
+      o.vals.forEach((x, i) => { if (typeof x === 'boolean' ? x === v : Math.abs((x as number) - (v as number)) < Math.abs((o.vals[best] as number) - (v as number))) best = i; });
+      return best;
+    };
+    const row = choiceRow(o.label, o.vals.map(o.fmt), idx, (i) => {
+      st.qo = { ...(st.qo ?? {}), [o.key]: o.vals[i] };
+      if (o.vals[i] === base()[o.key]) delete (st.qo as any)[o.key];
+      g.applyQuality();
+      g.saveSettings();
+      paintAll();
+    });
+    rows.push(row);
+    panel.append(bind(menu, row, r++, 0, {}));
+  }
+  const reset = h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Reset to the preset'), h('span', { class: 'val' }, ''));
+  panel.append(bind(menu, reset, r++, 0, { activate: () => { st.qo = {}; g.applyQuality(); g.saveSettings(); paintAll(); } }));
+  const backR = h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Back'), h('span', { class: 'val' }, ''));
+  panel.append(bind(menu, backR, r++, 0, { activate: () => g.show('settings', { back }) }));
+  paintAll();
+  menu.focus = 0;
+  menu.paint();
+  menu.onBack = () => g.show('settings', { back });
+  const el = h('div', { class: 'scr bg scan', style: back === 'pause' ? 'background:rgba(6,3,20,.7)' : '' }, hdr('GRAPHICS'), h('div', { class: 'body', style: 'justify-content:center;flex:1 0 auto' }, panel), STD_HINT.cloneNode(true) as HTMLElement);
+  return { el, onKey: (k) => { menu.key(k); (menu.items[menu.focus]?.el as HTMLElement | undefined)?.scrollIntoView({ block: 'nearest' }); } };
 }
 
 // ---------------------------------------------------------------- controls / rebinding
@@ -571,7 +643,7 @@ function controls(g: Game, back: string): Screen {
 // ---------------------------------------------------------------- benchmark
 function bench(g: Game): Screen {
   const panel = h('div', { class: 'panel', style: 'width:min(64rem,94vw)' }, h('h3', {}, 'BENCHMARK'),
-    h('div', { class: 'info' }, 'About 45 seconds: a bot races a heavy track at your current settings while the game measures where the time goes — a normal 30-second run, then per-pass GPU profiling and a resolution test. Leave the controls alone.'));
+    h('div', { class: 'info' }, `About ${Math.round((BENCH_TRACKS.length * (BENCH_PRESETS.length + 1) * 9.5) / 60 * 2) / 2} minutes. The same suite every run, so results can be compared: a bot drives ${BENCH_TRACKS.length} fixed tracks at ${BENCH_PRESETS.join(', ')} and at your own settings, with the resolution fixed. Leave the controls alone, then use Copy report or Save report.`));
   const chart = h('canvas', { class: 'benchchart', width: 960, height: 150, style: 'display:none' }) as HTMLCanvasElement;
   const out = h('pre', { class: 'lcd benchout', style: 'display:none' });
   const menu = new Menu(g.sfx);
@@ -611,9 +683,9 @@ function bench(g: Game): Screen {
     c.stroke();
     c.lineWidth = 1;
     c.fillStyle = 'rgba(255,255,255,.55)';
-    c.fillText('fps over the 30 s run', pad, 12);
+    c.fillText('fps, every measured run in order', pad, 12);
     c.fillStyle = '#ff2d95';
-    c.fillText('render resolution', pad + 170, 12);
+    c.fillText('render scale', pad + 250, 12);
   };
   const showRep = (r: BenchReport) => {
     rep = r;
@@ -626,11 +698,11 @@ function bench(g: Game): Screen {
   };
   const run = () => {
     g.startBenchmark((r) => {
-      store.set('lastBenchmark2', r);
+      store.set('lastBenchmark3', r);
       g.show('bench');
     });
   };
-  const last = store.get<BenchReport | null>('lastBenchmark2', null);
+  const last = store.get<BenchReport | null>('lastBenchmark3', null);
   if (last && last.text) showRep(last);
   bind(menu, startB, 0, 0, { activate: run });
   bind(menu, copyB, 0, 1, { activate: () => { if (rep) void navigator.clipboard?.writeText(rep.text).then(() => toast('Report copied'), () => toast('Copy failed – select the text manually')); } });

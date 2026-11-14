@@ -1,24 +1,39 @@
-// Detailed benchmark. A bot drives a heavy track at the current settings while the game measures where the
-// time goes, in phases:
-//   warm-up   2 s   shaders, caches, dynamic resolution settle
-//   play     30 s   normal frames: frame-time distribution, hitches, CPU per stage, fps/resolution timeline
-//                   (GPU time per pass too, when the browser exposes GPU timer queries)
-//   profile   6 s   GPU time per render pass, measured by finishing the GPU after every pass (stalls; slower)
-//   res-full  3 s   whole-frame cost at the preset's resolution (GPU finished every frame, not limited by vsync)
-//   res-half  3 s   the same at half resolution: how much of the cost is per-pixel work
-// The report ends with a verdict on what limits this device and which settings would help.
+// Benchmark: the same fixed suite on every run, so results can be compared between runs, builds and devices.
+//
+// Four tracks (heavy scenery, big terrain, many lights, many buildings), each at three fixed presets with their
+// stock options, plus once more at the player's own settings when those differ from all three. One player, a bot
+// driving, the same car, render resolution fixed at the preset's scale (dynamic resolution off). Each case:
+//   warm-up   1.5 s  track load and caches settle (not measured)
+//   play      5 s    normal frames: fps, lows, frame-time percentiles, CPU time, draw counters
+//   cost      1.5 s  the GPU is made to finish every frame: true frame cost, not limited by vsync
+//   stages    1.5 s  the GPU is made to finish after every render stage: where the cost goes
+// The report is plain text: a summary table, a stage table per case, the device, and one line of JSON with
+// every number for pasting into a spreadsheet or back to the developer.
 
 import type { Game } from './game';
-import { QUALITY } from './render/renderer';
+import { QUALITY, type Quality } from './render/renderer';
 
-interface Phase { id: 'warm' | 'play' | 'profile' | 'full' | 'half'; dur: number; label: string }
-const PHASES: Phase[] = [
-  { id: 'warm', dur: 2, label: 'warming up' },
-  { id: 'play', dur: 30, label: 'normal run' },
-  { id: 'profile', dur: 6, label: 'profiling passes' },
-  { id: 'full', dur: 3, label: 'resolution test 1/2' },
-  { id: 'half', dur: 3, label: 'resolution test 2/2' },
+export const BENCH_TRACKS: { code: string; what: string }[] = [
+  { code: 'MIHJHHTLI12', what: 'Forest (dense scenery)' },
+  { code: 'UTNRSVVLR17', what: 'Mountains (terrain, woodland)' },
+  { code: 'KIGJHGSHI15', what: 'Night (street lights)' },
+  { code: 'TUORSWWUS14', what: 'Futuristic (buildings, neon)' },
 ];
+export const BENCH_PRESETS = ['Low', 'High', 'Psycho'];
+
+interface Phase { id: 'warm' | 'play' | 'cost' | 'stages'; dur: number }
+// (automated tests on a software GPU shorten the phases: window.__benchQuick)
+const QK = (globalThis as any).__benchQuick ? 0.1 : 1;
+const PHASES: Phase[] = [{ id: 'warm', dur: 1.5 * QK }, { id: 'play', dur: 5 * QK }, { id: 'cost', dur: 1.5 * QK }, { id: 'stages', dur: 1.5 * QK }];
+const CASE_SECONDS = PHASES.reduce((a, p) => a + p.dur, 0);
+
+interface Case { track: number; q: Quality; label: string }
+interface CaseResult {
+  track: string; what: string; settings: string; res: string;
+  fps: number; low1: number; p50: number; p95: number; p99: number; worst: number; hitches: number;
+  cpuMs: number; cpuP99: number; costMs: number; calls: number; instances: number; verts: number;
+  stages: { name: string; cpu: number; gpu: number }[];
+}
 
 export interface BenchReport { text: string; timeline: number[]; scaleLine: number[]; refresh: number }
 
@@ -26,108 +41,130 @@ const pct = (s: number[], p: number) => (s.length ? s[Math.min(s.length - 1, Mat
 const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
 const f1 = (x: number) => x.toFixed(1), f2 = (x: number) => x.toFixed(2);
 
+/** the options that differ from the stock preset of the same name, e.g. "msaa 8>4, shadows 4096>0" */
+export function qualityDiff(q: Quality): string {
+  const base = QUALITY.find((x) => x.name === q.name.replace(/ \(custom\)$/, ''));
+  if (!base) return '';
+  const out: string[] = [];
+  for (const k of Object.keys(base) as (keyof Quality)[]) if (k !== 'name' && base[k] !== q[k]) out.push(`${k} ${base[k]}>${q[k]}`);
+  return out.join(', ');
+}
+
 export class Benchmark {
+  private cases: Case[] = [];
+  private ci = 0;
   private k = 0;
   private t = 0;
   private iv: number[] = [];
   private cpu: number[] = [];
-  private scales: number[] = [];
+  private cost: number[] = [];
+  private calls = 0;
+  private inst = 0;
+  private verts = 0;
+  private stageCpu = new Map<string, number>();
+  private results: CaseResult[] = [];
   private secN = 0;
   private secT = 0;
-  private secScale: number[] = [];
   timeline: number[] = [];
   scaleLine: number[] = [];
-  private playCpu = new Map<string, number>();
-  private playGpu = new Map<string, number>();
-  private playOrder: string[] = [];
-  private playFrames = 0;
-  private playCalls = 0;
-  private playInst = 0;
-  private playVerts = 0;
-  private profCpu = new Map<string, number>();
-  private profGpu = new Map<string, number>();
-  private profOrder: string[] = [];
-  private cost: { full: number[]; half: number[] } = { full: [], half: [] };
-  private fullScale = 1;
-  private dynResWas = false;
   label = '';
+  readonly totalSeconds: number;
 
   constructor(private g: Game, private done: (r: BenchReport) => void) {
-    this.dynResWas = g.settings.dynRes;
-    this.enter();
+    const mine = g.effectiveQuality();
+    // (the automated test runs a cut-down suite: a software GPU needs minutes per Psycho frame)
+    const quick = !!(globalThis as any).__benchQuick;
+    const presets = quick ? ['Ultra Low', 'Low'] : BENCH_PRESETS;
+    for (let t = 0; t < (quick ? 2 : BENCH_TRACKS.length); t++) {
+      for (const n of presets) this.cases.push({ track: t, q: QUALITY.find((x) => x.name === n)!, label: n });
+      // the player's own settings too, unless they are exactly one of the presets above
+      if (!(presets.includes(mine.name) && !qualityDiff(mine))) this.cases.push({ track: t, q: mine, label: 'Yours: ' + mine.name });
+    }
+    this.totalSeconds = this.cases.length * CASE_SECONDS;
+    this.startCase();
   }
 
   get phase(): Phase { return PHASES[this.k]; }
-  /** the game must finish the GPU at the end of this frame (whole-frame cost, resolution tests) */
-  get finishFrames(): boolean { return this.phase.id === 'full' || this.phase.id === 'half'; }
+  /** the game must finish the GPU at the end of this frame (whole-frame cost) */
+  get finishFrames(): boolean { return this.phase.id === 'cost'; }
   /** the game must not touch the render scale (fixed by the test) */
-  get holdScale(): boolean { return this.phase.id === 'full' || this.phase.id === 'half'; }
+  get holdScale(): boolean { return true; }
+
+  private startCase(): void {
+    const c = this.cases[this.ci];
+    this.g.benchRace(BENCH_TRACKS[c.track].code, c.q);
+    this.g.renderer.forceScale = c.q.scale;
+    this.iv = [];
+    this.cpu = [];
+    this.cost = [];
+    this.k = 0;
+    this.enter();
+  }
 
   private enter(): void {
-    const R = this.g.renderer;
-    const pf = R.prof;
+    const pf = this.g.renderer.prof;
     const id = this.phase.id;
     this.t = 0;
     pf.reset();
-    if (id === 'warm') pf.mode = 'off';
-    if (id === 'play') pf.mode = pf.timerAvailable ? 'timer' : 'cpu';
-    if (id === 'profile') pf.mode = 'sync';
-    if (id === 'full' || id === 'half') {
-      pf.mode = 'off';
-      // the resolution the play phase settled on (dynamic resolution included), then half of it
-      this.fullScale = this.scales.length ? mean(this.scales) : R.quality.scale;
-      R.forceScale = id === 'full' ? this.fullScale : this.fullScale * 0.5;
-    }
+    pf.mode = id === 'play' ? 'cpu' : id === 'stages' ? 'sync' : 'off';
   }
 
   private leave(): void {
-    const pf = this.g.renderer.prof;
+    const R = this.g.renderer, pf = R.prof;
     const id = this.phase.id;
     if (id === 'play') {
-      pf.flush();
-      this.playOrder = pf.order.slice();
-      for (const n of pf.order) { this.playCpu.set(n, pf.cpuAvg(n)); this.playGpu.set(n, pf.gpuAvg(n)); }
-      this.playFrames = pf.frames;
-      this.playCalls = pf.calls / Math.max(1, pf.frames);
-      this.playInst = pf.instances / Math.max(1, pf.frames);
-      this.playVerts = pf.verts / Math.max(1, pf.frames);
+      const n = Math.max(1, pf.frames);
+      this.calls = pf.calls / n;
+      this.inst = pf.instances / n;
+      this.verts = pf.verts / n;
+      this.stageCpu = new Map(pf.order.map((s) => [s, pf.cpuAvg(s)]));
     }
-    if (id === 'profile') {
-      this.profOrder = pf.order.slice();
-      for (const n of pf.order) { this.profCpu.set(n, pf.cpuAvg(n)); this.profGpu.set(n, pf.gpuAvg(n)); }
+    if (id === 'stages') {
+      const c = this.cases[this.ci];
+      const ms = this.iv.map((x) => x * 1000);
+      const s = ms.slice().sort((a, b) => a - b);
+      const med = pct(s, 0.5);
+      const cs = this.cpu.slice().sort((a, b) => a - b);
+      const worst1 = s.slice(Math.floor(s.length * 0.99));
+      this.results.push({
+        track: BENCH_TRACKS[c.track].code, what: BENCH_TRACKS[c.track].what, settings: c.label, res: `${R.renderW}x${R.renderH}`,
+        fps: 1000 / Math.max(1e-3, mean(ms)), low1: 1000 / Math.max(1e-3, mean(worst1)), p50: med, p95: pct(s, 0.95), p99: pct(s, 0.99), worst: s[s.length - 1] ?? 0,
+        hitches: ms.filter((x) => x > Math.max(med * 2, 25)).length,
+        cpuMs: mean(this.cpu), cpuP99: pct(cs, 0.99), costMs: mean(this.cost.slice(Math.floor(this.cost.length * 0.2))),
+        calls: this.calls, instances: this.inst, verts: this.verts,
+        stages: pf.order.map((n) => ({ name: n, cpu: this.stageCpu.get(n) ?? 0, gpu: n.endsWith('(CPU)') ? -1 : pf.gpuAvg(n) })),
+      });
     }
   }
 
   /** called at the end of every frame; raw = wall-clock interval, cpuMs = time spent in this frame */
   frame(raw: number, cpuMs: number): void {
-    const R = this.g.renderer;
     this.t += raw;
     const id = this.phase.id;
     if (id === 'play') {
       this.iv.push(raw);
       this.cpu.push(cpuMs);
-      const sc = R.renderW / Math.max(1, R.canvas.width);
-      this.scales.push(sc);
       this.secN++;
       this.secT += raw;
-      this.secScale.push(sc);
       if (this.secT >= 1) {
         this.timeline.push(this.secN / this.secT);
-        this.scaleLine.push(mean(this.secScale));
+        this.scaleLine.push(this.cases[this.ci].q.scale);
         this.secN = 0;
         this.secT = 0;
-        this.secScale = [];
       }
     }
-    if (id === 'full' || id === 'half') this.cost[id].push(cpuMs);
+    if (id === 'cost') this.cost.push(cpuMs);
+    const c = this.cases[this.ci];
+    const left = Math.max(0, (this.cases.length - this.ci) * CASE_SECONDS - PHASES.slice(0, this.k).reduce((a, p) => a + p.dur, 0) - this.t);
     const recent = this.iv.slice(-120);
     const fps = recent.length ? recent.length / recent.reduce((x, y) => x + y, 0) : 0;
-    this.label = `BENCHMARK · ${this.phase.label} · ${Math.min(this.phase.dur, this.t).toFixed(1)} / ${this.phase.dur} s` + (id === 'play' ? ` · ${fps.toFixed(0)} fps` : '');
+    this.label = `BENCHMARK ${this.ci + 1}/${this.cases.length} · ${BENCH_TRACKS[c.track].what.split(' (')[0]} · ${c.label}` + (id === 'play' ? ` · ${fps.toFixed(0)} fps` : '') + ` · ${Math.ceil(left)} s left`;
     if (this.t >= this.phase.dur) {
       this.leave();
       this.k++;
-      if (this.k >= PHASES.length) this.finish();
-      else this.enter();
+      if (this.k < PHASES.length) this.enter();
+      else if (++this.ci < this.cases.length) this.startCase();
+      else this.finish();
     }
   }
 
@@ -136,7 +173,7 @@ export class Benchmark {
     const R = this.g.renderer;
     R.forceScale = null;
     R.prof.mode = 'off';
-    this.g.settings.dynRes = this.dynResWas;
+    this.g.benchRestore();
   }
 
   private finish(): void {
@@ -147,92 +184,88 @@ export class Benchmark {
   private report(): BenchReport {
     const g = this.g, R = g.renderer, gl = R.gl;
     const refresh = g.refreshRate;
-    const T = 1000 / refresh;
-    const ms = this.iv.map((x) => x * 1000);
-    const s = ms.slice().sort((a, b) => a - b);
-    const avgMs = mean(ms);
-    const low = (p: number) => { const w = s.slice(Math.floor(s.length * (1 - p))); return 1000 / Math.max(1e-3, mean(w)); };
-    const med = pct(s, 0.5);
-    const hitches = ms.filter((x) => x > Math.max(med * 2, 25));
-    const below60 = ms.filter((x) => x > 1000 / 58).reduce((a, b) => a + b, 0) / Math.max(1, ms.reduce((a, b) => a + b, 0));
-    const cpuS = this.cpu.slice().sort((a, b) => a - b);
-    const sc = this.scales.slice().sort((a, b) => a - b);
-    const q = R.quality;
     const dbg = gl.getExtension('WEBGL_debug_renderer_info');
     const gpuName = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
     const gpuVendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
     const nav = navigator as any;
-    const full = mean(this.cost.full), half = mean(this.cost.half);
+    const mine = g.effectiveQuality();
     const L: string[] = [];
-    const line = (k: string, v: string) => L.push(k.padEnd(25) + v);
-    L.push(`CRESTLINE v${__VERSION__} — detailed benchmark`);
-    L.push(`${new Date().toISOString().slice(0, 19).replace('T', ' ')}   track TUORSWWUS14 (Futuristic, heavy), bot driving`);
-    L.push('');
-    L.push('== Result (30 s normal run) ==');
-    line('average', `${f1(1000 / avgMs)} fps   (${f2(avgMs)} ms per frame)`);
-    line('1% low / 0.1% low', `${f1(low(0.01))} / ${f1(low(0.001))} fps`);
-    line('frame time p50/p95/p99', `${f2(med)} / ${f2(pct(s, 0.95))} / ${f2(pct(s, 0.99))} ms   worst ${f1(s[s.length - 1] ?? 0)} ms`);
-    line('hitches', `${hitches.length} frames over ${f1(Math.max(med * 2, 25))} ms` + (hitches.length ? `  (worst ${f1(Math.max(...hitches))} ms)` : ''));
-    line('time below 60 fps', `${f1(below60 * 100)} %`);
-    line('display refresh', `~${refresh.toFixed(0)} Hz (estimated; frames cannot be faster than this)`);
-    line('render resolution', `${f1(pct(sc, 0.5) * 100)} % of output (min ${f1((sc[0] ?? 0) * 100)} %, max ${f1((sc[sc.length - 1] ?? 0) * 100)} %)` + (g.settings.dynRes ? '  dynamic resolution on' : '  fixed'));
-    L.push('');
-    L.push('== Frame cost, not limited by vsync ==');
-    line('at played resolution', `${f2(full)} ms  → could run ~${f1(1000 / Math.max(0.01, full))} fps`);
-    line('at half resolution', `${f2(half)} ms  → could run ~${f1(1000 / Math.max(0.01, half))} fps`);
-    line('CPU per frame', `${f2(mean(this.cpu))} ms average, p99 ${f2(pct(cpuS, 0.99))} ms (JavaScript: simulation, scene set-up, draw calls)`);
-    line('draw calls per frame', `${this.playCalls.toFixed(0)}   instances ${this.playInst.toFixed(0)}   vertices ${(this.playVerts / 1e6).toFixed(2)} M`);
-    L.push('');
-    // per-pass breakdown: GPU from timer queries (play) if available, else from the synchronised profile phase
-    const useTimer = [...this.playGpu.values()].some((v) => v >= 0);
-    const order = useTimer ? this.playOrder : this.profOrder;
-    const gpuOf = (n: string) => (useTimer ? this.playGpu.get(n) ?? -1 : this.profGpu.get(n) ?? -1);
-    const cpuOf = (n: string) => this.playCpu.get(n) ?? 0;
-    const rows = order.map((n) => ({ n, gpu: n.endsWith('(CPU)') ? -1 : gpuOf(n), cpu: cpuOf(n) }));
-    const gpuSum = rows.reduce((a, r) => a + Math.max(0, r.gpu), 0);
-    L.push(`== Time per stage (ms per frame; GPU column ${useTimer ? 'from GPU timer queries' : 'measured by finishing the GPU after each stage'}) ==`);
-    L.push('stage'.padEnd(30) + 'CPU'.padStart(8) + 'GPU'.padStart(9) + '  share');
-    for (const r of rows) {
-      const share = gpuSum > 0 && r.gpu >= 0 ? (r.gpu / gpuSum) * 100 : 0;
-      const cpuOnly = r.n.endsWith('(CPU)');
-      L.push(r.n.padEnd(30) + f2(r.cpu).padStart(8) + (r.gpu >= 0 && !cpuOnly ? f2(r.gpu) : '–').padStart(9) + '  ' + (cpuOnly ? '' : '█'.repeat(Math.round(share / 4)).padEnd(26) + (share ? f1(share) + ' %' : '')));
-    }
-    L.push('');
-    // verdict
-    L.push('== What limits this device ==');
-    const verdict: string[] = [];
-    const fpsAvg = 1000 / avgMs;
-    const atRefresh = fpsAvg > refresh * 0.95;
-    const cpuAvg = mean(this.cpu);
-    const pixel = full > 0 ? Math.max(0, 1 - half / full) : 0;
-    if (atRefresh) verdict.push(`Runs at the display's refresh rate. Frame cost ${f2(full)} ms of a ${f2(T)} ms budget (${f1(Math.max(0, (1 - full / T) * 100))} % headroom).`);
-    else verdict.push(`Below the display's refresh rate (${f1(fpsAvg)} of ~${refresh.toFixed(0)} fps).`);
-    if (pixel > 0.4) verdict.push(`Mostly per-pixel GPU work: half resolution cuts the frame cost by ${f1(pixel * 100)} %. Lower Render scale / MSAA, keep Dynamic resolution on, or pick a lower preset.`);
-    else if (cpuAvg > full * 0.6) verdict.push(`Mostly CPU (JavaScript) work: ${f2(cpuAvg)} ms of ${f2(full)} ms. Lower draw distance (preset) reduces scenery set-up; resolution changes will not help much.`);
-    else verdict.push(`Mostly geometry / draw work (half resolution only saves ${f1(pixel * 100)} %): a preset with a shorter draw distance helps more than lowering resolution.`);
-    const top = rows.filter((r) => r.gpu >= 0).sort((a, b) => b.gpu - a.gpu).slice(0, 3);
-    if (top.length) verdict.push('Most expensive stages: ' + top.map((r) => `${r.n} ${f2(r.gpu)} ms`).join(', ') + '.');
-    if (hitches.length > 5) verdict.push(`${hitches.length} hitches: occasional long frames (often garbage collection, shader compiles or background tasks).`);
-    if (!atRefresh && q.name !== QUALITY[0].name) {
-      const idx = QUALITY.findIndex((x) => x.name === q.name);
-      verdict.push(`Suggestion: try the ${QUALITY[Math.max(0, idx - 1)].name} preset.`);
-    }
-    for (const v of verdict) L.push('• ' + v);
-    L.push('');
-    L.push('== Settings ==');
-    line('preset', `${q.name}   render scale ${f1(q.scale * 100)} % (min ${f1(q.minScale * 100)} %)   MSAA ${q.msaa}x   bloom levels ${q.bloom}   draw distance ×${q.dist}`);
-    line('extras', `particles ×${q.particles}   weather ×${q.weather}   scenery ×${q.scenery}   shadows ${q.shadows ? q.shadows + ' px map' : 'blob'}   AO ${q.ssao ? 'on' : 'off'}`);
-    line('players', `${g.settings.players}`);
+    const line = (k: string, v: string) => L.push(k.padEnd(22) + v);
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    L.push(`CRESTLINE v${__VERSION__} (build ${__BUILD_TIME__.slice(0, 16).replace('T', ' ')} UTC) — benchmark, ${stamp} UTC`);
+    L.push(`Fixed suite: ${BENCH_TRACKS.length} tracks x ${BENCH_PRESETS.join(' / ')}` + (this.cases.length > BENCH_TRACKS.length * BENCH_PRESETS.length ? ' + your settings' : '') + '; 1 player, bot driving, resolution fixed at each preset\'s scale.');
     L.push('');
     L.push('== Device ==');
     line('GPU', `${gpuName}  (${gpuVendor})`);
-    line('WebGL', `${gl.getParameter(gl.VERSION)}   max samples ${gl.getParameter(gl.MAX_SAMPLES)}   max texture ${gl.getParameter(gl.MAX_TEXTURE_SIZE)}   HDR targets ${R.hdr ? 'yes' : 'no'}   GPU timers ${R.prof.timerAvailable ? 'yes' : 'no'}`);
-    line('output', `${R.canvas.width}x${R.canvas.height} px (device pixel ratio ${devicePixelRatio})   screen ${screen.width}x${screen.height}`);
+    line('output', `${R.canvas.width}x${R.canvas.height} px   device pixel ratio ${devicePixelRatio}   screen ${screen.width}x${screen.height}   refresh ~${refresh.toFixed(0)} Hz (estimated)`);
+    line('WebGL', `${gl.getParameter(gl.VERSION)}   max MSAA ${gl.getParameter(gl.MAX_SAMPLES)}   HDR targets ${R.hdr ? 'yes' : 'no'}   GPU timers ${R.prof.timerAvailable ? 'yes' : 'no'}`);
     line('CPU threads / memory', `${nav.hardwareConcurrency ?? '?'} / ${nav.deviceMemory ? nav.deviceMemory + ' GB' : '?'}`);
     line('browser', navigator.userAgent);
-    line('start-up', `${(this.g.startupMs / 1000).toFixed(1)} s from opening the page to the third frame drawn (shader compilation included)`);
+    line('start-up', `${(g.startupMs / 1000).toFixed(1)} s from opening the page to the third frame (shader compilation included)`);
+    line('your settings', `${mine.name}` + (qualityDiff(mine) ? `  [${qualityDiff(mine)}]` : '  (stock)') + `   dynamic resolution ${g.settings.dynRes ? 'on' : 'off'} (off during the benchmark)`);
     L.push('');
-    L.push('fps per second: ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
+    L.push('== Summary ==');
+    L.push('fps = measured (never above the refresh rate) · cost = full frame with the GPU finished, no vsync · max fps = 1000 / cost');
+    L.push('CPU = JavaScript per frame (simulation, scene set-up, draw calls) · verts = vertices sent per frame');
+    L.push('');
+    const head = 'track'.padEnd(12) + 'settings'.padEnd(20) + 'render'.padEnd(11) + 'fps'.padStart(7) + '1% low'.padStart(8) + 'p99 ms'.padStart(8) + 'cost ms'.padStart(9) + 'max fps'.padStart(9) + 'CPU ms'.padStart(8) + 'calls'.padStart(7) + 'verts'.padStart(8) + '  hitches';
+    L.push(head);
+    let lastTrack = '';
+    for (const r of this.results) {
+      if (lastTrack && lastTrack !== r.track) L.push('');
+      lastTrack = r.track;
+      L.push(r.what.split(' (')[0].padEnd(12) + r.settings.slice(0, 19).padEnd(20) + r.res.padEnd(11) + f1(r.fps).padStart(7) + f1(r.low1).padStart(8) + f2(r.p99).padStart(8) + f2(r.costMs).padStart(9) + f1(1000 / Math.max(0.01, r.costMs)).padStart(9) + f2(r.cpuMs).padStart(8) + r.calls.toFixed(0).padStart(7) + ((r.verts / 1e6).toFixed(2) + 'M').padStart(8) + '  ' + r.hitches);
+    }
+    L.push('');
+    // averages per settings across the tracks
+    L.push('== Average over the tracks ==');
+    const labels = [...new Set(this.results.map((r) => r.settings))];
+    for (const lab of labels) {
+      const rs = this.results.filter((r) => r.settings === lab);
+      const cost = mean(rs.map((r) => r.costMs));
+      L.push(lab.padEnd(22) + `${f1(mean(rs.map((r) => r.fps)))} fps measured   frame cost ${f2(cost)} ms (max ~${f1(1000 / Math.max(0.01, cost))} fps)   CPU ${f2(mean(rs.map((r) => r.cpuMs)))} ms   ` +
+        (cost <= 1000 / refresh ? `fits the ${refresh.toFixed(0)} Hz budget of ${f2(1000 / refresh)} ms` : `over the ${refresh.toFixed(0)} Hz budget of ${f2(1000 / refresh)} ms by ${f2(cost - 1000 / refresh)} ms`));
+    }
+    L.push('');
+    L.push('== Time per render stage (ms per frame, GPU finished after each stage; slower than normal play, compare the proportions) ==');
+    const names: string[] = [];
+    for (const r of this.results) for (const s of r.stages) if (!names.includes(s.name)) names.push(s.name);
+    for (const t of BENCH_TRACKS) {
+      const rs = this.results.filter((r) => r.track === t.code);
+      if (!rs.length) continue;
+      L.push('');
+      L.push(`${t.what}  ${t.code}`);
+      L.push('stage'.padEnd(30) + rs.map((r) => r.settings.slice(0, 15).padStart(16)).join(''));
+      for (const n of names) {
+        const vals = rs.map((r) => r.stages.find((s) => s.name === n));
+        if (vals.every((v) => !v || (v.gpu < 0.005 && v.cpu < 0.005))) continue;
+        const cpuOnly = n.endsWith('(CPU)');
+        L.push(n.padEnd(30) + vals.map((v) => (v ? f2(cpuOnly ? v.cpu : Math.max(0, v.gpu)) : '–').padStart(16)).join(''));
+      }
+      L.push('total of stages'.padEnd(30) + rs.map((r) => f2(r.stages.reduce((a, s) => a + Math.max(0, s.name.endsWith('(CPU)') ? s.cpu : s.gpu), 0)).padStart(16)).join(''));
+    }
+    L.push('');
+    L.push('== Presets used ==');
+    const used: Quality[] = [];
+    for (const c of this.cases) if (!used.includes(c.q)) used.push(c.q);
+    for (const q of used) {
+      L.push(`${q.name}: scale ${q.scale} (min ${q.minScale}) · pixel ratio cap ${q.dpr} · MSAA ${q.msaa}x · bloom ${q.bloom} · distance x${q.dist} · scenery x${q.scenery} · woodland x${q.woods} · detail distance ${q.lod} m · ` +
+        `terrain ${q.terrLite ? 'light' : 'full'} · particles x${q.particles} · weather x${q.weather} · lamp lights ${q.lamps} · effects ${q.lite ? 'simple' : 'full'} · sun shadows ${q.shadows || 'off'} · AO ${q.ssao ? 'on' : 'off'}`);
+    }
+    L.push('');
+    L.push('fps per second of the measured runs, in order: ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
+    L.push('');
+    L.push('== Data (JSON, one line) ==');
+    const round = (x: number) => Math.round(x * 100) / 100;
+    L.push(JSON.stringify({
+      v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh),
+      threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), yours: { name: mine.name, diff: qualityDiff(mine) },
+      cases: this.results.map((r) => ({
+        track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches,
+        cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),
+        stages: Object.fromEntries(r.stages.map((s) => [s.name, round(s.name.endsWith('(CPU)') ? s.cpu : Math.max(0, s.gpu))])),
+      })),
+    }));
     return { text: L.join('\n'), timeline: this.timeline, scaleLine: this.scaleLine, refresh };
   }
 }

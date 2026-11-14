@@ -224,7 +224,7 @@ export class Renderer {
     this.quality = q;
     this.dynScale = q.scale;
     // scenery thinning and the deep woodland are built per track: rebuild if they changed
-    if (this.track && this.scenery && (prev.scenery !== q.scenery || (prev.woods > 0) !== (q.woods > 0))) {
+    if (this.track && this.scenery && (prev.scenery !== q.scenery || prev.woods !== q.woods)) {
       this.scenery = this.buildScenery(this.track, q);
     } else if (this.scenery) this.scenery.backdropDist = q.woods;
     if (this.scenery) this.scenery.lodDist = q.lod;

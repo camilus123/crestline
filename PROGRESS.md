@@ -286,7 +286,24 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   within 160 m of the road beside the car was already stable on Desert (0.2 m worst shift). Dunes that seem to
   move in bends are not explained yet.
 
+**v3.1.0 (2026-11-15)**
+- Benchmark is a fixed suite, the same on every run: Forest, Mountains, Night and Futuristic, each at Low, High
+  and Psycho (stock options) and at the player's own settings if those differ; one player, bot driving, the same
+  car, resolution fixed at the preset's scale. Per case: 5 s of normal frames, then true frame cost with the GPU
+  finished every frame, then cost per render stage. The report has a summary table, averages against the
+  refresh-rate budget, a stage table per track, the options of each preset, and one line of JSON with every number.
+- Graphics options (Settings -> Graphics options): every option a preset sets can be changed on its own
+  (resolution, pixel-ratio limit, MSAA, sun shadows, ambient occlusion, bloom, sky/screen effects, draw distance,
+  clutter, woodland, detail distance, terrain mesh, lamp lights, particles, weather, dynamic-resolution floor and
+  target). Changed options are marked; picking a preset resets them. `tests/gfxopts.mjs`.
+
 ## Known issues / not verified
+- **Mountains has known visual issues that are staying.** The world is a strip of terrain about 800 m either side
+  of the road, bent each frame so the road ahead straightens, with a painted sky behind. On flat scenarios the
+  strip's edge sits on the horizon; with mountain-sized relief its edges and the joins between stretches can be
+  seen, with the backdrop showing behind them ("holes"), and the ground inside bends changes shape slightly as
+  you drive. Decided 2026-11-14 to leave it. What would fix it: a far ground layer behind the strip, lower
+  relief, or a true 3D world (a rewrite of the renderer and the track generator).
 - v3 frame rates are not measured on real hardware (no GPU here). What is measured: vertex counts, and that
   every stage runs on a software GPU. Whether Low holds 60 fps on a given slow device needs a benchmark run there.
 - v3: beyond the level-of-detail distance a tree swaps to its lighter model; the shapes match, but the swap to

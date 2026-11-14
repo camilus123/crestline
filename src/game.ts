@@ -10,7 +10,7 @@ import { decodeCode, normalizeCode, DEFAULT_CODE } from './track/codes';
 import { COURSES, CourseKey } from './track/courses';
 import { generateTrack, TrackData } from './track/generator';
 import { hashString } from './core/rng';
-import { QUALITY, Q_DEFAULT, Renderer, View } from './render/renderer';
+import { QUALITY, Q_DEFAULT, Renderer, View, type Quality } from './render/renderer';
 import { LOOKS } from './render/looks';
 import { Hud, ord } from './ui/hud';
 import { TouchControls } from './ui/touch';
@@ -33,6 +33,8 @@ export interface Settings {
   sequence: string;
   quality: number;
   qv?: number; // preset list version (2: Ultra Low added at the front, Psycho at the end)
+  /** individual graphics options changed from the chosen preset (cleared when another preset is picked) */
+  qo?: Partial<Quality>;
   dynRes: boolean;
   musicVol: number;
   sfxVol: number;
@@ -190,7 +192,8 @@ export class Game {
   async start(): Promise<void> {
     await installStyle();
     const q = new URLSearchParams(location.search);
-    this.renderer.setQuality(QUALITY[+(q.get('q') ?? this.settings.quality)] ?? QUALITY[Q_DEFAULT]);
+    if (q.has('q')) this.renderer.setQuality(QUALITY[+q.get('q')!] ?? QUALITY[Q_DEFAULT]);
+    else this.applyQuality();
     this.manual = q.has('manual');
     if (q.has('hashcheck')) {
       const { hashCheck } = await import('./track/hashcheck');
@@ -717,15 +720,12 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- benchmark
+  private benchSaved: Partial<Settings> | null = null;
   startBenchmark(done: (report: BenchReport) => void): void {
-    this.session = null;
-    this.startSession('arcade', 'custom', ['TUORSWWUS14'], true);
-    this.enterRace(true);
-    // skip the countdown
-    this.race!.countdown = 0.01;
-    this.paused = false;
-    // nothing may cover the race while it is measured
-    for (const e of Array.from(this.ui.querySelectorAll('.scr'))) if (e !== this.screen?.el) e.remove();
+    // the same conditions on every run: one player, the same car, no music restarts
+    const st = this.settings;
+    this.benchSaved = { players: st.players, cars: st.cars.slice(), colors: st.colors.slice(), manual: st.manual.slice(), song: st.song };
+    st.players = 1; st.cars[0] = 0; st.colors[0] = 0; st.manual[0] = false; st.song = -1;
     this.cpuMs.length = 0;
     this.gpuMs.length = 0;
     this.benchEl?.remove();
@@ -744,6 +744,33 @@ export class Game {
       done(rep);
     });
   }
+  /** benchmark: start one case (a track at a set of quality options) */
+  benchRace(code: string, q: Quality): void {
+    this.session = null;
+    this.startSession('arcade', 'custom', [code], true);
+    this.renderer.setQuality(q);
+    this.enterRace(true);
+    this.race!.countdown = 0.01; // skip the countdown
+    this.paused = false;
+    // nothing may cover the race while it is measured
+    for (const e of Array.from(this.ui.querySelectorAll('.scr'))) if (e !== this.screen?.el) e.remove();
+  }
+  /** benchmark over or abandoned: the player's own settings again */
+  benchRestore(): void {
+    if (this.benchSaved) Object.assign(this.settings, this.benchSaved);
+    this.benchSaved = null;
+    this.applyQuality();
+  }
+
+  /** the chosen preset with the player's own changes to individual options on top */
+  effectiveQuality(): Quality {
+    const base = QUALITY[this.settings.quality] ?? QUALITY[Q_DEFAULT];
+    const o = this.settings.qo ?? {};
+    const changed = (Object.keys(o) as (keyof Quality)[]).some((k) => o[k] !== base[k]);
+    return changed ? { ...base, ...o, name: base.name + ' (custom)' } : base;
+  }
+  applyQuality(): void { this.renderer.setQuality(this.effectiveQuality()); }
+
   cancelBenchmark(): void {
     if (!this.bench) return;
     this.bench.restore();
