@@ -550,6 +550,20 @@ the user notes the cache is gone when Edge is closed.)
 - Same pattern, not changed: the ground-patch shader (decals) calls the lighting in seven branches; it covers
   few pixels, but it is one of the slower programs to compile (546 ms).
 
+**Measured with v3.5.3 on the target PC (2026-11-15): Admiral holds the refresh rate on every benchmark track**
+- Edge: Admiral 239.8 fps on Forest, Mountains, Night and Futuristic (1% lows 226-233, no frame over 4.6 ms);
+  frame cost 4.42 / 3.48 / 3.23 / 4.33 ms. Low and High 239.8 everywhere. Psycho 219.9 average: Mountains 239.6
+  and Night 239.8, Forest 205.1, Futuristic 194.9.
+- Firefox: Admiral 239.0 / 239.8 / 239.8 / 239.8 (average 239.6); Psycho 229.7.
+- The car-shader theory held. Cars, traffic on Edge, v3.5.2 -> v3.5.3: Forest Admiral 0.44 -> 0.11 ms, Night
+  0.48 -> 0.14 (High 0.49 -> 0.14), Futuristic 0.54 -> 0.12, Mountains 0.71 -> 0.39. The car program compiles
+  in 171 ms (548). Left over: on Mountains the cars still cost 0.39-0.46 ms with sun shadows on against 0.08 on
+  High; not looked at.
+- Shader compilation: Edge 1.80 s all at once, Firefox 5.49 s; start-up on Firefox 4.8 s.
+- User: "looks like we did it.. it's 239 for everything now".
+- The 240 Hz figures above are the user's measurements on the target hardware (RX 9070, 3440x1440, 240 Hz
+  display, vsync on, so 239.8 is the cap). Psycho does not hold it and nothing here claims it does.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
