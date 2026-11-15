@@ -10,9 +10,14 @@ export const NOISE = `
 uint hashU(uvec2 v){ v = v*1664525u + 1013904223u; v.x += v.y*1664525u; v.y += v.x*1664525u; v ^= v>>16u; v.x += v.y*1664525u; v.y += v.x*1664525u; v ^= v>>16u; return v.x ^ v.y; }
 float hash2(vec2 p){ return float(hashU(uvec2(ivec2(floor(p)) + 32768))) * (1.0/4294967296.0); }
 float hash1(float p){ return hash2(vec2(p, p*0.37+11.0)); }
-float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.0-2.0*f);
-  float a=hash2(i), b=hash2(i+vec2(1,0)), c=hash2(i+vec2(0,1)), d=hash2(i+vec2(1,1));
-  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y); }
+// the four corners of a lattice cell hashed in one go: the same numbers as four hash2() calls, in a quarter of
+// the instructions (the Direct3D compiler's time on the terrain and sky programs was mostly this hash, copied
+// out hundreds of times)
+uvec4 hashU4(uvec4 x, uvec4 y){ x = x*1664525u + 1013904223u; y = y*1664525u + 1013904223u; x += y*1664525u; y += x*1664525u; x ^= x>>16u; y ^= y>>16u; x += y*1664525u; y += x*1664525u; x ^= x>>16u; y ^= y>>16u; return x ^ y; }
+float vnoise(vec2 p){ vec2 f=fract(p); vec2 u=f*f*(3.0-2.0*f);
+  uvec2 b = uvec2(ivec2(floor(p)) + 32768);
+  vec4 h = vec4(hashU4(b.x + uvec4(0u,1u,0u,1u), b.y + uvec4(0u,0u,1u,1u))) * (1.0/4294967296.0);
+  return mix(mix(h.x,h.y,u.x), mix(h.z,h.w,u.x), u.y); }
 float fbm(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<4;i++){ s+=a*vnoise(p); p=p*2.03+vec2(17.1,9.3); a*=0.5; } return s; }
 float fbm2(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<2;i++){ s+=a*vnoise(p); p=p*2.03+vec2(17.1,9.3); a*=0.5; } return s/0.75; }
 `;

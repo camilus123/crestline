@@ -502,6 +502,30 @@ the user notes the cache is gone when Edge is closed.)
   care); (b) lattice values from a texture; (c) show the menu before the terrain and sky programs are ready
   (helps where compilation is parallel, i.e. not Firefox).
 
+## v3.5.2 (2026-11-15) — lattice hash four corners at a time; lighter car model from 80 m
+**Measured with v3.5.1 on the target PC**
+- The two-place `terrNoise` of v3.5.1 (Edge, from scratch): terrain 4643 -> 2768 ms, terrain-depth 1802 -> 1136,
+  blobshadow 831 -> 458; all at once 5.40 -> 3.47 s. Firefox on the same PC: 9.11 s at once (9.35 one by one),
+  start-up 8.2 s (9.3 s on v3.2.0).
+- Experiments (Edge / Firefox, ms): terrain vertex shader alone 1117 / 1119; fragment shader alone 119 / 123;
+  one point not three 545 / 590; 2 octaves 542 / 584; lattice values from a texture 253 / 271; no seam blend
+  566 / 518; fragment without lighting 57 / 61; without branches around textures 118 / 121. Sky 2083 / 2293:
+  2 octaves 965 / 1051, lattice from a texture 417 / 451.
+  Reading: the fragment shaders are not the problem; the time is the integer lattice hash, written out once per
+  corner, per octave, per noise call, per terrain point. Everything that halves the number of copies halves
+  the time. (The whole terrain program takes 2.5x the vertex shader alone because with no fragment shader two
+  of its three terrain points are dead code.)
+- Frame rates, Edge: Admiral 235.6 average (Forest 237.4, Futuristic 225.4, the others 239.8). Firefox: 232.8.
+
+**In v3.5.2**
+- `vnoise` hashes the four corners of a cell in one four-wide operation (`hashU4`): the same numbers (0 pixels
+  differ on the four benchmark tracks), a quarter of the instructions. Not measured on Direct3D yet.
+- The benchmark's two "lattice values from a texture" experiments now apply to the new `vnoise`, so the next run
+  shows what a texture would still gain on top.
+- Cars use the lighter model beyond min(0.35 x detail distance, 80 m): was 157 m on Psycho and Admiral, where
+  "cars, traffic" was 0.45-0.91 ms on the PC (0.14-0.15 on High) and 8-21 ms on the laptop. High and below are
+  unchanged (60 m and less). Not measured yet.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

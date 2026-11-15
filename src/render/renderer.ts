@@ -902,7 +902,9 @@ export class Renderer {
       const sm = modelMatrix(pos[0], pos[1] - h, pos[2], yaw, Math.atan(this.path.slope(d)), 0);
       const liv = LIVERIES[c.color % LIVERIES.length];
       out.push({
-        far: Math.abs(d) > this.quality.lod * 0.35,
+        // (the lighter car model beyond 80 m at most: twenty full-detail cars in a pack 150 m ahead was the
+        // largest stage on the two top presets, for cars a few dozen pixels wide)
+        far: Math.abs(d) > Math.min(this.quality.lod * 0.35, 80),
         model: m, shadowModel: sm, geo: c.spec.id, paint: liv[0], accent: liv[1],
         spin: c.pwheel + (c.wheelAngle - c.pwheel) * a, steer: c.psteer + (c.steerVis - c.psteer) * a,
         brake: c.brake > 0.1 ? 1 : 0, lights: lights ? 1 : 0, tail: lights ? 1 : 0.25,

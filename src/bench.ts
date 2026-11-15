@@ -75,16 +75,14 @@ function compileProbes(): { name: string; vs: string; fs: string }[] {
     add('terrain: fragment shader alone', flatVS, terr.fs);
     add('terrain vertex: one point, not three', sub(terr.vs, [['for (int i = 0; i < 3; i++) {', 'for (int i = 0; i < 1; i++) {']]), noFS);
     add('terrain vertex: noise of 2 octaves, not 4', sub(terr.vs, [OCT]), noFS);
-    add('terrain vertex: lattice values from a texture', sub(terr.vs, [['float hash2(vec2 p){ return float(hashU(uvec2(ivec2(floor(p)) + 32768))) * (1.0/4294967296.0); }',
-      'uniform sampler2D uProbeN;\nfloat hash2(vec2 p){ return texelFetch(uProbeN, ivec2(floor(p)) & 255, 0).r; }']]), noFS);
+    add('terrain vertex: lattice values from a texture', sub(terr.vs, [['  vec4 h = vec4(hashU4(b.x + uvec4(0u,1u,0u,1u), b.y + uvec4(0u,0u,1u,1u))) * (1.0/4294967296.0);', '  ivec2 bi = ivec2(b) & 255; vec4 h = vec4(texelFetch(uProbeN, bi, 0).r, texelFetch(uProbeN, (bi + ivec2(1,0)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(0,1)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(1,1)) & 255, 0).r);'], ['uvec4 hashU4(', 'uniform sampler2D uProbeN;\nuvec4 hashU4(']]), noFS);
     add('terrain vertex: no circuit seam blend', sub(terr.vs, [['  if (w <= 0.0) return a;\n  float b = fbm(vec2((sm - L)*fr, u*fr));\n  return mix(a, b, w);', '  return a + w;']]), noFS);
     add('terrain fragment: no lighting', flatVS, sub(terr.fs, [['vec3 col = lightSurf(c, N, vW, rough, spec, ao, shade);', 'vec3 col = c * N.y * rough * (spec + ao + shade);']]));
     add('terrain fragment: no branches around textures', flatVS, sub(terr.fs, [['if (rock > 0.0 || uGType == 4) {', '{'], ['if (rock > 0.0) { vec4 gr', '{ vec4 gr']]));
   }
   if (sky) {
     add('sky: noise of 2 octaves, not 4', sky.vs, sub(sky.fs, [['for(int i=0;i<4;i++){ s+=a*vnoise(p)', 'for(int i=0;i<2;i++){ s+=a*vnoise(p)']]));
-    add('sky: lattice values from a texture', sky.vs, sub(sky.fs, [['float hash2(vec2 p){ return float(hashU(uvec2(ivec2(floor(p)) + 32768))) * (1.0/4294967296.0); }',
-      'uniform sampler2D uProbeN;\nfloat hash2(vec2 p){ return texelFetch(uProbeN, ivec2(floor(p)) & 255, 0).r; }']]));
+    add('sky: lattice values from a texture', sky.vs, sub(sky.fs, [['  vec4 h = vec4(hashU4(b.x + uvec4(0u,1u,0u,1u), b.y + uvec4(0u,0u,1u,1u))) * (1.0/4294967296.0);', '  ivec2 bi = ivec2(b) & 255; vec4 h = vec4(texelFetch(uProbeN, bi, 0).r, texelFetch(uProbeN, (bi + ivec2(1,0)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(0,1)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(1,1)) & 255, 0).r);'], ['uvec4 hashU4(', 'uniform sampler2D uProbeN;\nuvec4 hashU4(']]));
   }
   return out;
 }
