@@ -695,14 +695,6 @@ export class Renderer {
       pf.end();
     }
 
-    // ---------- sky ----------
-    pf.begin('sky');
-    gl.disable(gl.DEPTH_TEST);
-    gl.depthMask(false);
-    this.sky.setLook(look, sw);
-    this.sky.lite = this.quality.lite;
-    this.sky.draw(invVP, eye, heading, (tr.y(sCar) - this.meanY) + eye[1], F.time, this.flash, this.bolt);
-    pf.end();
     gl.enable(gl.DEPTH_TEST);
     gl.depthFunc(gl.LEQUAL);
     gl.depthMask(true);
@@ -785,6 +777,21 @@ export class Renderer {
     pf.begin('cars, traffic');
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);
     this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
+    pf.end();
+
+    // ---------- sky ----------
+    // Drawn after everything solid, at the far plane with the depth test on, so its (expensive) clouds are only
+    // worked out for the pixels where nothing else is. It used to be drawn first over the whole screen and then
+    // mostly covered: the largest single cost of the frame at high resolutions.
+    pf.begin('sky');
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.depthMask(false);
+    gl.disable(gl.BLEND);
+    this.sky.setLook(look, sw);
+    this.sky.lite = this.quality.lite;
+    this.sky.draw(invVP, eye, heading, (tr.y(sCar) - this.meanY) + eye[1], F.time, this.flash, this.bolt);
+    gl.depthMask(true);
     pf.end();
 
     // ---------- particles, glows, weather ----------

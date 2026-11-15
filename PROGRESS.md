@@ -297,6 +297,20 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   clutter, woodland, detail distance, terrain mesh, lamp lights, particles, weather, dynamic-resolution floor and
   target). Changed options are marked; picking a preset resets them. `tests/gfxopts.mjs`.
 
+## v3.2.0 (2026-11-15) — benchmark fixes, sky drawn last
+Steps 1 and 2 of the "Next work" list below.
+- Sky is drawn after everything solid, at the far plane with the depth test on, so its clouds are only computed
+  where nothing else is. `tests/samepic.mjs` renders the same frame with the old and new build: 0 pixels differ on
+  Mountains, Night (High) and Forest (Low). On the software GPU the sky stage fell 53 % on a Forest frame and 3 %
+  on a Mountains frame with a lot of sky in view; the gain on real hardware is not measured.
+- Benchmark:
+  - stage times come from GPU timer queries during the normal 5 s run where the browser has them, and the slow
+    stage-by-stage phase is skipped;
+  - without timers, the cost of the read-back that makes the GPU finish is measured at the start, taken off the
+    frame cost and stage times, and printed in the report;
+  - warm-up lasts until 20 consecutive frames are steady (up to 8 s), so track loading stays out of the result;
+  - the cost and stage phases are 1 s each (were 1.5 s), and the bar says the picture slowing down is normal.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
