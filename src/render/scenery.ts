@@ -532,7 +532,7 @@ export class Scenery {
     set.mesh.updateInstances(D);
   }
 
-  draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath, landmarksOnly = false): void {
+  draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath, landmarksOnly = false, part = 0): void {
     const gl = this.gl;
     const p = this.prog.use();
     prep(p);
@@ -541,6 +541,9 @@ export class Scenery {
     gl.disable(gl.CULL_FACE);
     for (const set of this.sets) {
       if (landmarksOnly && (!set.landmark || set.sky)) continue;
+      // part 1: everything near (drawn before the terrain); part 2: the far backdrop (drawn after it, so that
+      // peaks and skylines the ground hides are not shaded); 0: all
+      if (part && (part === 2) !== !!(set.sky || set.backdrop)) continue;
       p.i('uSkyObj', set.sky ? 1 : 0).f('uRocky', set.sky ? 1 : 0);
       if (set.sky) {
         // every switch set explicitly: a backdrop mountain must never inherit 'bend along the road' (or anything

@@ -719,7 +719,7 @@ export class Renderer {
 
     // ---------- scenery ----------
     pf.begin('scenery');
-    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path);
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path, false, 1);
     pf.end();
 
     // ---------- terrain ----------
@@ -788,6 +788,11 @@ export class Renderer {
     this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
     pf.end();
 
+
+    // the far backdrop (mountain peaks, skylines) after the ground and everything on it: most of it is hidden
+    pf.begin('backdrop');
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path, false, 2);
+    pf.end();
 
     // ---------- sky ----------
     // Drawn after everything solid, at the far plane with the depth test on, so its (expensive) clouds are only

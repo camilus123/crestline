@@ -352,6 +352,30 @@ Steps 1 and 2 of the "Next work" list below.
   Futuristic).
 - The three texture lookups for the rock colour are skipped on pixels without rock (0 pixels differ).
 
+## v3.3.1 (2026-11-15) — far backdrop drawn after the terrain
+**Measured with v3.3.0 on the target PC (Edge, GPU timers), against v3.2.0 in the same browser**
+- Averages: Low 239.8, High 239.8, Psycho 207.0 fps (was 195.0). Frame cost Low 2.26 -> 2.11, High 3.85 -> 3.50,
+  Psycho 6.50 -> 6.01 ms. Start-up 5.6 s.
+- Terrain stage on High: Forest 1.29 -> 0.27, Night 0.69 -> 0.37, Futuristic 0.91 -> 0.21 ms. Larger than hidden
+  ground alone explains; whatever is drawn first into the frame seems to carry an extra cost (road rose by about
+  0.1 ms). Forest High frame cost 4.20 -> 3.01 ms, Futuristic Psycho 133 -> 187.5 fps.
+- **Regression on Mountains in v3.3.0:** scenery stage 0.09 / 0.16 / 0.24 ms (Low / High / Psycho) became
+  1.03 / 1.59 / 1.42 ms, more than the terrain saved (0.58 / 0.93 / 1.04 -> 0.27 / 0.47 / 0.51). Frame cost on
+  High 3.16 -> 4.32 ms, Psycho 219 -> 197 fps. Cause: the backdrop peaks were shaded in full before the terrain
+  that hides most of them was drawn.
+- **Whole-frame timer:** within 0.35 ms of the sum of the GPU stages on every case, so no drawing is hidden
+  between the stages. Frame cost exceeds whole-frame GPU time plus CPU time by 0.3-0.6 ms on Low and High and
+  0.7-1.7 ms on Psycho: that part is outside the game's drawing commands (the browser presenting the picture,
+  and how "cost" is measured). Cost also overstates: cases with a cost of 4.66 and 4.83 ms held 239.8 fps
+  against a 4.10 ms budget.
+- User's settings (Psycho with MSAA off, distance x1.2, particles x1.25, weather x1.2): 239.8 fps on Forest and
+  Night, 226.6 on Mountains, 202.1 on Futuristic (sun shadow map 1.41 ms there: 4.66 M vertices per frame).
+
+**Fix in v3.3.1:** backdrop sets (mountain peaks, far skylines) are drawn in their own stage, "backdrop", after
+the terrain and cars and before the sky. Mountains UTNRSVVLR17 High: 0 pixels differ from v3.3.0; KJGJHHMLH04 and
+Forest move slightly closer to v3.2.0 (far backdrop no longer picks up the blob-shadow fringe). Not yet measured
+on real hardware.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
