@@ -313,6 +313,18 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
   nothing else is, should recover most of that.
 - Start-up was 10.7 s on Firefox / Windows.
 
+**Next work, agreed 2026-11-15 (not started)**
+1. Benchmark: use GPU timer queries for the stage times where the browser offers them (dropped in the v3.1.0
+   rewrite; Chrome usually has them), and fix the three benchmark faults listed above.
+2. Sky: draw it after the opaque scene, only where nothing else was drawn; then consider painting the clouds
+   into a smaller texture that is reused across frames.
+3. Shadow pass: depth-only shader, lighter (level-of-detail) models, far cascade updated every few frames.
+4. Terrain: bake the height noise into a texture per track instead of computing it three times per vertex.
+5. Night: limit each surface to the street-lamp lights near it instead of looping over all 16 per pixel.
+6. Draw order: near things (cars, road) before far things, so hidden pixels are skipped.
+Then: one benchmark run each in Firefox and Chrome on the target PC. A run on a second device (the "17t") is
+expected from the user with the current v3.1.0 benchmark.
+
 ## Known issues / not verified
 - **Mountains has known visual issues that are staying.** The world is a strip of terrain about 800 m either side
   of the road, bent each frame so the road ahead straightens, with a painted sky behind. On flat scenarios the
