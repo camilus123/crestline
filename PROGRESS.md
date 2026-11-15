@@ -311,6 +311,26 @@ Steps 1 and 2 of the "Next work" list below.
   - warm-up lasts until 20 consecutive frames are steady (up to 8 s), so track loading stays out of the result;
   - the cost and stage phases are 1 s each (were 1.5 s), and the bar says the picture slowing down is normal.
 
+**Measured 2026-11-15 with the v3.2.0 benchmark**
+- Target PC (RX 9070, 3440x1440, 240 Hz), Firefox: Low 239.8, High 239.0 (was 229.2), Psycho 195.1 fps (was 162.5).
+  Sky stage on High fell from 2.1-3.2 ms to 0.1-1.0 ms. Cost and fps now agree (Forest High 4.20 ms, 239.8 fps).
+- Same PC, Edge (GPU timers available): same averages (239.8 / 239.8 / 195.0); start-up 6.5 s against 9.3 s in
+  Firefox; Psycho 1% lows worse (60-130 against 120). Real stage times: terrain 0.9-1.3 ms on High and Psycho,
+  sun shadows 1.60 ms on Futuristic but 0.27-0.39 ms on Forest and Mountains, Night sky 0.9-1.1 ms, ambient
+  occlusion 0.4-0.5 ms, MSAA resolve 0.3-0.4 ms on Psycho.
+- **Unaccounted on Psycho:** stage times sum to 1.1-2.2 ms less than the frame cost (0.5-0.9 ms on High).
+  Suspects: filling and presenting an 8x MSAA target, the browser's compositing. Find this before the terrain work.
+- Laptop (Core 5 120U, integrated Intel graphics, 1920x1080, 60 Hz), Firefox: Low 53-60 fps at a fixed 1536x864
+  (Forest 59.8, Mountains 59.6, Night 57.4, Futuristic 53.2), High 32-46, Psycho 12-23. Terrain is the largest
+  GPU stage on Low on three tracks (about 3 ms), then road and post. The cost column is wrong on this machine
+  (says 42 fps max while 57-60 was measured). Ultra Low was not in the run.
+
+**Added to the next-work list, 2026-11-15**
+- Simulation CPU cost on slow machines: 1.8-3.5 ms per frame on the laptop on Low (0.05-0.2 ms on the target
+  PC), and more as the frame rate falls because several steps run per frame to catch up.
+- Start-up time on Windows: 17.6 s on the laptop, 9.3 s (Firefox) and 6.5 s (Edge) on the target PC, 1.7 s on
+  the phone. Shader compilation through Direct3D is the suspect.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
