@@ -366,6 +366,21 @@ Costs are estimates for the target PC at 3440x1440, not measurements (240 Hz bud
 - The two fit together as a "Psycho+" mode: full effects at about 120 real frames, shown at 240 by reprojection.
 - Limit that stays: the world is bent, so distant shadows and reflections can drift in long bends.
 
+**Anti-aliasing beyond MSAA, noted 2026-11-15 (ideas, not started; costs are estimates at 3440x1440)**
+- DLSS, FSR 4 and XeSS are not available to a web page (native driver and game toolkits only).
+- Options, simplest to best:
+  - FXAA: blurs detected edges; trivial, about 0.2 ms, softens everything;
+  - SMAA: rebuilds edges properly; 0.4-0.6 ms, sharper than FXAA, does nothing for shimmer;
+  - temporal AA: sub-pixel shift each frame, several frames blended; 0.4-0.6 ms, removes shimmer too, can
+    ghost behind moving things;
+  - temporal upscaling: the same while rendering fewer pixels; saves time overall, same risks more visible.
+- FSR 1 (AMD's older single-frame upscaler, published as open shader code) can be ported: about 0.3 ms, no
+  anti-aliasing, but a better picture under dynamic resolution than the plain stretch used now.
+- Plan: SMAA as an option first; temporal AA together with frame generation (both need to know where each pixel
+  was a frame ago); FSR 1-style upscaling for dynamic resolution, mainly for phones and slower PCs.
+- Caveat: the world is re-bent every frame, so the previous position of a pixel is slightly inexact in bends;
+  expect a little extra softness there with the temporal methods.
+
 **Measured 2026-11-15: Xiaomi 17T (Mali-G720 MC8, 120 Hz), Mi Browser, v3.1.0 benchmark**
 - Low and Ultra Low hold the screen's 120 Hz on all four tracks (119 fps average; 1% lows 45-118 fps).
   First real measurement of the light presets on a phone. Start-up 1.7 s.
