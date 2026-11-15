@@ -676,16 +676,27 @@ export class Renderer {
         gl.viewport(0, 0, sz, sz);
         gl.clear(gl.DEPTH_BUFFER_BIT);
         const prepS = (p: Program) => { prep(p); p.m4('uViewProj', sv); };
-        const tp = this.ground.terrP.use();
+        // terrain and scenery go in with depth-only programs: nothing is shaded for a shadow map
+        const tp = this.ground.terrDepthP.use();
         prepS(tp);
-        tp.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
         (this.quality.terrLite ? this.ground.terrLite : this.ground.terr).draw();
+        const sc = this.scenery;
+        if (sc) sc.depthOnly = true;
         if (pass === 0) {
           if (this.hazards) this.hazards.drawProps(prepS, sCar, F.time);
-          if (this.scenery) this.scenery.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK, path);
+          if (sc) {
+            // the detailed map only receives within about 240 m: what stands further off can only cast into it,
+            // and its lighter model casts the same shadow
+            const lod = sc.lodDist;
+            sc.lodDist = Math.min(lod, 250);
+            sc.draw(prepS, sCar, Math.min(maxD, 600), loop, F.time, wind, emisK, path);
+            sc.lodDist = lod;
+          }
+          if (sc) sc.depthOnly = false;
           this.drawTraffic(prepS, race.traffic, sCar, Math.min(maxD, 600), a, F.time);
           this.cars.draw(prepS, draws, [0.2, 0.9, 1.0]);
-        } else if (this.scenery) this.scenery.draw(prepS, sCar, maxD, loop, F.time, wind, emisK, path, true);
+        } else if (sc) sc.draw(prepS, sCar, maxD, loop, F.time, wind, emisK, path, true);
+        if (sc) sc.depthOnly = false;
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
       this.curTarget!.bind();

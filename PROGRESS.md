@@ -388,6 +388,21 @@ v2.0.2".
   x1.2, particles x1.25, rain and snow x1.2). Built in rather than saved in the browser because each delivered
   .html file is a different address to the browser, so saved settings do not follow from one build to the next.
 
+## v3.4.0 (2026-11-15) — lighter sun shadow pass
+Item 3 of the next-work list. Not measured on real hardware yet.
+- Terrain and scenery are drawn into the shadow maps with depth-only programs (same vertex shader, a fragment
+  shader that does nothing, so the full terrain and object shading no longer runs per shadow-map pixel and the
+  linker drops the vertex work that only fed it). The two programs are created when shadows are first used.
+- In the detailed (near) map, scenery beyond 250 m along the track uses its lighter model (was the preset's
+  detail distance, 450 m on Psycho and Admiral). That map only receives within about 240 m of the camera.
+- `tests/shadowpic.mjs` (High with a 1024 px shadow map switched on, old build against new): 0 pixels differ on
+  Forest, Futuristic and Mountains; also 0 on Forest and Futuristic with the detail distance at 450 m. Psycho
+  itself cannot be rendered on the software GPU here.
+- **Not done: far map updated every few frames.** The whole shadow stage is 0.26-0.56 ms on Forest and Mountains,
+  so the far map is worth perhaps 0.1-0.2 ms, and reusing an old map needs the exact camera movement between
+  frames or distant shadows would shimmer. Left out as not worth the risk.
+- Cars, traffic and props still go in with their full programs (few vertices).
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
@@ -409,7 +424,8 @@ v2.0.2".
    rewrite; Chrome usually has them), and fix the three benchmark faults listed above.
 2. Sky: draw it after the opaque scene, only where nothing else was drawn; then consider painting the clouds
    into a smaller texture that is reused across frames.
-3. Shadow pass: depth-only shader, lighter (level-of-detail) models, far cascade updated every few frames.
+3. Shadow pass: depth-only shader, lighter (level-of-detail) models (done in v3.4.0); far cascade updated
+   every few frames (dropped, see v3.4.0).
 4. ~~Terrain: bake the height noise into a texture~~ dropped in v3.3.0: the mesh is too small for that to be
    the cost. Done instead: terrain drawn after the scenery, rock lookups skipped where there is no rock.
 5. Night: limit each surface to the street-lamp lights near it instead of looping over all 16 per pixel.

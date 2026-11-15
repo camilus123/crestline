@@ -398,6 +398,10 @@ export class Ground {
   rail: Mesh;
   roadP: Program;
   terrP: Program;
+  private gl0!: GL;
+  private terrDepth: Program | null = null;
+  /** the terrain with no shading at all, for the sun shadow maps (made when shadows are first used) */
+  get terrDepthP(): Program { return this.terrDepth ??= new Program(this.gl0, TERR_VS, '#version 300 es\nprecision highp float;\nvoid main(){}', 'terrain-depth'); }
   waterP: Program;
   railP: Program;
   bandU = new Float32Array(16);
@@ -486,6 +490,7 @@ export class Ground {
     }
     this.roadP = new Program(gl, ROAD_VS, ROAD_FS, 'road');
     this.terrP = new Program(gl, TERR_VS, TERR_FS, 'terrain');
+    this.gl0 = gl;
     this.waterP = new Program(gl, WATER_VS, WATER_FS, 'water');
     this.railP = new Program(gl, RAIL_VS, RAIL_FS, 'rail');
   }

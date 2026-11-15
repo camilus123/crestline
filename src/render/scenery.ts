@@ -152,6 +152,11 @@ void main(){
   o = vec4(uRocky > 0.5 ? mix(col, fogged, 0.62) : fogged, blurW(vW));
 }`;
 
+const OBJ_DEPTH_FS = `#version 300 es
+precision highp float;
+in float vHide;
+void main(){ if (vHide > 0.5) discard; }`;
+
 const SHADOW_VS = PRELUDE + NOISE + PATH + `
 layout(location=0) in vec2 aQ;
 layout(location=4) in vec3 iSUR;
@@ -321,6 +326,10 @@ export class Scenery {
   backdropDist = 0.8;
   /** beyond this distance ahead, models with a lighter version are drawn with it */
   lodDist = 160;
+  /** draw with the depth-only program (sun shadow maps): same vertices, no shading, and the linker drops the
+   *  vertex work that only fed the shading (normals, colours, lights) */
+  depthOnly = false;
+  private depthProg: Program | null = null;
   /** density: fraction of purely decorative roadside objects kept (collidable ones always stay);
    *  woods: deep Forest woodland draw distance factor (0 = not built) */
   constructor(private gl: GL, track: TrackData, private terrain: Terrain, waterY: number, pits = true, density = 1, woods = 0.8) {
@@ -534,7 +543,8 @@ export class Scenery {
 
   draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath, landmarksOnly = false, part = 0): void {
     const gl = this.gl;
-    const p = this.prog.use();
+    if (this.depthOnly && !this.depthProg) this.depthProg = new Program(gl, OBJ_VS, OBJ_DEPTH_FS, 'objects-depth');
+    const p = (this.depthOnly ? this.depthProg! : this.prog).use();
     prep(p);
     p.f('uSCar', sCar).f('uTime', time).v3('uWind', wind).f('uEmisMul', emis);
     const r: number[] = [];
