@@ -468,6 +468,40 @@ the user notes the cache is gone when Edge is closed.)
 - Start-up itself is unchanged in this version. JavaScript set-up before the first frame is about 1.1 s in the
   test container.
 
+## v3.5.1 (2026-11-15) — compile-time experiments in the benchmark
+**Measured with v3.5.0 (and v3.4.3 for comparison)**
+- Target PC, Edge: Admiral average 236.1 fps (Forest 238.6, Mountains 239.8, Night 239.8, Futuristic 226.3);
+  Psycho 213.6. Simulation 0.14 -> 0.04-0.05 ms per frame on Forest.
+- Laptop (Core 5 120U, Intel graphics, Firefox, 1080p), v3.4.3 -> v3.5.0 in the same sitting: simulation per
+  frame Forest 2.05 -> 0.69 ms (Low), 5.15 -> 1.60 (Psycho); Mountains 1.08 -> 0.66; Night 0.90 -> 0.51;
+  Futuristic 0.88 -> 0.55. CPU per frame on Low 2.82 -> 2.20 ms. Frame rates unchanged (the GPU is the limit
+  there): Low 60.0 on every track, High 53.0 average, Admiral 36.4, Psycho 20.4. Start-up 12.8 s (v3.5.0); the
+  v3.4.3 run reported 46.3 s, unexplained.
+  On that laptop "cars, traffic" is by far the largest stage on Psycho (19.6-21.5 ms) and Admiral (8.3-8.9 ms)
+  against 1.9-3.9 ms on High: to look at (the cars' full-detail distance follows the scenery's 450 m).
+- Phone (PowerVR GE8320, 2 GB, Chrome, v3.4.3): Ultra Low 18.0-27.0 fps at 618x270, Low 12.4-18.5. CPU 11-20 ms
+  per frame on Ultra Low, of which simulation 4.9-13.2 ms (before the v3.5.0 fix). MSAA resolve takes 200-500 ms
+  there, so High and Psycho run at 2-4 fps. Start-up 16.8 s. Needs a run with v3.5.0 or later.
+- **Shader compilation, each program from scratch.** PC (Edge): all at once 5.40 s, one after another 11.83 s.
+  Laptop (Firefox): 14.04 s at once, 14.33 s one after another: Firefox does not compile in parallel.
+  PC / laptop, ms: terrain 4643 / 7508, sky 2050 / 2277, terrain-depth 1802 / 1751, blobshadow 831 / 706,
+  car 634 / 541, decals 585 / 520, objects 447 / 359, texgen 295 / 217, road 206 / 150, the rest under 70.
+  Start-up on Edge is therefore the terrain program (it bounds the parallel compile); on Firefox it is the sum.
+  Programs that contain the terrain height function are the slow ones: about 0.6-0.8 s per copy of it
+  (blobshadow and decals have one, the terrain vertex shader three).
+
+**In v3.5.1**
+- `terrNoise` writes the noise out at two places, not three (same values; 0 pixels differ on a circuit and two
+  stage tracks). Expected to cut the compile time of every program with the terrain function; not measured.
+- The benchmark's compile section ends with ten experiments: cut-down variants of the terrain and sky programs
+  (vertex shader alone, fragment shader alone, one point not three, 2 noise octaves, lattice values from a
+  texture, no circuit seam blend, no lighting, no branches around textures; sky with 2 octaves and with a
+  texture). They are compiled and timed, never drawn with. Temporary: to be removed when start-up is settled.
+- Candidate fixes, to be chosen from those numbers: (a) bake the terrain height into a per-track texture (the
+  item dropped in v3.3.0 for frame time comes back for compile time; changes how Mountains is sampled, so needs
+  care); (b) lattice values from a texture; (c) show the menu before the terrain and sky programs are ready
+  (helps where compilation is parallel, i.e. not Firefox).
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

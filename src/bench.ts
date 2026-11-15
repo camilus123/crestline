@@ -50,6 +50,45 @@ const pct = (s: number[], p: number) => (s.length ? s[Math.min(s.length - 1, Mat
 const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
 const f1 = (x: number) => x.toFixed(1), f2 = (x: number) => x.toFixed(2);
 
+/**
+ * Temporary experiments for the start-up work: variants of the terrain and sky programs with one thing cut out
+ * or changed, compiled and timed after the real ones. They are never drawn with. What each takes, against the
+ * whole program, says which part the Direct3D shader compiler spends its seconds on.
+ */
+function compileProbes(): { name: string; vs: string; fs: string }[] {
+  const src = (n: string) => Program.sources.find((x) => x.name === n);
+  const terr = src('terrain'), sky = src('sky');
+  const out: { name: string; vs: string; fs: string }[] = [];
+  const HEAD = '#version 300 es\nprecision highp float;\n';
+  const noFS = HEAD + 'void main(){}';
+  // a variant is only added if every text it changes was found (the sources may have moved on)
+  const sub = (s: string, pairs: [string, string][]): string | null => {
+    for (const [a, b] of pairs) { if (!s.includes(a)) return null; s = s.replace(a, b); }
+    return s;
+  };
+  const add = (name: string, vs: string | null, fs: string | null) => { if (vs && fs) out.push({ name, vs, fs }); };
+  if (terr) {
+    const flatVS = HEAD + 'layout(location=0) in vec3 aRCS;\nout vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge; out vec2 vAlt;\n' +
+      'void main(){ vW=aRCS; vN=aRCS; vSU=aRCS.xy; vOff=aRCS.x; vSlope=aRCS.y; vFlags=aRCS.z; vEdge=aRCS.x; vAlt=aRCS.xy; gl_Position=vec4(aRCS,1.0); }';
+    const OCT: [string, string] = ['for(int i=0;i<4;i++){ s+=a*vnoise(p)', 'for(int i=0;i<2;i++){ s+=a*vnoise(p)'];
+    add('terrain: vertex shader alone', terr.vs, noFS);
+    add('terrain: fragment shader alone', flatVS, terr.fs);
+    add('terrain vertex: one point, not three', sub(terr.vs, [['for (int i = 0; i < 3; i++) {', 'for (int i = 0; i < 1; i++) {']]), noFS);
+    add('terrain vertex: noise of 2 octaves, not 4', sub(terr.vs, [OCT]), noFS);
+    add('terrain vertex: lattice values from a texture', sub(terr.vs, [['float hash2(vec2 p){ return float(hashU(uvec2(ivec2(floor(p)) + 32768))) * (1.0/4294967296.0); }',
+      'uniform sampler2D uProbeN;\nfloat hash2(vec2 p){ return texelFetch(uProbeN, ivec2(floor(p)) & 255, 0).r; }']]), noFS);
+    add('terrain vertex: no circuit seam blend', sub(terr.vs, [['  if (w <= 0.0) return a;\n  float b = fbm(vec2((sm - L)*fr, u*fr));\n  return mix(a, b, w);', '  return a + w;']]), noFS);
+    add('terrain fragment: no lighting', flatVS, sub(terr.fs, [['vec3 col = lightSurf(c, N, vW, rough, spec, ao, shade);', 'vec3 col = c * N.y * rough * (spec + ao + shade);']]));
+    add('terrain fragment: no branches around textures', flatVS, sub(terr.fs, [['if (rock > 0.0 || uGType == 4) {', '{'], ['if (rock > 0.0) { vec4 gr', '{ vec4 gr']]));
+  }
+  if (sky) {
+    add('sky: noise of 2 octaves, not 4', sky.vs, sub(sky.fs, [['for(int i=0;i<4;i++){ s+=a*vnoise(p)', 'for(int i=0;i<2;i++){ s+=a*vnoise(p)']]));
+    add('sky: lattice values from a texture', sky.vs, sub(sky.fs, [['float hash2(vec2 p){ return float(hashU(uvec2(ivec2(floor(p)) + 32768))) * (1.0/4294967296.0); }',
+      'uniform sampler2D uProbeN;\nfloat hash2(vec2 p){ return texelFetch(uProbeN, ivec2(floor(p)) & 255, 0).r; }']]));
+  }
+  return out;
+}
+
 /** the options that differ from the stock preset of the same name, e.g. "msaa 8>4, shadows 4096>0" */
 export function qualityDiff(q: Quality): string {
   const base = QUALITY.find((x) => x.name === q.name.replace(/ \(custom\)$/, ''));
@@ -226,7 +265,7 @@ export class Benchmark {
   }
 
   private finishing = false;
-  private compiles: { each: { name: string; ms: number }[]; together: number } | null = null;
+  private compiles: { each: { name: string; ms: number }[]; together: number; probes: { name: string; ms: number; ok: boolean }[] } | null = null;
   private finish(): void {
     this.restore();
     // last: how long the graphics driver takes over each shader program (what start-up waits for)
@@ -235,7 +274,7 @@ export class Benchmark {
     Program.timeCompiles(this.g.renderer.gl, (i, n) => {
       this.label = `BENCHMARK · timing shader compilation ${i + 1}/${n} (the picture stops for a moment each time, this is normal)`;
       return next();
-    }, () => this.g.renderer.prof.sync()).then((c) => { this.compiles = c; }, () => { /* report without it */ }).then(() => this.done(this.report()));
+    }, () => this.g.renderer.prof.sync(), compileProbes()).then((c) => { this.compiles = c; }, () => { /* report without it */ }).then(() => this.done(this.report()));
   }
 
   private report(): BenchReport {
@@ -317,6 +356,11 @@ export class Benchmark {
       L.push('== Shader compilation (each program built again from scratch, so no cache answers) ==');
       L.push(`all ${c.each.length} programs at once, as at start-up: ${(c.together / 1000).toFixed(2)} s · one after another: ${(sum / 1000).toFixed(2)} s`);
       for (const x of c.each.slice().sort((a, b) => b.ms - a.ms)) L.push(x.name.padEnd(22) + x.ms.toFixed(0).padStart(7) + ' ms');
+      if (c.probes.length) {
+        L.push('');
+        L.push('experiments (temporary): cut-down variants of the slowest programs, to find what the compiler is slow at');
+        for (const x of c.probes) L.push(x.name.padEnd(52) + x.ms.toFixed(0).padStart(7) + ' ms' + (x.ok ? '' : '   (did not link: ignore)'));
+      }
     }
     L.push('');
     L.push('== Presets used ==');
@@ -333,7 +377,7 @@ export class Benchmark {
     const round = (x: number) => Math.round(x * 100) / 100;
     L.push(JSON.stringify({
       v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh), syncMs: Math.round(this.syncMs * 1000) / 1000, stageSource: this.results[0]?.src ?? '',
-      threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), compileMs: this.compiles ? { together: Math.round(this.compiles.together), each: Object.fromEntries(this.compiles.each.map((x) => [x.name, Math.round(x.ms)])) } : null, yours: { name: mine.name, diff: qualityDiff(mine) },
+      threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), compileMs: this.compiles ? { together: Math.round(this.compiles.together), each: Object.fromEntries(this.compiles.each.map((x) => [x.name, Math.round(x.ms)])), probes: Object.fromEntries(this.compiles.probes.map((x) => [x.name, x.ok ? Math.round(x.ms) : -1])) } : null, yours: { name: mine.name, diff: qualityDiff(mine) },
       cases: this.results.map((r) => ({
         track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches,
         warmS: round(r.warm), wholeGpu: round(r.wholeGpu), cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),

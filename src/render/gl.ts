@@ -48,7 +48,8 @@ export class Program {
    * changed comment (so that no cache can answer) and waiting for the result. One program per call of `step`,
    * so the page stays alive. Then all of them at once, which is what start-up does.
    */
-  static async timeCompiles(gl: GL, step: (done: number, of: number) => Promise<void>, drain: () => void): Promise<{ each: { name: string; ms: number }[]; together: number }> {
+  static async timeCompiles(gl: GL, step: (done: number, of: number) => Promise<void>, drain: () => void,
+    probes: { name: string; vs: string; fs: string }[] = []): Promise<{ each: { name: string; ms: number }[]; together: number; probes: { name: string; ms: number; ok: boolean }[] }> {
     const list = Program.sources.slice();
     const nonce = () => `\n// ${Math.random().toString(36).slice(2)} ${performance.now()}\n`;
     const start = (vs: string, fs: string) => {
@@ -64,26 +65,36 @@ export class Program {
       return { p, sh };
     };
     const wait = (x: { p: WebGLProgram; sh: WebGLShader[] }) => {
-      gl.getProgramParameter(x.p, gl.LINK_STATUS); // (blocks until the program is ready)
+      const ok = !!gl.getProgramParameter(x.p, gl.LINK_STATUS); // (blocks until the program is ready)
       for (const s of x.sh) gl.deleteShader(s);
       gl.deleteProgram(x.p);
+      return ok;
     };
     const each: { name: string; ms: number }[] = [];
     for (let i = 0; i < list.length; i++) {
-      await step(i, list.length + 1);
+      await step(i, list.length + 1 + probes.length);
       drain(); // (whatever the game has queued for the GPU must not be counted)
       const t0 = performance.now();
       wait(start(list[i].vs, list[i].fs));
       each.push({ name: list[i].name, ms: performance.now() - t0 });
     }
-    await step(list.length, list.length + 1);
+    const n = list.length + 1 + probes.length;
+    await step(list.length, n);
     drain();
     const t0 = performance.now();
     const all = list.map((x) => start(x.vs, x.fs));
     for (const x of all) wait(x);
     const together = performance.now() - t0;
     Program.sources = list; // (the copies above are not programs of the game)
-    return { each, together };
+    const pr: { name: string; ms: number; ok: boolean }[] = [];
+    for (let i = 0; i < probes.length; i++) {
+      await step(list.length + 1 + i, n);
+      drain();
+      const t1 = performance.now();
+      const ok = wait(start(probes[i].vs, probes[i].fs));
+      pr.push({ name: probes[i].name, ms: performance.now() - t1, ok });
+    }
+    return { each, together, probes: pr };
   }
   /** first use: report compile / link errors, set the fixed sampler units */
   private check(): void {

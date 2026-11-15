@@ -44,15 +44,15 @@ float noiseS(float s){
   return sm;
 }
 float terrNoise(float s, float u, float fr){
-  if (uLoopLen > 0.0) {
-    float L = uLoopLen; float sm = mod(s, L);
-    float w = smoothstep(L - 300.0, L, sm);
-    float a = fbm(vec2(sm*fr, u*fr));
-    if (w <= 0.0) return a;
-    float b = fbm(vec2((sm - L)*fr, u*fr));
-    return mix(a, b, w);
-  }
-  return fbm(vec2(s*fr, u*fr));
+  // (two places where the noise is written out, not three: every one of them is copied into the compiled
+  // shader for every use of this function, and the Direct3D compiler takes seconds over the terrain as it is)
+  float L = uLoopLen;
+  float sm = L > 0.0 ? mod(s, L) : s;
+  float w = L > 0.0 ? smoothstep(L - 300.0, L, sm) : 0.0;
+  float a = fbm(vec2(sm*fr, u*fr));
+  if (w <= 0.0) return a;
+  float b = fbm(vec2((sm - L)*fr, u*fr));
+  return mix(a, b, w);
 }
 // terrain height relative to the road centre at lateral position u (signed), side = sign(u), off = metres beyond edge
 // (mirrored on the CPU in terrain.ts, which places scenery: keep the two in step)
