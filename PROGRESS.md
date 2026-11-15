@@ -564,6 +564,18 @@ the user notes the cache is gone when Edge is closed.)
 - The 240 Hz figures above are the user's measurements on the target hardware (RX 9070, 3440x1440, 240 Hz
   display, vsync on, so 239.8 is the cap). Psycho does not hold it and nothing here claims it does.
 
+## v3.5.4 (2026-11-15) — windsocks and trees no longer shake when gusts build
+User's screenshot: windsocks on a Wind track vibrating very quickly.
+- Cause: the sway was sin(time x speed), and the speed rises with the wind. Any change of speed was therefore
+  multiplied by the whole race time: a gust building over a second, one minute into a race, swung the phase at
+  about 90 rad/s (14 Hz) for as long as the gust was rising or falling. Everything that sways was affected
+  (trees too); the windsocks, with full sway, showed it most. Worse the longer the race had run.
+- Fix: the phase is added up frame by frame on the CPU (`Scenery.windPhase`, uniform `uWindPh`).
+  `tests/windphase.mjs`: on a Wind track, 60 s in, the phase never advances faster than 4.4 rad/s.
+- Also: a gust from the other side flipped the lean of every tree and sock in one frame; the wind's side is now
+  eased over in about a second.
+- Calm tracks are unchanged: Forest at High, 0 pixels differ from v3.5.3.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

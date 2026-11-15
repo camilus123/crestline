@@ -30,6 +30,7 @@ uniform int uBend;     // follow the road's curve along the object's length (kee
 uniform float uFoot;   // model footprint radius (unscaled)
 uniform float uTime;
 uniform vec3 uWind; // dirX (lateral), strength, gust
+uniform float uWindPh; // phase of the main sway, accumulated on the CPU (see Scenery.windPhase)
 out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide; out vec3 vL;
 void main(){
   vL = aPos;
@@ -77,8 +78,8 @@ void main(){
       // wind sway: stronger higher up
       float ph = iSHX.z * 6.28 + p.s * 0.05;
       float w = (0.25 + uWind.y) * aAux.x * (0.02 + 0.012 * lp.y);
-      float g = sin(uTime * (1.6 + uWind.y) + ph) * 0.6 + sin(uTime * 3.7 + ph * 1.7) * 0.25 + uWind.z;
-      lp.x += g * w * lp.y * 0.6 * (uWind.x != 0.0 ? 1.0 : 0.3) + uWind.x * uWind.y * aAux.x * 0.03 * lp.y;
+      float g = sin(uWindPh + ph) * 0.6 + sin(uTime * 3.7 + ph * 1.7) * 0.25 + uWind.z;
+      lp.x += g * w * lp.y * 0.6 * mix(0.3, 1.0, min(abs(uWind.x), 1.0)) + uWind.x * uWind.y * aAux.x * 0.03 * lp.y;
       lp.z += sin(uTime * 2.3 + ph) * w * lp.y * 0.25;
     }
     float r = iSUR.z, c = cos(r), s = sin(r);
@@ -331,6 +332,8 @@ export class Scenery {
   /** draw with the depth-only program (sun shadow maps): same vertices, no shading, and the linker drops the
    *  vertex work that only fed the shading (normals, colours, lights) */
   depthOnly = false;
+  private windPhase = 0;
+  private windT = 0;
   private depthProg: Program | null = null;
   /** density: fraction of purely decorative roadside objects kept (collidable ones always stay);
    *  woods: deep Forest woodland draw distance factor (0 = not built) */
@@ -561,7 +564,14 @@ export class Scenery {
     if (this.depthOnly && !this.depthProg) this.depthProg = new Program(gl, OBJ_VS, OBJ_DEPTH_FS, 'objects-depth');
     const p = (this.depthOnly ? this.depthProg! : this.prog).use();
     prep(p);
-    p.f('uSCar', sCar).f('uTime', time).v3('uWind', wind).f('uEmisMul', emis);
+    // The sway's speed rises with the wind. Its phase must therefore be added up frame by frame: as time x speed
+    // (how it used to be worked out) every change of speed is multiplied by the whole race time so far, and a
+    // gust building a minute into a race shook everything that sways at over ten times a second.
+    if (time !== this.windT) {
+      this.windPhase = (this.windPhase + Math.max(0, Math.min(0.1, time - this.windT)) * (1.6 + wind[1])) % (Math.PI * 2000);
+      this.windT = time;
+    }
+    p.f('uSCar', sCar).f('uTime', time).v3('uWind', wind).f('uWindPh', this.windPhase).f('uEmisMul', emis);
     const r: number[] = [];
     gl.disable(gl.CULL_FACE);
     for (const set of this.sets) {

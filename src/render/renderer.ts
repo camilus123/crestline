@@ -113,6 +113,8 @@ export class Renderer {
   private shadowFB2: WebGLFramebuffer | null = null;
   private shadowVP2 = new Float32Array(16);
   private shadowP2 = [0, 0, 0, 0];
+  private windDir = 1;
+  private windDirT = -1;
   private shadowLive = false;
   private curTarget: { bind(): void } | null = null;
   // scene depth copy for ambient occlusion (Psycho)
@@ -619,7 +621,14 @@ export class Renderer {
         if (a > gust) { gust = a; gustDir = h.a; }
       }
     }
-    const wind = [gustDir, windStr + gust * 1.5, gust * 1.2 * gustDir];
+    // the side the wind comes from is eased over, not switched: a gust from the other side used to flip the lean of
+    // every tree and windsock in a single frame
+    if (F.time !== this.windDirT) {
+      const k = Math.min(1, Math.max(0, F.time - this.windDirT) * 2.5);
+      this.windDir += (gustDir - this.windDir) * (this.windDirT < 0 ? 1 : k);
+      this.windDirT = F.time;
+    }
+    const wind = [this.windDir, windStr + gust * 1.5, gust * 1.2 * this.windDir];
     const emisK = night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25;
 
     // ---------- sun shadow maps (Psycho) ----------
