@@ -8,7 +8,7 @@ generated in code.
 | | |
 |---|---|
 | **Play (stable, v2.0.2)** | https://camilus123.github.io/crestline/ |
-| **This branch** | `v3` (v3.5.5). Build it, or open `dist/crestline.html` from this branch |
+| **This branch** | `v3` (v3.5.6). Build it, or open `dist/crestline.html` from this branch |
 | **Stable branch** | `main` |
 
 ## What's in it

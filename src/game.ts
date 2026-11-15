@@ -506,7 +506,14 @@ export class Game {
     }
   }
 
+  /** One frame. If anything in it throws, the error is still reported but the next frame is scheduled all the same:
+   *  one bad frame must not leave a frozen picture with dead controls on top of it. */
   frame(now: number, forceDt?: number): void {
+    let done = false;
+    try { this.frameBody(now, forceDt); done = true; }
+    finally { if (!done && !this.manual && !this.asleep) requestAnimationFrame((t) => this.frame(t)); }
+  }
+  private frameBody(now: number, forceDt?: number): void {
     const t0 = performance.now();
     const monitor = this.settings.fps || !!this.bench;
     const pf = this.renderer.prof;

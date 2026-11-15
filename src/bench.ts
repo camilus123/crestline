@@ -106,9 +106,12 @@ export class Benchmark {
     this.startCase();
   }
 
-  get phase(): Phase { return PHASES[this.k]; }
+  // (after the last phase of the last case k is one past the end while the shader timing runs: the game still asks
+  // about the phase every frame, and an undefined one here stopped its frame loop on every device without GPU
+  // timers)
+  get phase(): Phase { return PHASES[Math.min(this.k, PHASES.length - 1)]; }
   /** the game must finish the GPU at the end of this frame (whole-frame cost) */
-  get finishFrames(): boolean { return this.phase.id === 'cost'; }
+  get finishFrames(): boolean { return !this.finishing && this.phase.id === 'cost'; }
   /** the game must not touch the render scale (fixed by the test) */
   get holdScale(): boolean { return true; }
 

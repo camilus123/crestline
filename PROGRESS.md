@@ -589,6 +589,22 @@ Shader compilation 0.31 s; start-up 3.8 s. Stage times on this device are unusab
 - Removed the ten temporary compile experiments from the benchmark (the per-program compile times stay).
 - README brought up to v3.5.5.
 
+## v3.5.6 (2026-11-15) — the game no longer freezes after the benchmark where there are no GPU timers
+User's screenshot from the 17T on v3.5.5: benchmark report on screen with the race's touch controls still drawn
+over it, nothing responding. My focus theory for v3.5.5 was wrong.
+- Cause, a bug introduced in v3.5.0: since the shader-compile timing was added, the benchmark object stays alive
+  for some frames after its last phase. Without GPU timers the phase index is then one past the end, the game
+  asks `bench.finishFrames` every frame, and that threw ("Cannot read properties of undefined"). The frame loop
+  never scheduled another frame: frozen picture, and on a phone the race's touch controls stayed on top of the
+  report and swallowed every touch. Affected every browser without GPU timers since v3.5.0 (Firefox on desktop
+  too: there the report worked but the background was frozen until reload). The automated test missed it
+  because the software GPU here has timers.
+- Fix: the phase is clamped and `finishFrames` is false while finishing.
+- The frame loop now schedules the next frame even when a frame throws (the error is still reported).
+- `tests/benchrun.mjs`: `NOTIMERS=1` runs it as a browser without GPU timers, and it fails unless frames are
+  still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
+- The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

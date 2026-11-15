@@ -63,7 +63,8 @@ export class Profiler {
   }
 
   get timerAvailable(): boolean {
-    if (this.ext === undefined) this.ext = this.gl.getExtension('EXT_disjoint_timer_query_webgl2') || null;
+    // (tests can switch the timers off to behave like a browser without them: window.__noGpuTimers)
+    if (this.ext === undefined) this.ext = (globalThis as any).__noGpuTimers ? null : this.gl.getExtension('EXT_disjoint_timer_query_webgl2') || null;
     return !!this.ext;
   }
 
