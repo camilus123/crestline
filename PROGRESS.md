@@ -325,6 +325,27 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
 Then: one benchmark run each in Firefox and Chrome on the target PC. A run on a second device (the "17t") is
 expected from the user with the current v3.1.0 benchmark.
 
+**Image-quality ideas, noted 2026-11-15 (not started; to follow the performance work above)**
+Costs are estimates for the target PC at 3440x1440, not measurements (240 Hz budget: 4.16 ms).
+- Nearly free (do as one batch):
+  - shading baked into the models at load (darker undersides and creases), on every preset;
+  - cloud shadows drifting over the ground (under 0.1 ms);
+  - terrain texturing with larger-scale variation, to break up the repeating wavy pattern on slopes;
+  - haze with depth, so far hills fade towards the sky colour in layers;
+  - trees dissolve between their near and far models instead of switching in one frame;
+  - cars reflect the real sky and clouds instead of a two-colour gradient.
+- Cheap (as options):
+  - post-process anti-aliasing, for use with MSAA off (0.2-0.4 ms);
+  - lighter sun shadows for High and Ultra, cars and nearby objects only (0.5-1 ms);
+  - soft particles that fade where they meet the ground (0.1-0.2 ms);
+  - grass and ground cover along the verges (0.2-0.5 ms).
+- Expensive (Psycho only):
+  - reflections on wet roads (1-1.5 ms);
+  - headlight shadows at night (1 ms or more).
+- Phones: the free batch only; no shadows or reflections on phone presets.
+- Also noted: pick the default preset on touch devices from a short measurement at first start, not a fixed
+  Ultra Low; find why High stutters on the Xiaomi 17T (try it with MSAA off).
+
 **Measured 2026-11-15: Xiaomi 17T (Mali-G720 MC8, 120 Hz), Mi Browser, v3.1.0 benchmark**
 - Low and Ultra Low hold the screen's 120 Hz on all four tracks (119 fps average; 1% lows 45-118 fps).
   First real measurement of the light presets on a phone. Start-up 1.7 s.
