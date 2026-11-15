@@ -418,6 +418,20 @@ the shadow pass was not the cost; the vertex count is.
   Not measured on real hardware yet.
 - Still open on Futuristic: the towers in the main view (scenery 0.99-1.08 ms) have no distance model either.
 
+## v3.4.2 (2026-11-15) — distance model for the city towers
+**Measured with v3.4.1 on the target PC (Edge):** Futuristic vertices 4.66 -> 2.44 M per frame, sun shadow map
+1.23 -> 0.88 ms (Psycho) and 1.47 -> 0.92 ms (Admiral); Admiral on Futuristic 193.3 -> 217.7 fps, Psycho 177.
+Admiral average 233.0 fps: 239.8 on Mountains and Night, 234.8 on Forest (239.8 in the two runs before; its cost
+of 4.9-5.0 ms sits right at the edge), 217.7 on Futuristic. (Start-up read 0.3 s: a reload with shaders cached.)
+- Towers beyond the full-detail distance are drawn with a distance model: each window band is its outward face
+  (6 vertices) in place of a box 6 cm deep (36). Landmark sets could not have a distance model before; one that
+  is placed every frame now shares the instance buffer, and the whole stretch is placed before either part is
+  drawn. The shadow maps use the plain hull for both parts.
+- Software GPU, Futuristic at High: 1,916 k -> 870 k vertices per frame, scenery stage 1,384 -> 741 ms.
+  Picture against v3.4.1: 3-6 % of pixels differ at 480x270, 0.1-0.4 % by more than 8/255, all on towers far
+  down the street (bands seen edge-on, under a pixel wide); side by side at 960x540 the frames look the same.
+  Not measured on real hardware yet.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

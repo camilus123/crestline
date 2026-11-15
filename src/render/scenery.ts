@@ -405,14 +405,16 @@ export class Scenery {
           caster.shareInstances(mesh);
         }
         let far: Mesh | null = null;
-        if (!landmark && lb.vertexCount < mb.vertexCount * 0.8) {
+        // (landmarks keep one model, except the city towers: thousands of them, 2,000 vertices each)
+        if ((!landmark || type === O.TOWER) && lb.vertexCount < mb.vertexCount * 0.8) {
           far = new Mesh(gl, lb.pack(), 32, [
             { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
             { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
             { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
             { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
           ], lb.vertexCount);
-          far.setInstances(data, F * 4, inst);
+          if (adj) far.shareInstances(mesh); // (placed every frame: one buffer for both models)
+          else far.setInstances(data, F * 4, inst);
         }
         let far2: Mesh | null = null;
         const tb = buildFarTree(type, v);
@@ -579,14 +581,20 @@ export class Scenery {
       p.i('uLandmark', set.landmark ? 1 : 0).i('uSpan', set.span ? 1 : 0).i('uRotor', set.rotor ? 1 : 0).i('uBend', set.bend ? 1 : 0).f('uFoot', set.foot);
       const ahead = set.landmark ? maxD + 400 : set.backdrop ? maxD * this.backdropDist : maxD;
       const split = set.far ? Math.min(this.lodDist, ahead) : ahead;
+      if (set.adj && set.far) {
+        // placed landmarks with a distance model: place the whole stretch, then draw it in two parts
+        this.ranges(set, sCar, 60, ahead, loop, r);
+        this.placeLandmarks(set, path, sCar, loop, r);
+      }
       this.ranges(set, sCar, 60, split, loop, r);
-      if (set.adj) this.placeLandmarks(set, path, sCar, loop, r);
+      if (set.adj && !set.far) this.placeLandmarks(set, path, sCar, loop, r);
       const near = this.depthOnly && set.caster ? set.caster : set.mesh;
       for (let k = 0; k < r.length; k += 2) near.drawInstances(r[k], r[k + 1]);
       if (set.far && ahead > split) {
         const split2 = set.far2 ? Math.min(split * 2.2, ahead) : ahead;
         this.ranges(set, sCar, -split, split2, loop, r);
-        for (let k = 0; k < r.length; k += 2) set.far.drawInstances(r[k], r[k + 1]);
+        const farM = this.depthOnly && set.caster ? set.caster : set.far;
+        for (let k = 0; k < r.length; k += 2) farM.drawInstances(r[k], r[k + 1]);
         if (set.far2 && ahead > split2) {
           this.ranges(set, sCar, -split2, ahead, loop, r);
           for (let k = 0; k < r.length; k += 2) set.far2.drawInstances(r[k], r[k + 1]);

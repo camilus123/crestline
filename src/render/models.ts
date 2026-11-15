@@ -246,9 +246,17 @@ const LIB: Partial<Record<O, Builder>> = {
     b.box(0, 0, 0, w, h, w, M('#3e3862', { spec: 0.6, hue: 0.4 }));
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) b.box(sx * w / 2, 0, sz * w / 2, 0.25, h, 0.25, glassLit(sx > 0 ? '#40e8ff' : '#ff50c8', 1.2));
     // window bands
+    // (distance model: each band is its outward face only, 6 vertices in place of a 36-vertex box 6 cm deep)
+    const band = (cx: number, cy: number, cz: number, sx: number, sy: number, sz: number, face: number, mat: Mat) => {
+      if (!b.lod) { b.box(cx, cy, cz, sx, sy, sz, mat); return; }
+      const x0 = cx - sx / 2, x1 = cx + sx / 2, y0 = cy, y1 = cy + sy, z0 = cz - sz / 2, z1 = cz + sz / 2;
+      const P: [number, number, number][] = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+      const f = [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2]][face];
+      b.quad(P[f[0]], P[f[1]], P[f[2]], P[f[3]], mat, [cx, cy + sy / 2, cz]);
+    };
     for (let y = 3; y < h - 2; y += 3.2) {
-      for (const side of [-1, 1]) b.box(side * (w / 2 + 0.03), y, 0, 0.06, 1.3, w * 0.86, glassLit(b.rng.chance(0.5) ? '#7ad8ff' : '#ff8ad8', b.rng.chance(0.65) ? 1.6 : 0.1));
-      b.box(0, y, -w / 2 - 0.03, w * 0.86, 1.3, 0.06, glassLit('#a0e8ff', b.rng.chance(0.6) ? 1.4 : 0.1));
+      for (const side of [-1, 1]) band(side * (w / 2 + 0.03), y, 0, 0.06, 1.3, w * 0.86, side < 0 ? 2 : 3, glassLit(b.rng.chance(0.5) ? '#7ad8ff' : '#ff8ad8', b.rng.chance(0.65) ? 1.6 : 0.1));
+      band(0, y, -w / 2 - 0.03, w * 0.86, 1.3, 0.06, 0, glassLit('#a0e8ff', b.rng.chance(0.6) ? 1.4 : 0.1));
     }
     b.box(0, h, 0, w * 0.6, 3, w * 0.6, dmetal);
     b.cyl(0, h + 3, 0, 0.2, 0.05, 8, 4, metal);
