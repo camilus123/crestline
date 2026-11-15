@@ -702,16 +702,8 @@ export class Renderer {
 
     // ---------- terrain / road / water / rails ----------
     const g = this.ground;
-    pf.begin('terrain');
-    let p = g.terrP.use();
-    prep(p);
-    p.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
-    p.v3('uG0', look.ground[0]).v3('uG1', look.ground[1]).v3('uG2', look.ground[2]).i('uGType', look.groundType);
-    p.v3('uShoulder', look.road.dirt > 0.5 ? look.road.base : look.groundType === 2 ? [0.8, 0.84, 0.9] : look.groundType === 1 ? look.ground[1] : [0.32, 0.3, 0.27]);
-    (this.quality.terrLite ? g.terrLite : g.terr).draw();
-    pf.end();
     pf.begin('road');
-    p = g.roadP.use();
+    let p = g.roadP.use();
     prep(p);
     const rs = look.road;
     p.tex('uAsphalt', this.tex.asphalt, 0).tex('uNoiseT', this.tex.noise, 1);
@@ -723,6 +715,25 @@ export class Renderer {
     if (!tr.circuit) tr.d.checkpoints.forEach((c, i) => { if (i < 11) lines[i + 1] = c; });
     p.v4a('uLines', lines).f('uLoopLen2', loop);
     g.road.draw();
+    pf.end();
+
+    // ---------- scenery ----------
+    pf.begin('scenery');
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path);
+    pf.end();
+
+    // ---------- terrain ----------
+    // Drawn after the road and the scenery: the trees and buildings in front of the ground are already in the depth
+    // buffer, so the terrain's (costly) shading is only worked out for the pixels where ground is actually seen.
+    // (Cars and props still come after the blob shadows and patches on the ground, which would otherwise creep up
+    // their wheels: those are drawn pulled a little towards the camera.)
+    pf.begin('terrain');
+    p = g.terrP.use();
+    prep(p);
+    p.tex('uGround', this.tex.ground, 0).tex('uNoiseT', this.tex.noise, 1);
+    p.v3('uG0', look.ground[0]).v3('uG1', look.ground[1]).v3('uG2', look.ground[2]).i('uGType', look.groundType);
+    p.v3('uShoulder', look.road.dirt > 0.5 ? look.road.base : look.groundType === 2 ? [0.8, 0.84, 0.9] : look.groundType === 1 ? look.ground[1] : [0.32, 0.3, 0.27]);
+    (this.quality.terrLite ? g.terrLite : g.terr).draw();
     pf.end();
     pf.begin('water, rails');
     if (look.terr2[3] > -20) {
@@ -740,6 +751,7 @@ export class Renderer {
     }
     void ROWS;
     pf.end();
+
 
     // ---------- decals and blob shadows ----------
     pf.begin('decals, blob shadows');
@@ -771,13 +783,11 @@ export class Renderer {
       }
     }
     pf.end();
-    pf.begin('scenery');
-    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path);
-    pf.end();
     pf.begin('cars, traffic');
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);
     this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
     pf.end();
+
 
     // ---------- sky ----------
     // Drawn after everything solid, at the far plane with the depth test on, so its (expensive) clouds are only

@@ -275,11 +275,15 @@ void main(){
   // steep slopes become rock
   float rock = smoothstep(0.25, 0.5, vSlope);
   float alt = vAlt.x;
-  float strata = 0.82 + 0.18 * sin(alt * 1.3 + texture(uNoiseT, vec2(u * 0.02, s * 0.02)).r * 6.0);
-  // on steep faces the flat (u, s) mapping stretches into vertical streaks: map rock by (s, altitude) there
+  // the rock colour takes three more texture lookups: only where there is rock (most ground pixels have none)
   float detR = det;
-  if (rock > 0.0) { vec4 gr = texture(uGround, vec2(s + u * 0.35, alt) / 6.0); detR = mix(det, gr.g, smoothstep(0.3, 0.6, vSlope)); }
-  vec3 rockC = vec3(0.23, 0.215, 0.2) * strata * (0.6 + 0.8 * texture(uNoiseT, vec2(u * 0.05, s * 0.05 + alt * 0.05)).r) * (0.8 + 0.4 * detR);
+  vec3 rockC = vec3(0.0);
+  if (rock > 0.0 || uGType == 4) {
+    float strata = 0.82 + 0.18 * sin(alt * 1.3 + texture(uNoiseT, vec2(u * 0.02, s * 0.02)).r * 6.0);
+    // on steep faces the flat (u, s) mapping stretches into vertical streaks: map rock by (s, altitude) there
+    if (rock > 0.0) { vec4 gr = texture(uGround, vec2(s + u * 0.35, alt) / 6.0); detR = mix(det, gr.g, smoothstep(0.3, 0.6, vSlope)); }
+    rockC = vec3(0.23, 0.215, 0.2) * strata * (0.6 + 0.8 * texture(uNoiseT, vec2(u * 0.05, s * 0.05 + alt * 0.05)).r) * (0.8 + 0.4 * detR);
+  }
   float snowM = 0.0;
   if (uGType == 4) {
     // alpine: meadow and scree low down, bare rock higher up and on anything steep, snow above the snow line

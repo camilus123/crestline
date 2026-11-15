@@ -38,6 +38,8 @@ interface CaseResult {
   stages: { name: string; cpu: number; gpu: number }[];
   /** where the stage GPU times came from */
   src: 'timer' | 'sync';
+  /** GPU time of the entire frame from one timer query (-1: not measured) */
+  wholeGpu: number;
   warm: number;
 }
 
@@ -69,6 +71,7 @@ export class Benchmark {
   private verts = 0;
   private stageCpu = new Map<string, number>();
   private stageGpu: Map<string, number> | null = null;
+  private wholeGpu = -1;
   private order: string[] = [];
   private warmIv: number[] = [];
   private warmT = 0;
@@ -126,6 +129,7 @@ export class Benchmark {
     const id = this.phase.id;
     this.t = 0;
     pf.reset();
+    pf.whole = id === 'play';
     pf.mode = id === 'play' ? (pf.timerAvailable ? 'timer' : 'cpu') : id === 'stages' ? 'sync' : 'off';
   }
 
@@ -143,6 +147,7 @@ export class Benchmark {
         pf.flush();
         const m = new Map(pf.order.map((s) => [s, pf.gpuAvg(s)]));
         if ([...m.values()].some((v) => v > 0)) this.stageGpu = m;
+        this.wholeGpu = pf.wholeAvg;
       }
     }
     if (id === 'stages' || (id === 'cost' && this.stageGpu)) {
@@ -161,7 +166,7 @@ export class Benchmark {
         stages: this.stageGpu
           ? this.order.map((n) => ({ name: n, cpu: this.stageCpu.get(n) ?? 0, gpu: n.endsWith('(CPU)') ? -1 : this.stageGpu!.get(n) ?? -1 }))
           : pf.order.map((n) => ({ name: n, cpu: this.stageCpu.get(n) ?? 0, gpu: n.endsWith('(CPU)') ? -1 : Math.max(0, pf.gpuAvg(n) - this.syncMs) })),
-        src: this.stageGpu ? 'timer' : 'sync', warm: this.warmT,
+        src: this.stageGpu ? 'timer' : 'sync', warm: this.warmT, wholeGpu: this.stageGpu ? this.wholeGpu : -1,
       });
     }
   }
@@ -214,6 +219,7 @@ export class Benchmark {
     const R = this.g.renderer;
     R.forceScale = null;
     R.prof.mode = 'off';
+    R.prof.whole = false;
     this.g.benchRestore();
   }
 
@@ -286,6 +292,14 @@ export class Benchmark {
         L.push(n.padEnd(30) + vals.map((v) => (v ? f2(cpuOnly ? v.cpu : Math.max(0, v.gpu)) : '–').padStart(16)).join(''));
       }
       L.push('total of stages'.padEnd(30) + rs.map((r) => f2(r.stages.reduce((a, s) => a + Math.max(0, s.name.endsWith('(CPU)') ? s.cpu : s.gpu), 0)).padStart(16)).join(''));
+      if (rs.some((r) => r.wholeGpu > 0)) {
+        // one query around the whole frame: what it shows beyond the stages is GPU work between them; what the
+        // frame cost shows beyond it is outside the game's drawing (the browser presenting the picture, the page)
+        L.push('GPU stages only'.padEnd(30) + rs.map((r) => f2(r.stages.reduce((a, s) => a + (s.name.endsWith('(CPU)') ? 0 : Math.max(0, s.gpu)), 0)).padStart(16)).join(''));
+        L.push('whole frame, one GPU timer'.padEnd(30) + rs.map((r) => (r.wholeGpu > 0 ? f2(r.wholeGpu) : '–').padStart(16)).join(''));
+        L.push('CPU time in the frame'.padEnd(30) + rs.map((r) => f2(r.cpuMs).padStart(16)).join(''));
+        L.push('frame cost (as measured)'.padEnd(30) + rs.map((r) => f2(r.costMs).padStart(16)).join(''));
+      }
     }
     L.push('');
     L.push('== Presets used ==');
@@ -305,7 +319,7 @@ export class Benchmark {
       threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), yours: { name: mine.name, diff: qualityDiff(mine) },
       cases: this.results.map((r) => ({
         track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches,
-        warmS: round(r.warm), cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),
+        warmS: round(r.warm), wholeGpu: round(r.wholeGpu), cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),
         stages: Object.fromEntries(r.stages.map((s) => [s.name, round(s.name.endsWith('(CPU)') ? s.cpu : Math.max(0, s.gpu))])),
       })),
     }));

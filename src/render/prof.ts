@@ -10,6 +10,7 @@ export const glStats = { calls: 0, instances: 0, verts: 0 };
 
 export type ProfMode = 'off' | 'cpu' | 'timer' | 'sync';
 
+const WHOLE = '\u0000whole';
 interface PendingQuery { q: WebGLQuery; name: string }
 
 export class Profiler {
@@ -19,6 +20,14 @@ export class Profiler {
   gpu = new Map<string, number>();
   gpuFrames = new Map<string, number>();
   frames = 0;
+  /** 'timer' mode: every second frame is timed as a whole with one query in place of the per-stage ones (queries
+   *  cannot overlap), so that the sum of the stages can be compared with the GPU's time for the entire frame */
+  whole = false;
+  wholeMs = 0;
+  wholeN = 0;
+  private wholeNow = false;
+  private wholeQ: WebGLQuery | null = null;
+  private tick = 0;
   calls = 0;
   instances = 0;
   verts = 0;
@@ -63,6 +72,7 @@ export class Profiler {
     this.gpu.clear();
     this.gpuFrames.clear();
     this.frames = 0;
+    this.wholeMs = this.wholeN = 0;
     this.calls = this.instances = this.verts = 0;
     this.order = [];
   }
@@ -70,8 +80,19 @@ export class Profiler {
   frameStart(): void {
     glStats.calls = glStats.instances = glStats.verts = 0;
     if (this.mode === 'timer') this.poll();
+    this.wholeNow = false;
+    if (this.mode === 'timer' && this.whole && this.timerAvailable && this.stack.length === 0 && (this.tick++ & 1)) {
+      this.wholeQ = this.free.pop() ?? this.gl.createQuery();
+      if (this.wholeQ) { this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, this.wholeQ); this.wholeNow = true; }
+    }
   }
   frameEnd(): void {
+    if (this.wholeNow && this.wholeQ) {
+      this.gl.endQuery(this.ext.TIME_ELAPSED_EXT);
+      this.pending.push({ q: this.wholeQ, name: WHOLE });
+      this.wholeQ = null;
+      this.wholeNow = false;
+    }
     if (this.mode === 'off') return;
     this.frames++;
     this.calls += glStats.calls;
@@ -85,7 +106,7 @@ export class Profiler {
     if (!this.order.includes(name)) this.order.push(name);
     if (this.mode === 'sync') this.sync();
     let q: WebGLQuery | null = null;
-    if (this.mode === 'timer' && this.stack.length === 0 && this.timerAvailable) {
+    if (this.mode === 'timer' && !this.wholeNow && this.stack.length === 0 && this.timerAvailable) {
       q = this.free.pop() ?? this.gl.createQuery();
       if (q) this.gl.beginQuery(this.ext.TIME_ELAPSED_EXT, q);
     }
@@ -105,6 +126,7 @@ export class Profiler {
     }
   }
   private addGpu(name: string, ms: number): void {
+    if (name === WHOLE) { this.wholeMs += ms; this.wholeN++; return; }
     this.gpu.set(name, (this.gpu.get(name) ?? 0) + ms);
     this.gpuFrames.set(name, (this.gpuFrames.get(name) ?? 0) + 1);
   }
@@ -126,5 +148,6 @@ export class Profiler {
   }
   /** per-frame averages */
   cpuAvg(name: string): number { return (this.cpu.get(name) ?? 0) / Math.max(1, this.frames); }
+  get wholeAvg(): number { return this.wholeN ? this.wholeMs / this.wholeN : -1; }
   gpuAvg(name: string): number { const n = this.gpuFrames.get(name) ?? 0; return n ? (this.gpu.get(name) ?? 0) / n : -1; }
 }

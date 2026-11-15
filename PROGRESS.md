@@ -331,6 +331,27 @@ Steps 1 and 2 of the "Next work" list below.
 - Start-up time on Windows: 17.6 s on the laptop, 9.3 s (Firefox) and 6.5 s (Edge) on the target PC, 1.7 s on
   the phone. Shader compilation through Direct3D is the suspect.
 
+## v3.3.0 (2026-11-15) — whole-frame GPU timer in the benchmark, terrain shaded only where seen
+- **Benchmark diagnostic for the time no stage accounts for.** With GPU timers, every second frame of the 5 s run
+  is now timed with a single query around the whole frame (queries cannot overlap, so the stages are timed on the
+  other frames). Each track's stage table ends with four lines: GPU stages only, whole frame from one timer, CPU
+  time in the frame, frame cost. Whole frame minus stages = GPU work between the stages; frame cost minus whole
+  frame = outside the game's drawing (presenting, compositing, the read-back). The JSON has `wholeGpu` per case.
+  Not yet run on real hardware: needs one Edge run on the target PC.
+- **Terrain finding (corrects item 4 of the next-work list).** The terrain mesh is 19,600 vertices (9,800 light),
+  so on a real GPU the terrain stage is pixel work, not the per-vertex height noise. Baking the noise into a
+  texture would not have helped the PC or the laptop; that item is dropped.
+- **Terrain is drawn after the scenery** (order now: road, scenery, terrain, water and rails, ground patches and
+  blob shadows, props, cars, sky). Ground pixels behind trees and buildings are no longer shaded. On the
+  software GPU the terrain stage fell 18 % on a Forest frame at High (994 -> 818 ms); real hardware not measured.
+  Picture: 0 pixels differ on Mountains and Night (High). On Forest and Futuristic the lowest pixel row of a tree
+  trunk or building that stands in its own blob shadow is now darkened with the ground (0.2-2 % of pixels at
+  480x270, mostly by under 8/255), because the blob shadows are drawn after the scenery. Not on Psycho (no blob
+  shadows there). Tried and rejected: cars before the terrain as well (blob shadows crept up the wheels), and
+  pushing the ground back in depth instead of pulling the shadows forward (bright lines across the road on
+  Futuristic).
+- The three texture lookups for the rock colour are skipped on pixels without rock (0 pixels differ).
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
@@ -347,13 +368,14 @@ Steps 1 and 2 of the "Next work" list below.
   nothing else is, should recover most of that.
 - Start-up was 10.7 s on Firefox / Windows.
 
-**Next work, agreed 2026-11-15 (not started)**
+**Next work, agreed 2026-11-15** (1 and 2 done in v3.2.0, 4 and part of 6 in v3.3.0)
 1. Benchmark: use GPU timer queries for the stage times where the browser offers them (dropped in the v3.1.0
    rewrite; Chrome usually has them), and fix the three benchmark faults listed above.
 2. Sky: draw it after the opaque scene, only where nothing else was drawn; then consider painting the clouds
    into a smaller texture that is reused across frames.
 3. Shadow pass: depth-only shader, lighter (level-of-detail) models, far cascade updated every few frames.
-4. Terrain: bake the height noise into a texture per track instead of computing it three times per vertex.
+4. ~~Terrain: bake the height noise into a texture~~ dropped in v3.3.0: the mesh is too small for that to be
+   the cost. Done instead: terrain drawn after the scenery, rock lookups skipped where there is no rock.
 5. Night: limit each surface to the street-lamp lights near it instead of looping over all 16 per pixel.
 6. Draw order: near things (cars, road) before far things, so hidden pixels are skipped.
 Then: one benchmark run each in Firefox and Chrome on the target PC. A run on a second device (the "17t") is
