@@ -325,6 +325,17 @@ Developed on the `v3` branch; `main` stays at v2.0.2.
 Then: one benchmark run each in Firefox and Chrome on the target PC. A run on a second device (the "17t") is
 expected from the user with the current v3.1.0 benchmark.
 
+**Measured 2026-11-15: Xiaomi 17T (Mali-G720 MC8, 120 Hz), Mi Browser, v3.1.0 benchmark**
+- Low and Ultra Low hold the screen's 120 Hz on all four tracks (119 fps average; 1% lows 45-118 fps).
+  First real measurement of the light presets on a phone. Start-up 1.7 s.
+- High: 42-68 fps, and not evenly slow: the median frame is still 8.4 ms but p95 is 42-92 ms, with 37-45 long
+  frames per 5 s run. Cause not known (4x MSAA at 1506x558 on a tile-based GPU is the first suspect).
+- Psycho: 13-49 fps.
+- The per-stage table is useless on this phone: every stage reads about 2 ms, including "clear". That is the
+  cost of the read-back used to finish the GPU, the same fault as on Firefox, only larger.
+- Ultra Low (the default on touch devices) renders 564x209 here, far below what the phone can afford; Low at
+  752x278 also holds 120 fps. The touch default should be picked from a short measurement, not fixed.
+
 ## Known issues / not verified
 - **Mountains has known visual issues that are staying.** The world is a strip of terrain about 800 m either side
   of the road, bent each frame so the road ahead straightens, with a painted sky behind. On flat scenarios the
