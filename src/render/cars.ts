@@ -81,34 +81,51 @@ void main(){
   vec3 base = vCol.rgb * vCol.rgb;
   vec3 col;
   vec3 emis = vec3(0.0);
+  // What the material is to the lighting, chosen first; then ONE lighting call for the pixel. Each material used
+  // to call the lighting itself, and a shader compiler turns such a chain of branches into "work out all of them,
+  // keep one": eight copies of the sun-shadow lookups and the lamp loop on every pixel of every car.
+  vec3 alb = vec3(0.0);
+  float rough = 0.5, spec = 0.5, ao = 1.0;
+  bool lit = true;
   if (m == 0 || m == 1) {
-    vec3 paint = m == 0 ? uPaint : uAccent;
     float flake = (hash2(floor(vL.xz * 900.0) + floor(vL.y * 900.0)) - 0.5) * 0.08;
-    vec3 diff = lightSurf(paint * (1.0 + flake), N, vW, 0.38, 0.45, 1.0, 1.0);
+    alb = (m == 0 ? uPaint : uAccent) * (1.0 + flake); rough = 0.38; spec = 0.45;
+  } else if (m == 2) { alb = vec3(0.02); rough = 0.05; spec = 1.5; }
+  else if (m == 3) { alb = vec3(0.3); rough = 0.1; spec = 1.2; }
+  else if (m == 4 || m == 9) {
+    float weave = m == 9 ? 0.5 + 0.5 * step(0.5, fract((vL.x + vL.z) * 40.0)) : 1.0;
+    alb = base * (0.7 + 0.3 * weave);
+  } else if (m == 5) { alb = vec3(0.42, 0.02, 0.02); rough = 0.15; spec = 1.2; }
+  else if (m == 7) { alb = base; rough = 0.9; spec = 0.1; ao = 0.9; }
+  else if (m == 8) { alb = base; rough = 0.25; spec = 1.0; }
+  else if (m == 10) { alb = vec3(0.5, 0.22, 0.02); rough = 0.15; spec = 1.2; }
+  else lit = false;
+  vec3 L = vec3(0.0);
+  if (lit) L = lightSurf(alb, N, vW, rough, spec, ao, 1.0);
+  if (m == 0 || m == 1) {
     float coat = 0.04 + 0.96 * fres;
-    col = diff + env(R) * coat * 0.38 + lampSpill(paint);
+    col = L + env(R) * coat * 0.38 + lampSpill(m == 0 ? uPaint : uAccent);
   } else if (m == 2) {
     col = vec3(0.01, 0.012, 0.016) + env(R) * (0.12 + 0.88 * fres) * 0.9;
-    col += lightSurf(vec3(0.02), N, vW, 0.05, 1.5, 1.0, 1.0) * 0.5;
+    col += L * 0.5;
   } else if (m == 3) {
-    col = env(R) * 0.85 * vec3(0.95, 0.96, 1.0) + lightSurf(vec3(0.3), N, vW, 0.1, 1.2, 1.0, 1.0) * 0.3;
+    col = env(R) * 0.85 * vec3(0.95, 0.96, 1.0) + L * 0.3;
   } else if (m == 4 || m == 9) {
-    float weave = m == 9 ? 0.5 + 0.5 * step(0.5, fract((vL.x + vL.z) * 40.0)) : 1.0;
-    col = lightSurf(base * (0.7 + 0.3 * weave), N, vW, 0.5, 0.5, 1.0, 1.0) + env(R) * fres * 0.15 + lampSpill(vec3(0.12));
+    col = L + env(R) * fres * 0.15 + lampSpill(vec3(0.12));
   } else if (m == 5) {
     // red lens: reads as red even when unlit; tail lights glow, brake lights flare
-    col = lightSurf(vec3(0.42, 0.02, 0.02), N, vW, 0.15, 1.2, 1.0, 1.0) + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.35, 0.35);
+    col = L + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.35, 0.35);
     float inner = 0.75 + 0.25 * smoothstep(0.02, 0.0, abs(fract(vL.x * 9.0) - 0.5) - 0.42); // lamp segments
     emis = vec3(1.0, 0.05, 0.025) * (0.9 * uTail + 3.2 * uBrake) * inner;
   } else if (m == 6) {
     col = vec3(0.6) * 0.1 + env(R) * (0.2 + fres) * 0.6;
     emis = vec3(1.0, 0.95, 0.85) * (0.15 + uLights * 7.0);
   } else if (m == 7) {
-    col = lightSurf(base, N, vW, 0.9, 0.1, 0.9, 1.0);
+    col = L;
   } else if (m == 8) {
-    col = lightSurf(base, N, vW, 0.25, 1.0, 1.0, 1.0) + env(R) * 0.35 * (base.r + 0.2);
+    col = L + env(R) * 0.35 * (base.r + 0.2);
   } else if (m == 10) {
-    col = lightSurf(vec3(0.5, 0.22, 0.02), N, vW, 0.15, 1.2, 1.0, 1.0) + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.6, 0.3);
+    col = L + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.6, 0.3);
     emis = vec3(1.0, 0.45, 0.05) * 0.06;
   } else if (m == 11) {
     col = vec3(0.0); emis = uNeonC * 2.0;

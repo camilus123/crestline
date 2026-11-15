@@ -526,6 +526,30 @@ the user notes the cache is gone when Edge is closed.)
   "cars, traffic" was 0.45-0.91 ms on the PC (0.14-0.15 on High) and 8-21 ms on the laptop. High and below are
   unchanged (60 m and less). Not measured yet.
 
+## v3.5.3 (2026-11-15) — one lighting call per car pixel
+**Measured with v3.5.2 on the target PC**
+- Shader compilation, Edge: terrain 2768 -> 1631 ms, sky 2083 -> 1212, terrain-depth 1136 -> 664; all at once
+  3.47 -> 1.93 s; start-up 2.3 s (5.4-6.5 s before v3.5.1). Firefox: 9.11 -> 5.87 s at once, start-up 5.5 s
+  (8.2). The four-wide hash gives the same picture and cut the two slow programs by about 40 %.
+- Lattice values from a texture would still take the terrain vertex shader from 675 to 230 ms and the sky from
+  1212 to 424 ms. Not taken: it changes the shape of the ground on every track. Open for the sky alone.
+- Admiral, Edge: Forest 239.8, Mountains 239.8, Night 239.8, Futuristic 231.6; average 237.8 (user: "super close
+  to hitting 239-240 average on all tests"). Psycho 212.9. Firefox: Admiral 232.9.
+- **The 80 m car model change of v3.5.2 gained nothing**: cars, traffic 0.44 / 0.71 / 0.48 / 0.54 ms on Admiral
+  as before, vertices down by 0.01 M. The cars' cost was not their geometry.
+
+**In v3.5.3**
+- Cause: the car fragment shader called the lighting function in eight material branches (paint, glass, chrome,
+  trim, lenses, ...). Compilers flatten such a chain, so every car pixel paid for eight sets of sun-shadow
+  lookups (16 taps each) and eight passes over the lamp list. That fits what was measured: cars cost 3-5x more
+  with sun shadows on (0.15 -> 0.44-0.91 ms on the PC, 2 -> 8-21 ms on the laptop) and 0.49 ms on Night even
+  on High. Now the branch only picks the material's values and the lighting is called once.
+  0 pixels differ (Forest, Night, Futuristic; Mountains with a shadow map on). On the software GPU the cars
+  stage on Night at High went from 319 to 160 ms in one noisy run. Not measured on real hardware yet.
+- The 80 m limit on the full car model stays (harmless, slightly fewer vertices).
+- Same pattern, not changed: the ground-patch shader (decals) calls the lighting in seven branches; it covers
+  few pixels, but it is one of the slower programs to compile (546 ms).
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
