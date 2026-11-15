@@ -1,0 +1,22 @@
+// Window loses focus: drawing stops after a few frames; focus again: it resumes.
+import { createRequire } from 'node:module'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const { chromium } = createRequire(root + '/')('playwright');
+const br = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await br.newPage({ viewport: { width: 160, height: 90 } });
+const errors = []; p.on('pageerror', (e) => errors.push(String(e)));
+await p.goto('file://' + path.join(root, 'dist/crestline.html') + '?q=0', { waitUntil: 'commit' });
+await p.waitForTimeout(4000);
+const count = async (ms) => p.evaluate(async (ms) => { const g = window.__crest; let n = 0; const f = g.frame.bind(g); g.frame = (...a) => { n++; return f(...a); }; await new Promise((r) => setTimeout(r, ms)); g.frame = f; return n; }, ms);
+const before = await count(1500);
+await p.evaluate(() => window.dispatchEvent(new Event('blur')));
+await p.waitForTimeout(1500);
+const asleep = await p.evaluate(() => window.__crest.asleep);
+const during = await count(1500);
+await p.evaluate(() => window.dispatchEvent(new Event('focus')));
+await p.waitForTimeout(500);
+const after = await count(1500);
+const awake = await p.evaluate(() => !window.__crest.asleep);
+console.log(JSON.stringify({ before, asleep, during, after, awake, errors }));
+await br.close();
+if (!(before > 0 && asleep && during === 0 && after > 0 && awake && !errors.length)) process.exit(1);

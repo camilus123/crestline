@@ -19,6 +19,41 @@ const glassLit = (h = '#ffd890', e = 1): Mat => ({ c: hex(h), spec: 0.4, emis: e
 
 type Builder = (b: MB) => void;
 
+/**
+ * One tier of a conifer: a jittered cone, and (snowy trees) a band of snow lying ON it. The snow is cut from the
+ * tier's own surface, pushed out a few centimetres, so it can never poke through this tier or the skirt of the
+ * one above. (It used to be a separate, separately jittered cone inside the tree: stray white facets showed
+ * wherever it happened to stick out.) `f1` is how far up the tier the snow reaches: 1 on the top tier (white
+ * tip), about half way elsewhere, where the next tier's skirt covers the rest.
+ */
+function coniferTier(b: MB, y: number, rr: number, hh: number, segs: number, r1: number, jit: number, mat: Mat, snow: Mat | null, f1: number, caps: boolean): void {
+  const ring = (r: number, yy: number): V3[] => {
+    const out: V3[] = [];
+    for (let i = 0; i < segs; i++) {
+      const a = (i / segs) * Math.PI * 2;
+      const j = 1 + (b.rng.float() - 0.5) * jit;
+      out.push([Math.cos(a) * r * j, yy, Math.sin(a) * r * j]);
+    }
+    return out;
+  };
+  const A = ring(rr, y), B = ring(r1, y + hh);
+  const ctr: V3 = [0, y + hh / 2, 0];
+  for (let i = 0; i < segs; i++) {
+    const j = (i + 1) % segs;
+    if (r1 > 1e-4) b.quad(A[i], A[j], B[j], B[i], mat, ctr);
+    else b.tri(A[i], A[j], B[i], mat, ctr);
+  }
+  if (caps) for (let i = 1; i < segs - 1; i++) b.tri(A[0], A[i], A[i + 1], mat, ctr);
+  if (!snow) return;
+  const f0 = 0.22, out = 1.05, lift = 0.02 * hh;
+  const at = (i: number, f: number): V3 => [(A[i][0] + (B[i][0] - A[i][0]) * f) * out, y + hh * f + lift, (A[i][2] + (B[i][2] - A[i][2]) * f) * out];
+  for (let i = 0; i < segs; i++) {
+    const j = (i + 1) % segs;
+    if (f1 < 1 || r1 > 1e-4) b.quad(at(i, f0), at(j, f0), at(j, f1), at(i, f1), snow, ctr);
+    else b.tri(at(i, f0), at(j, f0), at(i, 1), snow, ctr);
+  }
+}
+
 function conifer(b: MB, col: string, snow = false, h = 9, tiers = 4, r = 2.6): void {
   h *= 0.85 + b.rng.float() * 0.35;
   r *= 0.85 + b.rng.float() * 0.3;
@@ -28,8 +63,10 @@ function conifer(b: MB, col: string, snow = false, h = 9, tiers = 4, r = 2.6): v
     const t = i / tiers;
     const y = h * (0.18 + t * 0.62);
     const rr = r * (1 - t * 0.72);
-    b.cyl(0, y, 0, rr, 0.05, h * 0.36, 8, leaf(col, 0.3 + t * 0.6), true, 0.18);
-    if (snow) b.cyl(0, y + h * 0.12, 0, rr * 0.72, 0.04, h * 0.25, 8, { c: hex('#f4f8ff'), spec: 0.3, sway: 0.3 + t * 0.6, hue: 0 }, true, 0.2);
+    const white: Mat | null = snow ? { c: hex('#f4f8ff'), spec: 0.3, sway: 0.3 + t * 0.6, hue: 0 } : null;
+    coniferTier(b, y, rr, h * 0.36, 8, 0.05, 0.18, leaf(col, 0.3 + t * 0.6), white, i === tiers - 1 ? 1 : 0.5, !b.lod);
+    // (the old snow cone drew 16 random numbers here: draw them still, so every tree keeps the shape it had)
+    if (snow) for (let k = 0; k < 16; k++) b.rng.float();
   }
 }
 
@@ -629,8 +666,7 @@ export function buildFarTree(type: number, variant = 0): MB {
     for (let i = 0; i < 3; i++) {
       const t = i / 3;
       const y = h * (0.16 + t * 0.56), rr = rad * (1 - t * 0.6);
-      b.cyl(0, y, 0, rr, 0, h * (i === 2 ? 0.5 : 0.42), 6, leaf(col, 0.3 + t * 0.6), false, 0.15);
-      if (snow) b.cyl(0, y + h * 0.14, 0, rr * 0.7, 0, h * 0.3, 5, { c: hex('#f4f8ff'), spec: 0.3, sway: 0.3 + t * 0.6, hue: 0 }, false);
+      coniferTier(b, y, rr, h * (i === 2 ? 0.5 : 0.42), 6, 0, 0.15, leaf(col, 0.3 + t * 0.6), snow ? { c: hex('#f4f8ff'), spec: 0.3, sway: 0.3 + t * 0.6, hue: 0 } : null, i === 2 ? 1 : 0.55, false);
     }
   };
   const farBroad = (cols: string[], h: number, spread: number, trunk: Mat = bark, tw = 0.4) => {

@@ -78,6 +78,9 @@ export class Game {
   last = 0;
   time = 0;
   paused = false;
+  /** frames still to draw before going to sleep (window lost focus), and whether drawing has stopped */
+  private sleepIn = 0;
+  asleep = false;
   manual = false;
   frameTimes: number[] = [];
   f3: HTMLDivElement;
@@ -143,7 +146,14 @@ export class Game {
         this.toggleFullscreen();
       }
     };
-    window.addEventListener('blur', () => { if (!this.bench) this.setPaused(true, true); });
+    // Window not in focus: pause, draw a few more frames (so the pause menu is on the picture), then stop
+    // drawing altogether until the window has focus again. The last picture stays on screen; the GPU idles.
+    // (Not during the benchmark, which must run to its end.)
+    window.addEventListener('blur', () => { if (!this.bench) { this.setPaused(true, true); this.sleepIn = 4; } });
+    window.addEventListener('focus', () => {
+      this.sleepIn = 0;
+      if (this.asleep) { this.asleep = false; this.last = 0; if (!this.manual) requestAnimationFrame((t) => this.frame(t)); }
+    });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.setPaused(true, true);
     });
@@ -604,6 +614,7 @@ export class Game {
       b.frame(raw, performance.now() - t0);
       if (this.benchEl) this.benchEl.textContent = b.label;
     }
+    if (this.sleepIn > 0 && !this.bench && --this.sleepIn === 0) { this.asleep = true; return; }
     if (!this.manual) requestAnimationFrame((t) => this.frame(t));
   }
 

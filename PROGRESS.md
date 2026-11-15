@@ -432,6 +432,20 @@ of 4.9-5.0 ms sits right at the edge), 217.7 on Futuristic. (Start-up read 0.3 s
   down the street (bands seen edge-on, under a pixel wide); side by side at 960x540 the frames look the same.
   Not measured on real hardware yet.
 
+## v3.4.3 (2026-11-15) — snow on firs fixed, no drawing while the window is out of focus
+**Measured with v3.4.2 on the target PC (Edge):** Futuristic vertices 2.44 -> 1.53 M (Admiral, Psycho) and
+1.91 -> 0.87 M (High); scenery stage 1.06 -> 0.98 ms (Admiral), 0.72 -> 0.62 ms (High): the towers' cost in the
+main view is mostly pixels, not vertices. Admiral: Forest 235.2, Mountains 239.8, Night 239.8, Futuristic 221.3
+fps (217.7 in v3.4.1); average 234.0. Psycho average 210.8. (Start-up 0.2 s is with Edge's shader cache warm;
+the user notes the cache is gone when Edge is closed.)
+- **Snow on firs** (user's screenshot: stray white facets on the tiers). The snow was a separate cone inside each
+  tier with its own random jitter, so facets of it stuck out wherever the two jitters disagreed. It is now a band
+  cut from the tier's own surface and pushed out 5 %, reaching half way up the tier (to the tip on the top tier),
+  in the full, lighter and distance models. Tree shapes are unchanged (same random numbers). The trees carry
+  visibly more snow than before: a clean white band on every tier.
+- **Window out of focus:** the game already paused; it now also stops drawing after four more frames and starts
+  again on focus (`tests/sleep.mjs`: 0 frames while out of focus). Not during the benchmark.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
