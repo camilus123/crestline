@@ -6,7 +6,7 @@ import { hashString, Rng } from '../core/rng';
 import { TrackData } from '../track/generator';
 import { GL, Mesh, Program } from './gl';
 import { LIGHT, NOISE, PATH, PRELUDE } from './glsl';
-import { buildFarTree, buildCaster, buildModel, LAMPS, LANDMARK, SPANNING } from './models';
+import { buildFarTree, buildCaster, buildModel, LAMPS, LAMP_HEAD, LANDMARK, SPANNING } from './models';
 import { LandmarkPlacer } from './landmarks';
 import { BentPath } from './path';
 import { Terrain } from './terrain';
@@ -387,8 +387,11 @@ export class Scenery {
           data[k * F + 6] = u;
           data[k * F + 8] = span ? 0 : this.terrain.h(o.s[i], u);
           ss[k] = o.s[i];
-          // the lamp head: at the end of the arm (1.7 m, or 2.5 m on the tall double lamps), just under it
-          if (v === 0 && LAMPS.has(type)) this.lamps.push({ s: o.s[i], u: o.u[i] - Math.sign(o.u[i]) * (type === O.LAMP_DOUBLE ? 2.5 : 1.7) * o.scale[i], h: (type === O.LAMP_DOUBLE ? 10.13 : 7.13) * o.scale[i], type });
+          // the lamp head: at the end of the arm, just under it (per model: LAMP_HEAD)
+          if (v === 0 && LAMPS.has(type)) {
+            const hd = LAMP_HEAD[type] ?? [1.7, 7.08];
+            this.lamps.push({ s: o.s[i], u: o.u[i] - Math.sign(o.u[i]) * hd[0] * o.scale[i], h: (hd[1] + 0.05) * o.scale[i], type });
+          }
         });
         const inst = [
           { loc: 4, size: 3, type: gl.FLOAT, offset: 0 },

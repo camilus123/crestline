@@ -605,6 +605,16 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.5.7 (2026-11-15) — Futuristic: pylon glows on the lamps, no light patches on the road (on `v3`, not yet on `main`)
+User's screenshot of Futuristic: lamp glows floating above the pylons; and a request to remove the light patches
+on the street there ("it looks wrong and the track looked better before that got there").
+- The glow position was written for the street lamp (light 7.1 m up, 1.7 m out) and used for every lamp model.
+  The neon pylon's light is 5.9 m up: its glow hung 1.2 m above it. Each model now has its own entry
+  (`LAMP_HEAD` in models.ts, beside the models).
+- The pools of light painted on the road under distant lamps (added in v3.0.x for Night) are no longer drawn on
+  Futuristic, only where there is street lighting. Night is unchanged (0 pixels differ at High).
+- Not checked by eye here: the glows are faint at the time of day the test frame used.
+
 **Released 2026-11-15: v3.5.6.** The user confirmed the benchmark no longer freezes on the 17T ("It worked now")
 and said "go": `main` was fast-forwarded from v2.0.2 to v3.5.6 and is what the play link serves. The tag and the
 GitHub release entry are the user's to create (tag pushes are refused from this session). Not finished: see the

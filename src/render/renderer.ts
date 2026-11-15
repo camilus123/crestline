@@ -853,7 +853,9 @@ export class Renderer {
       // The nearest lamps light the ground properly (point lights). Beyond them each lamp gets a pool of light
       // painted on the road under it: a flat ellipse, as a 9 m circle on the ground looks from the driver's
       // seat, so the street reads as lit all the way down instead of going dark past the last real light.
-      for (let i = plN; i < far.length; i++) {
+      // (Not on Futuristic: its pylons are neon signs, not street lighting, and pale patches on the pink road
+      // under every one of them looked wrong.)
+      for (let i = look.streetLights ? plN : far.length; i < far.length; i++) {
         const l = far[i];
         const g = path.pos(l.d, l.u * 0.55, 0, [0, 0, 0, 0]);
         const dist = Math.hypot(g[0] - eye[0], g[2] - eye[2]);

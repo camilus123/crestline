@@ -627,6 +627,14 @@ export const LANDMARK = new Set<number>([O.MAST, O.PEAK, O.MESA, O.SPIRE, O.CRAN
 export const SPANNING = new Set<number>([O.ARCH, O.GANTRY, O.HOLO_ARCH, O.OVERPASS]);
 /** lamps that light the road at night */
 export const LAMPS = new Set<number>([O.LAMP, O.LAMP_DOUBLE, O.NEON_PYLON, O.LIGHT_TOWER]);
+/** where the light of each lamp model is: [reach towards the road, height], metres at scale 1. Glows and lamp
+ *  lights are put there, so keep it in step with the models above. */
+export const LAMP_HEAD: Record<number, [number, number]> = {
+  [O.LAMP]: [1.7, 7.08],
+  [O.LAMP_DOUBLE]: [2.5, 10.08],
+  [O.NEON_PYLON]: [1.6, 5.93],  // the pink strip under the arm (it was given the street lamp's 7.1 m: glows hung in the air above it)
+  [O.LIGHT_TOWER]: [0, 7.5],
+};
 
 export function buildModel(type: number, variant = 0, lod = false): MB {
   const b = new MB(type * 131 + variant * 7 + 1);
