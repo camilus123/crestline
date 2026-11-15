@@ -346,6 +346,26 @@ Costs are estimates for the target PC at 3440x1440, not measurements (240 Hz bud
 - Also noted: pick the default preset on touch devices from a short measurement at first start, not a fixed
   Ultra Low; find why High stutters on the Xiaomi 17T (try it with MSAA off).
 
+**Frame generation and fuller lighting, noted 2026-11-15 (ideas, not started; costs are estimates)**
+- Frame generation by reprojection, not interpolation. Interpolation needs the next real frame, so it adds a
+  frame of lag (about 8 ms at 120 fps). Reprojection shifts the last real frame to the current camera using
+  the depth buffer and adds none.
+  - Cars are redrawn properly on every generated frame (they move with the camera and would smear); the HUD is
+    separate already.
+  - Gaps uncovered behind near objects are filled by stretching neighbours; how visible they are is unknown
+    until it runs.
+  - Estimated about 1 ms per generated frame against 5-8 ms for a real one: 120 real frames shown as 240.
+    Handling still updates at the real rate.
+- Lighting that is convincing for nearly everything (ray tracing is not available to a web page):
+  - headlight shadows, a small shadow map per headlight pair (about 1 ms);
+  - road and water reflections by drawing the scene mirrored at half size (1-2 ms);
+  - car paint reflecting a small all-round snapshot of the surroundings, refreshed gradually (about 0.5 ms);
+  - street-lamp shadows are too expensive (16 lights): fake soft pools instead;
+  - bounced light is not feasible: ambient occlusion and sky light stand in.
+  - Together roughly 4-6 ms more per frame on the target PC, about 100-130 real fps.
+- The two fit together as a "Psycho+" mode: full effects at about 120 real frames, shown at 240 by reprojection.
+- Limit that stays: the world is bent, so distant shadows and reflections can drift in long bends.
+
 **Measured 2026-11-15: Xiaomi 17T (Mali-G720 MC8, 120 Hz), Mi Browser, v3.1.0 benchmark**
 - Low and Ultra Low hold the screen's 120 Hz on all four tracks (119 fps average; 1% lows 45-118 fps).
   First real measurement of the light presets on a phone. Start-up 1.7 s.
