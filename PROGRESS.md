@@ -605,6 +605,12 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+**Released 2026-11-15: v3.5.6.** The user confirmed the benchmark no longer freezes on the 17T ("It worked now")
+and said "go": `main` was fast-forwarded from v2.0.2 to v3.5.6 and is what the play link serves. The tag and the
+GitHub release entry are the user's to create (tag pushes are refused from this session). Not finished: see the
+known issues in the README (Mountains edge artefacts, Desert dunes in bends, stutter above Low on some phones,
+unconfirmed Brave glitches) and the to-do lists below.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

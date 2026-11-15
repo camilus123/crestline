@@ -7,9 +7,8 @@ generated in code.
 
 | | |
 |---|---|
-| **Play (stable, v2.0.2)** | https://camilus123.github.io/crestline/ |
-| **This branch** | `v3` (v3.5.6). Build it, or open `dist/crestline.html` from this branch |
-| **Stable branch** | `main` |
+| **Play** | https://camilus123.github.io/crestline/ (v3.5.6) |
+| **Branches** | `main` is the released version; `v3` is where development continues |
 
 ## What's in it
 
@@ -64,10 +63,8 @@ node tests/benchrun.mjs 128x72   # the benchmark end to end (cut-down suite)
 
 ## Branches
 
-- `main`: v2.0.2, the version served by the play link above.
-- `v3`: rebuilt Mountains terrain, woodland beyond the roadside on every scenario with trees, a second shadow
-  cascade, level-of-detail models, touch-friendly car selection, the fixed benchmark suite and individual
-  graphics options.
+- `main`: the released version (v3.5.6), served by the play link above.
+- `v3`: where development continues. v2.0.2, the previous release, is in the history of `main`.
 
 `PROGRESS.md` is the full change history, including what was measured and what was not.
 
