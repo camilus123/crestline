@@ -107,6 +107,8 @@ export class AIDriver {
   private wobble = 0;
   private wobT = 0;
   private hz: Hazard[] = [];
+  private nearC: Car[] = [];
+  private nearD: number[] = [];
   private blockX = 0;
   out: CarInput = { steer: 0, throttle: 0, brake: 0, shiftUp: false, shiftDown: false, digitalSteer: false };
   constructor(car: Car, plan: SpeedPlan, prof: AIProfile) {
@@ -142,7 +144,8 @@ export class AIDriver {
     // cars arriving or leaving use the inner half, so they pass cars that are still filling.
     let pitting = false, inStrip = false;
     // the race's advice is re-read every step; a stop decided for one strip never carries over to the next
-    const onStrip = d.pits.some((pz) => track.delta(s, pz.s0) <= 0 && track.delta(s, pz.s1) > 0);
+    let onStrip = false;
+    for (let q = 0; q < d.pits.length && !onStrip; q++) onStrip = track.delta(s, d.pits[q].s0) <= 0 && track.delta(s, d.pits[q].s1) > 0;
     if (pitNeed > 0) {
       if (this.pitTarget === 0 && car.fuel + 0.02 < pitNeed) this.pitTarget = Math.min(1, pitNeed + 0.03);
     } else if (!onStrip) this.pitTarget = 0;
@@ -210,11 +213,22 @@ export class AIDriver {
     const trafficClose = motor && trafficNear(track, s, traffic, 200);
     let bestX = xT, bestCost = Infinity, bestBlock: Car | null = null;
     const N = 22;
+    // the cars near enough to matter, found once: how far ahead a car is does not depend on the lane being scored
+    // (this loop used to work that out again for each of the 24 lanes: about 8,700 times per simulation step)
+    const nearC = this.nearC, nearD = this.nearD;
+    let nn = 0;
+    for (const o of cars) {
+      if (o === car) continue;
+      const ds = track.delta(s, o.s);
+      if (ds < -5 || ds > 48) continue;
+      nearC[nn] = o;
+      nearD[nn++] = ds;
+    }
     for (let k = 0; k <= N + 1; k++) {
       if (inStrip && k !== N + 1) continue; // in the pit lane: keep the pit line, only watch the car ahead in it
       const x = k === N + 1 ? xT : lo + ((hi - lo) * k) / N;
       let cost = Math.abs(x - xT) * 0.4 + Math.abs(x - car.x) * 0.12;
-      let block: Car | null = null;
+      let block: Car | null = null, blockD = 0;
       for (const h of hz) {
         if (!AVOID.has(h.kind)) continue;
         const must = MUST_AVOID.has(h.kind);
@@ -224,16 +238,14 @@ export class AIDriver {
           cost += must ? 400 : h.kind === Hz.OIL || h.kind === Hz.ICE ? 9 : 4 * (1 - Math.max(0, ds) / ahead);
         }
       }
-      for (const o of cars) {
-        if (o === car) continue;
-        const ds = track.delta(s, o.s);
-        if (ds < -5 || ds > 48) continue;
+      for (let q = 0; q < nn; q++) {
+        const o = nearC[q], ds = nearD[q];
         if (Math.abs(x - o.x) > 2.3) continue;
         if (ds < 4.6) cost += 40; // alongside
         else {
           const closing = v - o.v;
           cost += (closing > -1 ? 7 + closing * 0.8 : 1.5) * (1 - ds / 48);
-          if (!block || ds < track.delta(s, block.s)) block = o;
+          if (!block || ds < blockD) { block = o; blockD = ds; }
         }
       }
       if (motor && x < 0.8) cost += trafficClose ? 300 : 2.5;
@@ -243,6 +255,7 @@ export class AIDriver {
         bestBlock = block;
       }
     }
+    for (let q = 0; q < nn; q++) nearC[q] = null as unknown as Car; // (hold no cars between steps)
     xT = bestX;
     if (bestBlock) {
       const ds = track.delta(s, bestBlock.s);

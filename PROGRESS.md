@@ -446,6 +446,28 @@ the user notes the cache is gone when Edge is closed.)
 - **Window out of focus:** the game already paused; it now also stops drawing after four more frames and starts
   again on focus (`tests/sleep.mjs`: 0 frames while out of focus). Not during the benchmark.
 
+## v3.5.0 (2026-11-15) — simulation 3-4x cheaper on circuits, programs compiled once, compile times in the benchmark
+- **Simulation cost** (`tests/simcost.mjs`, software-GPU container, microseconds per 1/120 s step, 20 cars):
+  Forest circuit 322 -> about 75-95; Mountains, Night, Futuristic about 90-100 -> 60-85 (noisy). Results are
+  bit-identical: `tests/simsame.mjs` runs 9,000 steps on the four benchmark tracks with the old and new build and
+  compares every car's distance, lateral position and speed (largest difference 0).
+  - `Track.delta` (signed distance along the track) took two floating-point remainders per call and was 67 % of
+    the simulation's time on circuits; it now settles the usual case with a comparison and one addition.
+  - The rivals' lane choice worked out the distance to every other car again for each of 24 candidate lanes
+    (about 8,700 `delta` calls per step); the nearby cars are now found once per driver.
+  - `hazardsIn` / `objectsIn` no longer create a closure per call; pit-strip test without `Array.some`.
+  Not measured on the laptop yet (was 1.8-3.5 ms per frame there on v3.2.0).
+- **Shader programs were compiled again for every race.** Scenery and hazards create their programs per race:
+  the benchmark's 8 short cases had left 56 programs (13 x objects, 12 x blobshadow, 8 x hazprops, 7 x decals),
+  none ever freed. `Program` now returns the existing program for the same source. Browsers that cache shaders
+  by source (Chrome, Edge) hid this; where there is no such cache each race start paid the compile again.
+- **Benchmark: shader compile times.** After the last case every program is built again with a changed comment
+  (so no cache answers) and timed, one by one and then all at once as at start-up; the report has a "Shader
+  compilation" section and `compileMs` in the JSON. This is the measurement the start-up work needs: on Windows
+  the suspect is Direct3D shader compilation, which cannot be reproduced here.
+- Start-up itself is unchanged in this version. JavaScript set-up before the first frame is about 1.1 s in the
+  test container.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

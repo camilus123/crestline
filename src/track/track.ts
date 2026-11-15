@@ -162,9 +162,15 @@ export class Track {
   delta(a: number, b: number): number {
     let d = b - a;
     if (this.circuit) {
-      const L = this.d.lapLen;
+      const L = this.d.lapLen, H = L / 2;
+      // Nearly every call is for two positions within a lap of each other: one comparison and at most one
+      // addition settle those. (This is called thousands of times per simulation step; the two floating-point
+      // remainders it used to take were two thirds of the whole simulation's time on circuits.)
+      if (d > H) { d -= L; if (d <= H) return d; }
+      else if (d <= -H) { d += L; if (d > -H) return d; }
+      else return d;
       d = ((d % L) + L) % L;
-      if (d > L / 2) d -= L;
+      if (d > H) d -= L;
     }
     return d;
   }
@@ -172,52 +178,53 @@ export class Track {
   /** iterate hazards whose span overlaps [s0, s1] (track s). */
   hazardsIn(s0: number, s1: number, out: Hazard[]): Hazard[] {
     out.length = 0;
-    const hz = this.d.hazards;
-    const test = (a: number, b: number) => {
-      // binary search first hazard with s > a - 500 (max length)
-      let lo = 0, hi = hz.length;
-      const key = a - 450;
-      while (lo < hi) {
-        const m = (lo + hi) >> 1;
-        if (hz[m].s < key) lo = m + 1;
-        else hi = m;
-      }
-      for (let k = lo; k < hz.length && hz[k].s <= b; k++) {
-        const h = hz[k];
-        if (h.s + h.len >= a) out.push(h);
-      }
-    };
     if (this.circuit) {
       const L = this.d.lapLen;
       const a = ((s0 % L) + L) % L;
       const b = a + (s1 - s0);
-      test(a, Math.min(b, L));
-      if (b > L) test(0, b - L);
-    } else test(s0, s1);
+      this.hazScan(a, Math.min(b, L), out);
+      if (b > L) this.hazScan(0, b - L, out);
+    } else this.hazScan(s0, s1, out);
     return out;
+  }
+  // (methods, not closures made on every call: these two run for every car on every simulation step)
+  private hazScan(a: number, b: number, out: Hazard[]): void {
+    const hz = this.d.hazards;
+    // binary search first hazard with s > a - 500 (max length)
+    let lo = 0, hi = hz.length;
+    const key = a - 450;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (hz[m].s < key) lo = m + 1;
+      else hi = m;
+    }
+    for (let k = lo; k < hz.length && hz[k].s <= b; k++) {
+      const h = hz[k];
+      if (h.s + h.len >= a) out.push(h);
+    }
+  }
+  private objScan(a: number, b: number, out: number[]): void {
+    const cs = this.colS;
+    let lo = 0, hi = cs.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (cs[m] < a) lo = m + 1;
+      else hi = m;
+    }
+    for (let k = lo; k < cs.length && cs[k] <= b; k++) out.push(this.colIdx[k]);
   }
 
   /** collidable object indices in [s0, s1] */
   objectsIn(s0: number, s1: number, out: number[]): number[] {
     out.length = 0;
-    const cs = this.colS;
-    const scan = (a: number, b: number) => {
-      let lo = 0, hi = cs.length;
-      while (lo < hi) {
-        const m = (lo + hi) >> 1;
-        if (cs[m] < a) lo = m + 1;
-        else hi = m;
-      }
-      for (let k = lo; k < cs.length && cs[k] <= b; k++) out.push(this.colIdx[k]);
-    };
     if (this.circuit) {
       const L = this.d.lapLen;
       const a = ((s0 % L) + L) % L;
       const b = a + (s1 - s0);
-      scan(a, Math.min(b, L));
-      if (b > L) scan(0, b - L);
-      if (a < 0) scan(L + a, L);
-    } else scan(s0, s1);
+      this.objScan(a, Math.min(b, L), out);
+      if (b > L) this.objScan(0, b - L, out);
+      if (a < 0) this.objScan(L + a, L, out);
+    } else this.objScan(s0, s1, out);
     return out;
   }
 }

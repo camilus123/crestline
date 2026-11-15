@@ -4,7 +4,7 @@ import { glStats } from './prof';
 export type GL = WebGL2RenderingContext;
 
 export class Program {
-  readonly p: WebGLProgram;
+  readonly p!: WebGLProgram;
   private loc = new Map<string, WebGLUniformLocation | null>();
   private units = new Map<string, number>();
   private checked = false;
@@ -17,6 +17,15 @@ export class Program {
    * the browser compiles all of them at once on its worker threads.
    */
   constructor(private gl: GL, vs: string, fs: string, private name: string) {
+    // One program per source, however often it is asked for. The scenery and the hazards make their programs
+    // anew for every race; without this each race compiled them again (a pause on browsers that keep no shader
+    // cache) and the old ones were never freed.
+    let made = Program.made.get(gl);
+    if (!made) Program.made.set(gl, (made = new Map()));
+    const key = vs + '\u0000' + fs;
+    const hit = made.get(key);
+    if (hit) return hit;
+    made.set(key, this);
     const mk = (type: number, src: string) => {
       const sh = gl.createShader(type)!;
       gl.shaderSource(sh, src);
@@ -24,11 +33,57 @@ export class Program {
       this.sh.push({ s: sh, type, src });
       return sh;
     };
+    Program.sources.push({ name, vs, fs });
     const p = gl.createProgram()!;
     gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
     gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
     gl.linkProgram(p);
     this.p = p;
+  }
+  private static made = new WeakMap<GL, Map<string, Program>>();
+  /** every program made so far (for the compile-time measurement below) */
+  static sources: { name: string; vs: string; fs: string }[] = [];
+  /**
+   * How long the graphics driver takes to compile and link each program, measured by building it again with a
+   * changed comment (so that no cache can answer) and waiting for the result. One program per call of `step`,
+   * so the page stays alive. Then all of them at once, which is what start-up does.
+   */
+  static async timeCompiles(gl: GL, step: (done: number, of: number) => Promise<void>, drain: () => void): Promise<{ each: { name: string; ms: number }[]; together: number }> {
+    const list = Program.sources.slice();
+    const nonce = () => `\n// ${Math.random().toString(36).slice(2)} ${performance.now()}\n`;
+    const start = (vs: string, fs: string) => {
+      const p = gl.createProgram()!;
+      const sh = [gl.VERTEX_SHADER, gl.FRAGMENT_SHADER].map((type, i) => {
+        const s = gl.createShader(type)!;
+        gl.shaderSource(s, (i ? fs : vs) + nonce());
+        gl.compileShader(s);
+        gl.attachShader(p, s);
+        return s;
+      });
+      gl.linkProgram(p);
+      return { p, sh };
+    };
+    const wait = (x: { p: WebGLProgram; sh: WebGLShader[] }) => {
+      gl.getProgramParameter(x.p, gl.LINK_STATUS); // (blocks until the program is ready)
+      for (const s of x.sh) gl.deleteShader(s);
+      gl.deleteProgram(x.p);
+    };
+    const each: { name: string; ms: number }[] = [];
+    for (let i = 0; i < list.length; i++) {
+      await step(i, list.length + 1);
+      drain(); // (whatever the game has queued for the GPU must not be counted)
+      const t0 = performance.now();
+      wait(start(list[i].vs, list[i].fs));
+      each.push({ name: list[i].name, ms: performance.now() - t0 });
+    }
+    await step(list.length, list.length + 1);
+    drain();
+    const t0 = performance.now();
+    const all = list.map((x) => start(x.vs, x.fs));
+    for (const x of all) wait(x);
+    const together = performance.now() - t0;
+    Program.sources = list; // (the copies above are not programs of the game)
+    return { each, together };
   }
   /** first use: report compile / link errors, set the fixed sampler units */
   private check(): void {

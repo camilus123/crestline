@@ -15,6 +15,7 @@
 
 import type { Game } from './game';
 import { QUALITY, type Quality } from './render/renderer';
+import { Program } from './render/gl';
 
 export const BENCH_TRACKS: { code: string; what: string }[] = [
   { code: 'MIHJHHTLI12', what: 'Forest (dense scenery)' },
@@ -173,6 +174,7 @@ export class Benchmark {
 
   /** called at the end of every frame; raw = wall-clock interval, cpuMs = time spent in this frame */
   frame(raw: number, cpuMs: number): void {
+    if (this.finishing) return;
     this.t += raw;
     const id = this.phase.id;
     if (id === 'warm') this.warmIv.push(raw);
@@ -223,9 +225,17 @@ export class Benchmark {
     this.g.benchRestore();
   }
 
+  private finishing = false;
+  private compiles: { each: { name: string; ms: number }[]; together: number } | null = null;
   private finish(): void {
     this.restore();
-    this.done(this.report());
+    // last: how long the graphics driver takes over each shader program (what start-up waits for)
+    this.finishing = true;
+    const next = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+    Program.timeCompiles(this.g.renderer.gl, (i, n) => {
+      this.label = `BENCHMARK · timing shader compilation ${i + 1}/${n} (the picture stops for a moment each time, this is normal)`;
+      return next();
+    }, () => this.g.renderer.prof.sync()).then((c) => { this.compiles = c; }, () => { /* report without it */ }).then(() => this.done(this.report()));
   }
 
   private report(): BenchReport {
@@ -301,6 +311,13 @@ export class Benchmark {
         L.push('frame cost (as measured)'.padEnd(30) + rs.map((r) => f2(r.costMs).padStart(16)).join(''));
       }
     }
+    if (this.compiles) {
+      const c = this.compiles, sum = c.each.reduce((a, x) => a + x.ms, 0);
+      L.push('');
+      L.push('== Shader compilation (each program built again from scratch, so no cache answers) ==');
+      L.push(`all ${c.each.length} programs at once, as at start-up: ${(c.together / 1000).toFixed(2)} s · one after another: ${(sum / 1000).toFixed(2)} s`);
+      for (const x of c.each.slice().sort((a, b) => b.ms - a.ms)) L.push(x.name.padEnd(22) + x.ms.toFixed(0).padStart(7) + ' ms');
+    }
     L.push('');
     L.push('== Presets used ==');
     const used: Quality[] = [];
@@ -316,7 +333,7 @@ export class Benchmark {
     const round = (x: number) => Math.round(x * 100) / 100;
     L.push(JSON.stringify({
       v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh), syncMs: Math.round(this.syncMs * 1000) / 1000, stageSource: this.results[0]?.src ?? '',
-      threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), yours: { name: mine.name, diff: qualityDiff(mine) },
+      threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), compileMs: this.compiles ? { together: Math.round(this.compiles.together), each: Object.fromEntries(this.compiles.each.map((x) => [x.name, Math.round(x.ms)])) } : null, yours: { name: mine.name, diff: qualityDiff(mine) },
       cases: this.results.map((r) => ({
         track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches,
         warmS: round(r.warm), wholeGpu: round(r.wholeGpu), cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),
