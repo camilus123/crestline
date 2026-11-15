@@ -403,6 +403,21 @@ Item 3 of the next-work list. Not measured on real hardware yet.
   frames or distant shadows would shimmer. Left out as not worth the risk.
 - Cars, traffic and props still go in with their full programs (few vertices).
 
+## v3.4.1 (2026-11-15) — towers cast shadows as plain hulls
+**Measured with v3.4.0 on the target PC (Edge): the v3.4.0 shadow changes gained nothing.** Sun shadow map on
+Futuristic 1.23 ms (Psycho) and 1.47 ms (Admiral), exactly as in v3.3.1; Forest 0.48 / 0.57, Mountains
+0.29 / 0.46. Vertices per frame on Futuristic unchanged at 4.66 M (Forest 2.76 -> 2.66 M). Averages: Psycho
+212.0, Admiral 228.2 fps (Admiral 239.8 on Forest, Mountains, Night; 193.3 on Futuristic). So the shading in
+the shadow pass was not the cost; the vertex count is.
+- Cause found: the city towers. Three sets of about 1,940 towers each, 1,900-2,340 vertices per tower (window
+  bands and trim), are landmarks, so they have no lighter distance model and are drawn to 400 m beyond the draw
+  distance, in the main view and again in both shadow maps.
+- **Fix:** `buildCaster` in models.ts makes the plain hull of a tower (main box and roof block, 72 vertices, same
+  random size as the model); the shadow maps draw that in place of the model, sharing its instance buffer.
+  `tests/shadowpic.mjs` on Futuristic against v3.4.0: 34-48 of 64,000 pixels differ, by at most 4/255; Forest 0.
+  Not measured on real hardware yet.
+- Still open on Futuristic: the towers in the main view (scenery 0.99-1.08 ms) have no distance model either.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

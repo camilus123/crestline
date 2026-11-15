@@ -593,6 +593,21 @@ export function buildModel(type: number, variant = 0, lod = false): MB {
 }
 
 /**
+ * Shadow casters: the plain hull of a model with a lot of small detail, drawn into the sun shadow maps in its
+ * place. A city tower is about 2,000 vertices of window bands and trim on a box; its shadow is the box's.
+ * The hull must never be larger than the real model (the model would then shade itself). Null: use the model.
+ */
+export function buildCaster(type: number, variant = 0): MB | null {
+  if (type !== O.TOWER) return null;
+  const b = new MB(type * 131 + variant * 7 + 1); // the same seed, and the same first two draws, as the model
+  const h = 26 + b.rng.float() * 50;
+  const w = 10 + b.rng.float() * 8;
+  b.box(0, 0, 0, w, h, w, M('#3e3862'));
+  b.box(0, h, 0, w * 0.6, 3, w * 0.6, M('#3e3862'));
+  return b;
+}
+
+/**
  * Low-polygon stand-ins for trees that are only ever seen from a distance (woodland well back from the road).
  * A full oak is 1,560 vertices and a fir about 650; these are 100-200, and at 40 m and more they look the same.
  */

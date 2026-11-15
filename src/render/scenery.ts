@@ -6,7 +6,7 @@ import { hashString, Rng } from '../core/rng';
 import { TrackData } from '../track/generator';
 import { GL, Mesh, Program } from './gl';
 import { LIGHT, NOISE, PATH, PRELUDE } from './glsl';
-import { buildFarTree, buildModel, LAMPS, LANDMARK, SPANNING } from './models';
+import { buildFarTree, buildCaster, buildModel, LAMPS, LANDMARK, SPANNING } from './models';
 import { LandmarkPlacer } from './landmarks';
 import { BentPath } from './path';
 import { Terrain } from './terrain';
@@ -209,6 +209,8 @@ interface TypeSet {
   bend: boolean;
   backdrop: boolean; // deep woodland behind the roadside: visual only, shorter draw distance
   adj: boolean; // rigid landmark placed on the CPU every frame (instance data has 2 extra floats)
+  /** plain hull drawn into the sun shadow maps in place of the model (see buildCaster) */
+  caster: Mesh | null;
   /** backdrop mountains: placed in view space by compass bearing every frame, like the sky (see placeSky) */
   sky: { bearing: Float32Array; dist: Float32Array; rot: Float32Array } | null;
 }
@@ -391,6 +393,17 @@ export class Scenery {
         ];
         inst.push({ loc: 6, size: 3, type: gl.FLOAT, offset: 24 });
         mesh.setInstances(data, F * 4, inst, adj ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+        let caster: Mesh | null = null;
+        const cb = buildCaster(type, v);
+        if (cb) {
+          caster = new Mesh(gl, cb.pack(), 32, [
+            { loc: 0, size: 3, type: gl.FLOAT, offset: 0 },
+            { loc: 1, size: 3, type: gl.FLOAT, offset: 12 },
+            { loc: 2, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 24 },
+            { loc: 3, size: 4, type: gl.UNSIGNED_BYTE, normalized: true, offset: 28 },
+          ], cb.vertexCount);
+          caster.shareInstances(mesh);
+        }
         let far: Mesh | null = null;
         if (!landmark && lb.vertexCount < mb.vertexCount * 0.8) {
           far = new Mesh(gl, lb.pack(), 32, [
@@ -420,7 +433,7 @@ export class Scenery {
         }
         let foot = 0;
         for (let k = 0; k < mb.pos.length; k += 3) foot = Math.max(foot, Math.hypot(mb.pos[k], mb.pos[k + 2]));
-        this.sets.push({ type, mesh, far, far2, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj, sky: null });
+        this.sets.push({ type, mesh, far, far2, shadow, s: ss, data, count: idx.length, landmark, span, rotor: type === O.TURBINE, radius: r ?? 0, foot, bend, backdrop: false, adj, sky: null, caster });
         if (isSky) {
           // Fixed compass bearings spread round the horizon, 2.3-3 km away: beyond the road and its scenery (drawn
           // to 1.95 km at most), near enough to read as mountains rather than dissolve into the haze.
@@ -469,7 +482,7 @@ export class Scenery {
       mesh.setInstances(data, 36, [{ loc: 4, size: 3, type: gl.FLOAT, offset: 0 }, { loc: 5, size: 3, type: gl.FLOAT, offset: 12 }, { loc: 6, size: 3, type: gl.FLOAT, offset: 24 }]);
       let foot = 0;
       for (let q = 0; q < mb.pos.length; q += 3) foot = Math.max(foot, Math.hypot(mb.pos[q], mb.pos[q + 2]));
-      this.sets.push({ type, mesh, far: null, far2: null, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false, sky: null });
+      this.sets.push({ type, mesh, far: null, far2: null, shadow: null, s: ss, data, count: list.length, landmark: false, span: false, rotor: false, radius: 0, foot, bend: true, backdrop: true, adj: false, sky: null, caster: null });
     }
   }
 
@@ -568,7 +581,8 @@ export class Scenery {
       const split = set.far ? Math.min(this.lodDist, ahead) : ahead;
       this.ranges(set, sCar, 60, split, loop, r);
       if (set.adj) this.placeLandmarks(set, path, sCar, loop, r);
-      for (let k = 0; k < r.length; k += 2) set.mesh.drawInstances(r[k], r[k + 1]);
+      const near = this.depthOnly && set.caster ? set.caster : set.mesh;
+      for (let k = 0; k < r.length; k += 2) near.drawInstances(r[k], r[k + 1]);
       if (set.far && ahead > split) {
         const split2 = set.far2 ? Math.min(split * 2.2, ahead) : ahead;
         this.ranges(set, sCar, -split, split2, loop, r);

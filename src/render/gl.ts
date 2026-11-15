@@ -162,6 +162,21 @@ export class Mesh {
     this.instStride = stride;
     gl.bindVertexArray(null);
   }
+  /** use another mesh's per-instance buffer (a stand-in model for the same objects; follows its updates) */
+  shareInstances(from: Mesh): void {
+    const gl = this.gl;
+    gl.bindVertexArray(this.vao);
+    this.inst = from.inst;
+    gl.bindBuffer(gl.ARRAY_BUFFER, from.inst);
+    for (const a of from.instSpec) {
+      gl.enableVertexAttribArray(a.loc);
+      gl.vertexAttribPointer(a.loc, a.size, a.type, !!a.normalized, from.instStride, a.offset);
+      gl.vertexAttribDivisor(a.loc, 1);
+    }
+    this.instSpec = from.instSpec;
+    this.instStride = from.instStride;
+    gl.bindVertexArray(null);
+  }
   updateInstances(data: ArrayBufferView, byteLen?: number): void {
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.inst);
