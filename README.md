@@ -19,7 +19,7 @@ generated in code.
   Motorway, Wind, Forest), each with its own surface, weather, hazards and scenery. Every track comes from an
   11-character code, and a track constructor lets you set curves, hills, length and difficulty and share the code.
 - **Controls:** keyboard, gamepad, or on-screen touch controls on phones and tablets. All keys can be rebound.
-- **Graphics:** a custom WebGL2 renderer. Six quality presets from Ultra Low (phones) to Psycho (sun shadows,
+- **Graphics:** a custom WebGL2 renderer. Quality presets from Ultra Low (phones) to Psycho (sun shadows,
   ambient occlusion, 8x anti-aliasing), and every option a preset sets can be changed on its own.
 - **Benchmark:** a fixed suite (four tracks at three presets, plus your own settings) that reports frame rate,
   frame cost and the cost of each render stage as text you can copy.

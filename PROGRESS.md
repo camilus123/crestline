@@ -376,6 +376,18 @@ the terrain and cars and before the sky. Mountains UTNRSVVLR17 High: 0 pixels di
 Forest move slightly closer to v3.2.0 (far backdrop no longer picks up the blob-shadow fringe). Not yet measured
 on real hardware.
 
+## v3.3.2 (2026-11-15) — "Admiral" preset
+**Measured with v3.3.1 on the target PC (Edge):** Low 239.8, High 239.8, Psycho 219.4 fps (207.0 in v3.3.0,
+195.0 in v3.2.0); frame cost Low 1.89, High 3.20, Psycho 5.78 ms. Mountains is fixed: scenery 0.12 ms and
+backdrop 0.11 ms on High (1.59 ms in v3.3.0), Mountains Psycho 239.8 fps (197.3). Still under 240: Forest Psycho
+217.7, Futuristic Psycho 180.3 (sun shadow map 1.23 ms). The user's settings: 239.8 on Forest, Mountains and
+Night, 193.5 on Futuristic (sun shadow map 1.47 ms). User: "very fast almost all the time, much better than
+v2.0.2".
+
+- New preset **Admiral**, last in the list: the user's settings as a built-in (Psycho with MSAA off, distance
+  x1.2, particles x1.25, rain and snow x1.2). Built in rather than saved in the browser because each delivered
+  .html file is a different address to the browser, so saved settings do not follow from one build to the next.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

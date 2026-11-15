@@ -47,6 +47,9 @@ export const QUALITY: Quality[] = [
   { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, bloom: 5, dist: 1.0, particles: 1, weather: 1, scenery: 1, woods: 0.8, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 170, terrLite: false, cap60: false },
   { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 0.9, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 260, terrLite: false, cap60: false },
   { name: 'Psycho', scale: 1.0, minScale: 0.85, msaa: 8, bloom: 6, dist: 1.45, particles: 1.5, weather: 1.4, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
+  // Psycho tuned for 240 Hz at 3440x1440 on the target PC: no MSAA, slightly shorter view, fewer particles.
+  // Kept last so that the preset numbers stored in players' settings do not shift.
+  { name: 'Admiral', scale: 1.0, minScale: 0.85, msaa: 0, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
 ];
 /** index of the default preset (High) */
 export const Q_DEFAULT = 3;
