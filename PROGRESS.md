@@ -576,6 +576,19 @@ User's screenshot: windsocks on a Wind track vibrating very quickly.
   eased over in about a second.
 - Calm tracks are unchanged: Forest at High, 0 pixels differ from v3.5.3.
 
+## v3.5.5 (2026-11-15) — tidy-up before release
+**Measured with v3.5.4 on the Xiaomi 17T (Mali-G720, Mi Browser, 1696x780, 120 Hz):** Low 118.8 fps average
+(119.7 / 119.7 / 116.7 / 119.3), CPU 2.05 ms per frame. High 52.9 with 30-43 hitches per 5 s run (median frame
+8.4-16.7 ms, 95th percentile 50-66 ms); Admiral 55.5 and Psycho 39.3, the same pattern. So the stutter above
+Low is still there and is not MSAA (Admiral has none) and not JavaScript (CPU 99th percentile 6-10 ms): open.
+Shader compilation 0.31 s; start-up 3.8 s. Stage times on this device are unusable (most read 0).
+- **User: after the benchmark the tab seemed to hang on the phone.** Probable cause (not reproduced): v3.4.3
+  stops drawing when the window loses focus, and on a phone the download prompt or share sheet takes focus and
+  never gives it back as an event. Now: on touch devices losing focus only pauses; and on every device a
+  touch, click, key or return to the tab wakes the game as well as the focus event.
+- Removed the ten temporary compile experiments from the benchmark (the per-program compile times stay).
+- README brought up to v3.5.5.
+
 ## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
 - **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
   make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next

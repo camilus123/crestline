@@ -50,43 +50,6 @@ const pct = (s: number[], p: number) => (s.length ? s[Math.min(s.length - 1, Mat
 const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length);
 const f1 = (x: number) => x.toFixed(1), f2 = (x: number) => x.toFixed(2);
 
-/**
- * Temporary experiments for the start-up work: variants of the terrain and sky programs with one thing cut out
- * or changed, compiled and timed after the real ones. They are never drawn with. What each takes, against the
- * whole program, says which part the Direct3D shader compiler spends its seconds on.
- */
-function compileProbes(): { name: string; vs: string; fs: string }[] {
-  const src = (n: string) => Program.sources.find((x) => x.name === n);
-  const terr = src('terrain'), sky = src('sky');
-  const out: { name: string; vs: string; fs: string }[] = [];
-  const HEAD = '#version 300 es\nprecision highp float;\n';
-  const noFS = HEAD + 'void main(){}';
-  // a variant is only added if every text it changes was found (the sources may have moved on)
-  const sub = (s: string, pairs: [string, string][]): string | null => {
-    for (const [a, b] of pairs) { if (!s.includes(a)) return null; s = s.replace(a, b); }
-    return s;
-  };
-  const add = (name: string, vs: string | null, fs: string | null) => { if (vs && fs) out.push({ name, vs, fs }); };
-  if (terr) {
-    const flatVS = HEAD + 'layout(location=0) in vec3 aRCS;\nout vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge; out vec2 vAlt;\n' +
-      'void main(){ vW=aRCS; vN=aRCS; vSU=aRCS.xy; vOff=aRCS.x; vSlope=aRCS.y; vFlags=aRCS.z; vEdge=aRCS.x; vAlt=aRCS.xy; gl_Position=vec4(aRCS,1.0); }';
-    const OCT: [string, string] = ['for(int i=0;i<4;i++){ s+=a*vnoise(p)', 'for(int i=0;i<2;i++){ s+=a*vnoise(p)'];
-    add('terrain: vertex shader alone', terr.vs, noFS);
-    add('terrain: fragment shader alone', flatVS, terr.fs);
-    add('terrain vertex: one point, not three', sub(terr.vs, [['for (int i = 0; i < 3; i++) {', 'for (int i = 0; i < 1; i++) {']]), noFS);
-    add('terrain vertex: noise of 2 octaves, not 4', sub(terr.vs, [OCT]), noFS);
-    add('terrain vertex: lattice values from a texture', sub(terr.vs, [['  vec4 h = vec4(hashU4(b.x + uvec4(0u,1u,0u,1u), b.y + uvec4(0u,0u,1u,1u))) * (1.0/4294967296.0);', '  ivec2 bi = ivec2(b) & 255; vec4 h = vec4(texelFetch(uProbeN, bi, 0).r, texelFetch(uProbeN, (bi + ivec2(1,0)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(0,1)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(1,1)) & 255, 0).r);'], ['uvec4 hashU4(', 'uniform sampler2D uProbeN;\nuvec4 hashU4(']]), noFS);
-    add('terrain vertex: no circuit seam blend', sub(terr.vs, [['  if (w <= 0.0) return a;\n  float b = fbm(vec2((sm - L)*fr, u*fr));\n  return mix(a, b, w);', '  return a + w;']]), noFS);
-    add('terrain fragment: no lighting', flatVS, sub(terr.fs, [['vec3 col = lightSurf(c, N, vW, rough, spec, ao, shade);', 'vec3 col = c * N.y * rough * (spec + ao + shade);']]));
-    add('terrain fragment: no branches around textures', flatVS, sub(terr.fs, [['if (rock > 0.0 || uGType == 4) {', '{'], ['if (rock > 0.0) { vec4 gr', '{ vec4 gr']]));
-  }
-  if (sky) {
-    add('sky: noise of 2 octaves, not 4', sky.vs, sub(sky.fs, [['for(int i=0;i<4;i++){ s+=a*vnoise(p)', 'for(int i=0;i<2;i++){ s+=a*vnoise(p)']]));
-    add('sky: lattice values from a texture', sky.vs, sub(sky.fs, [['  vec4 h = vec4(hashU4(b.x + uvec4(0u,1u,0u,1u), b.y + uvec4(0u,0u,1u,1u))) * (1.0/4294967296.0);', '  ivec2 bi = ivec2(b) & 255; vec4 h = vec4(texelFetch(uProbeN, bi, 0).r, texelFetch(uProbeN, (bi + ivec2(1,0)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(0,1)) & 255, 0).r, texelFetch(uProbeN, (bi + ivec2(1,1)) & 255, 0).r);'], ['uvec4 hashU4(', 'uniform sampler2D uProbeN;\nuvec4 hashU4(']]));
-  }
-  return out;
-}
-
 /** the options that differ from the stock preset of the same name, e.g. "msaa 8>4, shadows 4096>0" */
 export function qualityDiff(q: Quality): string {
   const base = QUALITY.find((x) => x.name === q.name.replace(/ \(custom\)$/, ''));
@@ -272,7 +235,7 @@ export class Benchmark {
     Program.timeCompiles(this.g.renderer.gl, (i, n) => {
       this.label = `BENCHMARK · timing shader compilation ${i + 1}/${n} (the picture stops for a moment each time, this is normal)`;
       return next();
-    }, () => this.g.renderer.prof.sync(), compileProbes()).then((c) => { this.compiles = c; }, () => { /* report without it */ }).then(() => this.done(this.report()));
+    }, () => this.g.renderer.prof.sync()).then((c) => { this.compiles = c; }, () => { /* report without it */ }).then(() => this.done(this.report()));
   }
 
   private report(): BenchReport {

@@ -8,7 +8,7 @@ generated in code.
 | | |
 |---|---|
 | **Play (stable, v2.0.2)** | https://camilus123.github.io/crestline/ |
-| **This branch** | `v3`, in development (v3.1.0). Build it, or open `dist/crestline.html` from this branch |
+| **This branch** | `v3` (v3.5.5). Build it, or open `dist/crestline.html` from this branch |
 | **Stable branch** | `main` |
 
 ## What's in it
@@ -20,9 +20,11 @@ generated in code.
   11-character code, and a track constructor lets you set curves, hills, length and difficulty and share the code.
 - **Controls:** keyboard, gamepad, or on-screen touch controls on phones and tablets. All keys can be rebound.
 - **Graphics:** a custom WebGL2 renderer. Quality presets from Ultra Low (phones) to Psycho (sun shadows,
-  ambient occlusion, 8x anti-aliasing), and every option a preset sets can be changed on its own.
+  ambient occlusion, 8x anti-aliasing), plus Admiral (Psycho without anti-aliasing), and every option a preset
+  sets can be changed on its own. The game pauses, and stops drawing, while its window is not in focus.
 - **Benchmark:** a fixed suite (four tracks at three presets, plus your own settings) that reports frame rate,
-  frame cost and the cost of each render stage as text you can copy.
+  frame cost, the cost of each render stage and how long each shader program takes to compile, as text you
+  can copy.
 
 ## Controls (defaults)
 

@@ -149,11 +149,17 @@ export class Game {
     // Window not in focus: pause, draw a few more frames (so the pause menu is on the picture), then stop
     // drawing altogether until the window has focus again. The last picture stays on screen; the GPU idles.
     // (Not during the benchmark, which must run to its end.)
-    window.addEventListener('blur', () => { if (!this.bench) { this.setPaused(true, true); this.sleepIn = 4; } });
-    window.addEventListener('focus', () => {
+    // On phones and tablets a share sheet, a download prompt or the address bar takes focus away without ever
+    // giving it back as an event: there the game only pauses, and any touch, key or return to the tab wakes it.
+    const touch = matchMedia('(pointer: coarse)').matches;
+    window.addEventListener('blur', () => { if (!this.bench) { this.setPaused(true, true); if (!touch) this.sleepIn = 4; } });
+    const wakeUp = () => {
       this.sleepIn = 0;
       if (this.asleep) { this.asleep = false; this.last = 0; if (!this.manual) requestAnimationFrame((t) => this.frame(t)); }
-    });
+    };
+    window.addEventListener('focus', wakeUp);
+    for (const ev of ['pointerdown', 'keydown', 'touchstart']) window.addEventListener(ev, wakeUp, { capture: true, passive: true });
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) wakeUp(); });
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.setPaused(true, true);
     });
