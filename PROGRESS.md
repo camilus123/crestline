@@ -605,7 +605,7 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.5.7 (2026-11-15) — Futuristic: pylon glows on the lamps, no light patches on the road (on `v3`, not yet on `main`)
+## v3.5.7 (2026-11-15) — Futuristic: pylon glows on the lamps, no light patches on the road (released: `main` moved to it 2026-11-15, user: "it seems ok, let's move it to main")
 User's screenshot of Futuristic: lamp glows floating above the pylons; and a request to remove the light patches
 on the street there ("it looks wrong and the track looked better before that got there").
 - The glow position was written for the street lamp (light 7.1 m up, 1.7 m out) and used for every lamp model.

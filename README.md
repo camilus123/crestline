@@ -7,7 +7,7 @@ generated in code.
 
 | | |
 |---|---|
-| **Play** | https://camilus123.github.io/crestline/ (v3.5.6) |
+| **Play** | https://camilus123.github.io/crestline/ (v3.5.7) |
 | **Branches** | `main` is the released version; `v3` is where development continues |
 
 ## What's in it
@@ -63,7 +63,7 @@ node tests/benchrun.mjs 128x72   # the benchmark end to end (cut-down suite)
 
 ## Branches
 
-- `main`: the released version (v3.5.6), served by the play link above.
+- `main`: the released version (v3.5.7), served by the play link above.
 - `v3`: where development continues. v2.0.2, the previous release, is in the history of `main`.
 
 `PROGRESS.md` is the full change history, including what was measured and what was not.
