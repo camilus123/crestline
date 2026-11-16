@@ -605,6 +605,19 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.7.1 (2026-11-16) — night sky: the band of faint light no longer breaks along a line (on `v3`)
+- User (KJGJHHMLH02, second half): a hard vertical edge through the blue haze of the night sky.
+- Cause, older than v3.7.0: the pattern of the star band was laid out on the compass angle, which wraps round
+  behind the world's north; the pattern jumped along that line, visible whenever the road points that way.
+  Now laid out on a dome plane, which has no wrap. The star dots' pixel-size estimate is capped at the same line.
+- Reproduced with `tests/pair.mjs` at 8000 steps on that track (edge at the left in v3.7.0, gone in v3.7.1).
+- **v3.7.0 measured by the user (RX 9070, 3440x1440, 240 Hz), Admiral frame cost against v3.5.3 in Edge:**
+  Forest 4.86 ms (was 4.42), Mountains 3.79 (3.48), Night 3.64 (3.23), Futuristic 4.73 (4.33): 0.3-0.45 ms more.
+  Measured frame rate: 239.8 / 239.8 / 239.8 / 239.4 in Edge and 239.4 / 239.8 / 239.8 / 239.8 in Firefox, so
+  Admiral still holds 240, with less in hand (1 % low 198 on Futuristic in Edge, 205 on Forest in Firefox:
+  a few doubled frames per run). Psycho averages 218.6 in Edge (was about 220) and 224.7 in Firefox.
+  Start-up 3.0 s in Edge (was about 2 s) and 5.2 s in Firefox. Not broken down: which of the six changes costs what.
+
 ## v3.7.0 (2026-11-16) — the "nearly free" image-quality batch (on `v3`)
 Six changes to the picture. None is switchable; all but the last apply on every preset.
 1. **Shading baked into the models** (`MB.bakeShade`, at model build): tree crowns darker low down, inside and

@@ -78,7 +78,7 @@ void main(){
     vec2 cell = floor(sp);
     float pick = hash2(cell);
     vec2 at = vec2(hash2(cell + 3.1), hash2(cell + 5.7)) * 0.6 + 0.2;
-    float px = fwidth(sp.x) + fwidth(sp.y); // one screen pixel in cell units
+    float px = min(fwidth(sp.x) + fwidth(sp.y), 0.5); // one screen pixel in cell units (capped: the angle jumps where it wraps round)
     float r = length(fract(sp) - at) / max(px, 1e-4);
     float mag = hash2(cell + 7.0);
     float st = step(0.994, pick) * mag * (exp(-r * r * 0.9) + 0.25 * exp(-r * 0.9));
@@ -86,7 +86,9 @@ void main(){
     vec3 sc = mix(vec3(1.0, 0.85, 0.7), vec3(0.75, 0.85, 1.0), hash2(cell + 9.3));
     col += sc * st * tw * uExtra.x * 2.6 * smoothstep(0.0, 0.2, wd.y);
     // milky band
-    float band = exp(-pow((wd.y - 0.55 + 0.3 * sin(az)), 2.0) * 18.0) * fbm(vec2(az * 6.0, el * 6.0));
+    // the pattern is laid out on a dome plane, not on the compass angle: the angle wraps round behind the
+    // world's north, and the pattern used to break along that line
+    float band = exp(-pow((wd.y - 0.55 + 0.3 * sin(az)), 2.0) * 18.0) * fbm(wd.xz / (wd.y + 0.45) * 5.0 + 11.0);
     col += vec3(0.12, 0.14, 0.22) * band * uExtra.x;
   }
   // sun disc
