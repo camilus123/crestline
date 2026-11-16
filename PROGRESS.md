@@ -605,7 +605,7 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.7.1 (2026-11-16) — night sky: the band of faint light no longer breaks along a line (on `v3`)
+## v3.7.1 (2026-11-16) — night sky: the band of faint light no longer breaks along a line (released: `main` moved to it 2026-11-16, user: "let's put this version as main")
 - User (KJGJHHMLH02, second half): a hard vertical edge through the blue haze of the night sky.
 - Cause, older than v3.7.0: the pattern of the star band was laid out on the compass angle, which wraps round
   behind the world's north; the pattern jumped along that line, visible whenever the road points that way.
