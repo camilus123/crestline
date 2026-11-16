@@ -34,18 +34,19 @@ uniform mat4 uViewProj;
 // ------------------------------------------------------------------ road
 const ROAD_VS = COMMON_VS + `
 layout(location=0) in vec2 aRC; // row, column (0 left edge, 1 right edge)
-out vec3 vW; out vec2 vSU; out float vHw; out float vHwR; out float vFlags; out float vCurv; out float vD; out float vSand;
+out vec3 vW; out vec2 vSU; out float vHw; out float vHwR; out float vFlags; out float vCurv; out float vD; out float vSand; out float vCloud;
 void main(){
   float d = rowD(aRC.x);
   PathS p = pathAt(d);
   float u = aRC.y < 0.5 ? -p.hwL : p.hwR;
   vec3 w = bentPos(p, u, 0.0);
+  vCloud = cloudShade(p.s, u);
   vW = w; vSU = vec2(p.s, u); vHw = p.hwL; vHwR = p.hwR; vFlags = p.flags; vCurv = p.curv; vD = d; vSand = int(uTerr.w + 0.5) == 4 ? 0.0 : p.sand;
   gl_Position = uViewProj * vec4(w, 1.0);
 }`;
 
 const ROAD_FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec2 vSU; in float vHw; in float vHwR; in float vFlags; in float vCurv; in float vD; in float vSand;
+in vec3 vW; in vec2 vSU; in float vHw; in float vHwR; in float vFlags; in float vCurv; in float vD; in float vSand; in float vCloud;
 out vec4 o;
 uniform vec3 uSandC;
 uniform sampler2D uAsphalt;
@@ -179,7 +180,7 @@ void main(){
   if (rum > 0.5) N = normalize(vec3(0.0, 1.0, sin(s / 1.6 * 6.2831) * 0.15));
   // tiny normal perturbation from the texture (anisotropy kills shimmer)
   N = normalize(N + vec3(tB.g - 0.5, 0.0, tA.a - 0.5) * 0.06 * (1.0 - wet));
-  vec3 col = lightSurf(alb, N, vW, rough, 0.35 + gloss * 0.8, 1.0, 1.0);
+  vec3 col = lightSurf(alb, N, vW, rough, 0.35 + gloss * 0.8, 1.0, vCloud);
   // sky reflection
   vec3 V = normalize(vW - uCamPos);
   vec3 R = reflect(V, N);
@@ -194,7 +195,7 @@ void main(){
 // ------------------------------------------------------------------ terrain
 const TERR_VS = COMMON_VS + `
 layout(location=0) in vec3 aRCS; // row, offset beyond edge, side
-out vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge; out vec2 vAlt;
+out vec3 vW; out vec3 vN; out vec2 vSU; out float vOff; out float vSlope; out float vFlags; out float vEdge; out vec2 vAlt; out float vCloud;
 uniform float uYCar; // true height of the road under the car (bent space is relative to it)
 // Terrain beyond the fold limit (ext, the inside of tight bends) is squeezed smoothly towards it instead of
 // being collapsed onto it, and its height tapers back to road level there (foldTaper), so the columns that pile
@@ -241,6 +242,7 @@ void main(){
   // texture and ground-type lookups use where the vertex ends up (squeezed), not where it would have been
   vW = w; vN = n; vSU = vec2(p.s, side * uu); vOff = max(0.0, uu - (side < 0.0 ? p.hwL : p.hwR)); vSlope = 1.0 - n.y; vFlags = p.flags;
   vEdge = side < 0.0 ? p.hwL : p.hwR;
+  vCloud = cloudShade(p.s, side * uu);
   // true altitude, and height above the road here: both fixed to the ground (w.y is relative to the car, so anything
   // keyed on it slides up and down the hillsides as the road climbs)
   vAlt = vec2(w.y + uYCar, w.y - p.y);
@@ -248,7 +250,7 @@ void main(){
 }`;
 
 const TERR_FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec3 vN; in vec2 vSU; in float vOff; in float vSlope; in float vFlags; in float vEdge; in vec2 vAlt;
+in vec3 vW; in vec3 vN; in vec2 vSU; in float vOff; in float vSlope; in float vFlags; in float vEdge; in vec2 vAlt; in float vCloud;
 out vec4 o;
 uniform sampler2D uGround; uniform sampler2D uNoiseT;
 uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2;
@@ -259,14 +261,19 @@ void main(){
   float s = mod(vSU.x, 600.0), u = vSU.y;
   vec2 uv = vec2(u, s) / 6.0;
   vec4 g = texture(uGround, uv);
-  vec4 g2 = texture(uGround, uv * 0.19 + 0.31);
   float dist = length(vW - uCamPos);
   float big = texture(uNoiseT, vec2(u, s) * 0.0025).a;
+  vec4 nz = texture(uNoiseT, vec2(u, s) * 0.011 + 0.37); // (r: patchiness, below; g: which copy of the coarse texture)
+  // The coarse copy of the ground texture repeats every 32 m, which shows as a regular pattern across a big
+  // slope or meadow. A second copy at another size, with its axes swapped, is mixed in patch by patch (the
+  // patches come from noise that does not repeat), so no single period is left to see. Both sizes fit the 600 m
+  // wrap of s a whole number of times.
+  vec4 g2 = mix(texture(uGround, uv * 0.19 + 0.31), texture(uGround, uv.yx * 0.13 + 0.7), smoothstep(0.35, 0.65, nz.g));
   float t = mix(g.r, g2.r, smoothstep(30.0, 200.0, dist)) * 0.6 + big * 0.6 - 0.1;
   vec3 c = mix(uG0, uG1, clamp(t, 0.0, 1.0));
   c = mix(c, uG2, clamp(g.b * 0.8 + (big - 0.6) * 0.8, 0.0, 1.0) * 0.6);
   // large-scale patchiness so meadows are not a flat colour
-  float patchy = texture(uNoiseT, vec2(u, s) * 0.011 + 0.37).r;
+  float patchy = nz.r;
   c *= 0.72 + 0.5 * patchy;
   if (uGType == 0 || uGType == 7) c = mix(c, vec3(dot(c, vec3(0.3, 0.55, 0.15))), 0.18);
   float det = mix(g.g, g2.g, smoothstep(20.0, 120.0, dist));
@@ -322,7 +329,7 @@ void main(){
     shade = 1.0 - deep * (0.85 - 0.6 * dapple);
     ao *= 1.0 - deep * 0.4;
   }
-  vec3 col = lightSurf(c, N, vW, rough, spec, ao, shade);
+  vec3 col = lightSurf(c, N, vW, rough, spec, ao, shade * vCloud);
   if (uGType == 5) col += uG2 * smoothstep(0.02, 0.0, abs(fract(u / 8.0) - 0.5) - 0.485) * 0.6 * smoothstep(3.0, 6.0, vOff);
   o = vec4(fogApply(col, vW), blurW(vW));
 }`;

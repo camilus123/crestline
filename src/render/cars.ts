@@ -2,10 +2,10 @@
 // wheels, brake lights and headlights, plus soft contact shadows.
 
 import { GL, Mesh, Program } from './gl';
-import { LIGHT, NOISE, PRELUDE } from './glsl';
+import { CLOUD, LIGHT, NOISE, PRELUDE } from './glsl';
 import { buildCar, CarGeo } from './carmodel';
 
-const VS = PRELUDE + `
+const VS = PRELUDE + CLOUD + `
 layout(location=0) in vec3 aPos;
 layout(location=1) in vec3 aNrm;
 layout(location=2) in vec4 aCol;
@@ -15,7 +15,8 @@ uniform mat4 uModel;
 uniform vec4 uWheel[4];
 uniform float uSpin;
 uniform float uSteer;
-out vec3 vW; out vec3 vN; out vec4 vCol; out float vMat; out vec3 vL; out vec3 vNL;
+uniform vec2 uCarSU; // where the car is on the track (for the cloud shadows)
+out vec3 vW; out vec3 vN; out vec4 vCol; out float vMat; out vec3 vL; out vec3 vNL; out float vCloud;
 void main(){
   vec3 p = aPos, n = aNrm;
   int wid = int(aAux.y * 255.0 + 0.5);
@@ -39,11 +40,12 @@ void main(){
   vMat = aAux.x * 255.0;
   vL = p;
   vNL = n;
+  vCloud = cloudShade(uCarSU.x, uCarSU.y);
   gl_Position = uViewProj * w;
 }`;
 
 const FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec3 vN; in vec4 vCol; in float vMat; in vec3 vL; in vec3 vNL;
+in vec3 vW; in vec3 vN; in vec4 vCol; in float vMat; in vec3 vL; in vec3 vNL; in float vCloud;
 out vec4 o;
 uniform vec3 uPaint; uniform vec3 uAccent; uniform vec3 uNeonC;
 uniform float uBrake; uniform float uLights; uniform float uTail;
@@ -55,7 +57,14 @@ vec3 lampSpill(vec3 albedo){
   return albedo * vec3(1.0, 0.07, 0.04) * facing * near * (0.25 * uTail + 1.1 * uBrake);
 }
 uniform vec3 uSkyRef; uniform vec3 uSkyRef2; uniform vec3 uGroundRef;
+uniform sampler2D uEnvT; uniform float uEnvOn;
 vec3 env(vec3 R){
+  if (uEnvOn > 0.5) {
+    // the sky as it really is this frame (clouds, horizon, the hills on it), from a small unrolled picture of it
+    vec2 uv = vec2(atan(R.x, R.z) * 0.15915494 + 0.5, asin(clamp(R.y, -1.0, 1.0)) * 0.31830989 + 0.5);
+    vec3 e = min(textureLod(uEnvT, uv, 0.0).rgb, vec3(4.0));
+    return e + uSunCol * pow(max(dot(R, uSunDir), 0.0), 400.0) * 3.0;
+  }
   vec3 sky = mix(uSkyRef2, uSkyRef, smoothstep(-0.02, 0.5, R.y));
   vec3 gnd = uGroundRef * 0.6;
   vec3 c = mix(gnd, sky, smoothstep(-0.12, 0.02, R.y));
@@ -100,32 +109,33 @@ void main(){
   else if (m == 8) { alb = base; rough = 0.25; spec = 1.0; }
   else if (m == 10) { alb = vec3(0.5, 0.22, 0.02); rough = 0.15; spec = 1.2; }
   else lit = false;
+  vec3 E = env(R); // (once: see the note on the lighting above)
   vec3 L = vec3(0.0);
-  if (lit) L = lightSurf(alb, N, vW, rough, spec, ao, 1.0);
+  if (lit) L = lightSurf(alb, N, vW, rough, spec, ao, vCloud);
   if (m == 0 || m == 1) {
     float coat = 0.04 + 0.96 * fres;
-    col = L + env(R) * coat * 0.38 + lampSpill(m == 0 ? uPaint : uAccent);
+    col = L + E * coat * 0.38 + lampSpill(m == 0 ? uPaint : uAccent);
   } else if (m == 2) {
-    col = vec3(0.01, 0.012, 0.016) + env(R) * (0.12 + 0.88 * fres) * 0.9;
+    col = vec3(0.01, 0.012, 0.016) + E * (0.12 + 0.88 * fres) * 0.9;
     col += L * 0.5;
   } else if (m == 3) {
-    col = env(R) * 0.85 * vec3(0.95, 0.96, 1.0) + L * 0.3;
+    col = E * 0.85 * vec3(0.95, 0.96, 1.0) + L * 0.3;
   } else if (m == 4 || m == 9) {
-    col = L + env(R) * fres * 0.15 + lampSpill(vec3(0.12));
+    col = L + E * fres * 0.15 + lampSpill(vec3(0.12));
   } else if (m == 5) {
     // red lens: reads as red even when unlit; tail lights glow, brake lights flare
-    col = L + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.35, 0.35);
+    col = L + E * (0.06 + 0.5 * fres) * vec3(1.0, 0.35, 0.35);
     float inner = 0.75 + 0.25 * smoothstep(0.02, 0.0, abs(fract(vL.x * 9.0) - 0.5) - 0.42); // lamp segments
     emis = vec3(1.0, 0.05, 0.025) * (0.9 * uTail + 3.2 * uBrake) * inner;
   } else if (m == 6) {
-    col = vec3(0.6) * 0.1 + env(R) * (0.2 + fres) * 0.6;
+    col = vec3(0.6) * 0.1 + E * (0.2 + fres) * 0.6;
     emis = vec3(1.0, 0.95, 0.85) * (0.15 + uLights * 7.0);
   } else if (m == 7) {
     col = L;
   } else if (m == 8) {
-    col = L + env(R) * 0.35 * (base.r + 0.2);
+    col = L + E * 0.35 * (base.r + 0.2);
   } else if (m == 10) {
-    col = L + env(R) * (0.06 + 0.5 * fres) * vec3(1.0, 0.6, 0.3);
+    col = L + E * (0.06 + 0.5 * fres) * vec3(1.0, 0.6, 0.3);
     emis = vec3(1.0, 0.45, 0.05) * 0.06;
   } else if (m == 11) {
     col = vec3(0.0); emis = uNeonC * 2.0;
@@ -155,6 +165,8 @@ export interface CarDraw {
   lights: number;
   tail: number;
   shadowModel: Float32Array;
+  /** track position and lateral position (cloud shadows) */
+  su?: [number, number];
 }
 
 export class CarRenderer {
@@ -204,7 +216,7 @@ export class CarRenderer {
     for (const c of cars) {
       const g = this.geos[c.geo];
       for (let i = 0; i < 16; i++) w[i] = g.wheels[i];
-      p.m4('uModel', c.model).v4a('uWheel', w).f('uSpin', c.spin).f('uSteer', c.steer);
+      p.m4('uModel', c.model).v4a('uWheel', w).f('uSpin', c.spin).f('uSteer', c.steer).v2('uCarSU', c.su ? c.su[0] : 0, c.su ? c.su[1] : 0);
       p.v3('uPaint', c.paint).v3('uAccent', c.accent).f('uBrake', c.brake).f('uLights', c.lights).f('uTail', c.tail).v2('uRear', g.tailY, -g.length * 0.5);
       (c.far ? this.farMeshes : this.meshes)[c.geo].draw();
     }

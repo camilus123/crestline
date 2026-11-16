@@ -31,7 +31,9 @@ uniform float uFoot;   // model footprint radius (unscaled)
 uniform float uTime;
 uniform vec3 uWind; // dirX (lateral), strength, gust
 uniform float uWindPh; // phase of the main sway, accumulated on the CPU (see Scenery.windPhase)
-out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide; out vec3 vL;
+uniform vec3 uLodFade; // where the full model gives way to the distance model: start (m ahead), length of the change-over, 0 off / 1 this is the full model / 2 the distance model
+out float vFade;
+out vec3 vW; out vec3 vN; out vec4 vCol; out vec2 vAux; out float vHide; out vec3 vL; out float vCloud;
 void main(){
   vL = aPos;
   float d = uSkyObj == 1 ? 0.0 : iSUR.x - uSCar;
@@ -111,17 +113,28 @@ void main(){
   col += vec3(0.05, 0.035, -0.03) * hue * aAux.z;
   vCol = vec4(max(col, 0.0), aCol.a);
   vAux = vec2(aAux.y, aAux.z);
+  vCloud = uSkyObj == 1 ? 1.0 : cloudShade(iSUR.x, u); // (one value for the whole object: where it stands)
+  vFade = uLodFade.z > 0.5 ? (d - uLodFade.x) / max(uLodFade.y, 0.001) : 0.0;
   vHide = hide;
   gl_Position = hide > 0.5 ? vec4(2.0, 2.0, 2.0, 1.0) : uViewProj * vec4(w, 1.0);
 }`;
 
 export const OBJ_FS = PRELUDE + NOISE + LIGHT + `
-in vec3 vW; in vec3 vN; in vec4 vCol; in vec2 vAux; in float vHide; in vec3 vL;
+in vec3 vW; in vec3 vN; in vec4 vCol; in vec2 vAux; in float vHide; in vec3 vL; in float vCloud;
 out vec4 o;
 uniform float uEmisMul;
 uniform float uRocky; // backdrop mountains: rock texture fixed to the model, lighter fog
+uniform vec3 uLodFade;
+in float vFade;
 void main(){
   if (vHide > 0.5) discard;
+  // Change-over between the full model and the distance model: over a stretch of road both are drawn, each
+  // through a fine screen-door pattern, one thinning out as the other fills in (the pixels one leaves, the other
+  // takes), where there used to be a switch from one frame to the next.
+  if (uLodFade.z > 0.5) {
+    float dth = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+    if (uLodFade.z < 1.5 ? dth < vFade : dth >= vFade) discard;
+  }
   vec3 N = normalize(vN);
   if (!gl_FrontFacing) N = -N;
   float ao = clamp(0.55 + vW.y * 0.0 + 0.45, 0.0, 1.0);
@@ -147,7 +160,7 @@ void main(){
     vec3 snowC = vec3(0.9, 0.93, 0.98) * (0.9 + 0.14 * fine) * (0.93 + 0.1 * mid);
     alb = mix(rock, snowC, snow);
   }
-  vec3 col = lightSurf(alb, N, vW, 1.0 - vCol.a, vCol.a, ao, 1.0);
+  vec3 col = lightSurf(alb, N, vW, 1.0 - vCol.a, vCol.a, ao, vCloud);
   col += vCol.rgb * vAux.x * uEmisMul * 4.0;
   vec3 fogged = fogApply(col, vW);
   o = vec4(uRocky > 0.5 ? mix(col, fogged, 0.62) : fogged, blurW(vW));
@@ -602,12 +615,17 @@ export class Scenery {
       this.ranges(set, sCar, 60, split, loop, r);
       if (set.adj && !set.far) this.placeLandmarks(set, path, sCar, loop, r);
       const near = this.depthOnly && set.caster ? set.caster : set.mesh;
+      // the last stretch before the split is drawn with both models, dissolving from one to the other
+      const band = set.far && ahead > split && !this.depthOnly ? Math.min(25, split * 0.2) : 0;
+      if (band > 0) p.v3('uLodFade', split - band, band, 1);
       for (let k = 0; k < r.length; k += 2) near.drawInstances(r[k], r[k + 1]);
       if (set.far && ahead > split) {
         const split2 = set.far2 ? Math.min(split * 2.2, ahead) : ahead;
-        this.ranges(set, sCar, -split, split2, loop, r);
+        this.ranges(set, sCar, -(split - band), split2, loop, r);
         const farM = this.depthOnly && set.caster ? set.caster : set.far;
+        if (band > 0) p.v3('uLodFade', split - band, band, 2);
         for (let k = 0; k < r.length; k += 2) farM.drawInstances(r[k], r[k + 1]);
+        if (band > 0) p.v3('uLodFade', 0, 0, 0);
         if (set.far2 && ahead > split2) {
           this.ranges(set, sCar, -split2, ahead, loop, r);
           for (let k = 0; k < r.length; k += 2) set.far2.drawInstances(r[k], r[k + 1]);

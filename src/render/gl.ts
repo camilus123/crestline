@@ -114,6 +114,18 @@ export class Program {
     for (const { s } of this.sh) gl.deleteShader(s);
     this.sh.length = 0;
     // the sun shadow maps always live on fixed texture units (a 1x1 'fully lit' depth texture when shadows are off)
+    // the cars' sky reflection and the cloud-shadow noise also keep to fixed units: a sampler left on unit 0 can find
+    // a shadow map bound there (a different kind of texture: the draw is then refused)
+    for (const [nm, unit] of [['uEnvT', ENV_UNIT], ['uCloudT', CLOUD_UNIT]] as const) {
+      const l = gl.getUniformLocation(p, nm);
+      if (l) {
+        const cur = gl.getParameter(gl.CURRENT_PROGRAM);
+        gl.useProgram(p);
+        gl.uniform1i(l, unit);
+        gl.useProgram(cur);
+        this.units.set(nm, unit);
+      }
+    }
     const sl = gl.getUniformLocation(p, 'uShadowMap');
     if (sl) {
       const cur = gl.getParameter(gl.CURRENT_PROGRAM);
@@ -371,6 +383,8 @@ export class MSTarget {
   }
 }
 
+export const ENV_UNIT = 2;
+export const CLOUD_UNIT = 4;
 export const SHADOW_UNIT = 6;
 /** the far shadow cascade */
 export const SHADOW_UNIT2 = 5;

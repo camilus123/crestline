@@ -113,6 +113,7 @@ export class Renderer {
   private shadowFB2: WebGLFramebuffer | null = null;
   private shadowVP2 = new Float32Array(16);
   private shadowP2 = [0, 0, 0, 0];
+  private env: Target | null = null;
   private windDir = 1;
   private windDirT = -1;
   private shadowLive = false;
@@ -592,6 +593,18 @@ export class Renderer {
       }
     }
     const fogDen = look.fogDensity;
+    // air: the far distance fades towards the horizon's colour. Less where the track's own fog already does it, and
+    // at night (there the "horizon colour" is near black and would swallow the lit windows and lamps far off).
+    const aerK = 0.42 * Math.max(0.3, 1 - fogDen / 0.004) * (look.stars > 0.2 ? 0.4 : 1);
+    const aerial = [0.6 * look.skyHorizon[0] + 0.4 * look.fogColor[0], 0.6 * look.skyHorizon[1] + 0.4 * look.fogColor[1], 0.6 * look.skyHorizon[2] + 0.4 * look.fogColor[2], aerK];
+    // cloud shadows: only under broken cloud with the sun up (none under a clear sky, an overcast or at night)
+    const cc = look.cloudCover;
+    const cloudK = 0.42 * Math.max(0, Math.min(1, (cc - 0.12) / 0.2)) * Math.max(0, Math.min(1, (0.9 - cc) / 0.2))
+      * (look.stars > 0.2 || look.sunEl < 6 ? 0 : 1);
+    const tile = 1500; // metres of ground per tile of the noise texture: shadows a few hundred metres across
+    const cloudS = loop > 0 ? Math.max(1, Math.round(loop / tile)) / loop : 1 / tile;
+    const cloud = [cloudK, cloudS, 1 / tile, (F.time * 7 * Math.min(3, look.cloudSpeed / 0.004)) * cloudS % 1];
+    const cloudLo = 0.66 - 0.2 * cc;
     const skyRef = look.skyZenith, skyRef2 = look.skyHorizon;
     const wet = look.wet;
     const bandU = this.ground.bands(sCar, maxD);
@@ -603,6 +616,7 @@ export class Renderer {
       p.v4('uTerr', T).v4('uTerr2', T2).f('uYCar', yCar);
       p.v3('uSunDir', sunB).v3('uSunCol', look.sunColor).v3('uAmbTop', look.ambTop).v3('uAmbBot', look.ambBot);
       p.v3('uFogCol', look.fogColor).v3('uFogSun', look.fogSun).v4('uFog', fogDen, look.fogHeight, -20, look.fogMax).v3('uCamPos', eye);
+      p.v4('uAerial', aerial).v4('uCloud', cloud).v2('uCloud2', cloudLo, cloudLo + 0.16).tex('uCloudT', this.tex.noise, 4);
       p.v4a('uHead', headU).v4a('uHeadDir', headD).i('uHeadN', headN);
       p.v4a('uPL', pl).v4a('uPLc', plc).i('uPLn', plN);
       p.f('uFlash', this.flash).f('uWet', wet).f('uTime', F.time);
@@ -807,8 +821,33 @@ export class Renderer {
     }
     pf.end();
     pf.begin('cars, traffic');
+    // what the cars reflect: the sky itself, drawn small and unrolled (not on the light presets)
+    const envOn = !this.quality.lite;
+    if (envOn) {
+      if (!this.env) {
+        gl.activeTexture(gl.TEXTURE0 + 2); // (not whichever unit is active: that may be a shadow map's)
+        this.env = new Target(gl, this.fmt.internal, this.fmt.format, this.fmt.type, false);
+        this.env.resize(128, 64);
+        gl.bindTexture(gl.TEXTURE_2D, this.env.tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      }
+      this.env.bind();
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+      this.sky.setLook(look, sw);
+      this.sky.lite = false;
+      this.sky.draw(null, eye, heading, (tr.y(sCar) - this.meanY) + eye[1], F.time, this.flash, this.bolt);
+      this.curTarget!.bind();
+      const vb = this.viewBox;
+      gl.viewport(vb[0], vb[1], vb[2], vb[3]);
+      gl.scissor(vb[0], vb[1], vb[2], vb[3]);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.enable(gl.DEPTH_TEST);
+    }
+    const prepC = (p: Program) => { prep(p); p.tex('uEnvT', envOn ? this.env!.tex : null, 2).f('uEnvOn', envOn ? 1 : 0); };
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);
-    this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
+    this.cars.draw(prepC, draws, [0.2, 0.9, 1.0]);
     pf.end();
 
 
@@ -918,7 +957,7 @@ export class Renderer {
         far: Math.abs(d) > Math.min(this.quality.lod * 0.35, 80),
         model: m, shadowModel: sm, geo: c.spec.id, paint: liv[0], accent: liv[1],
         spin: c.pwheel + (c.wheelAngle - c.pwheel) * a, steer: c.psteer + (c.steerVis - c.psteer) * a,
-        brake: c.brake > 0.1 ? 1 : 0, lights: lights ? 1 : 0, tail: lights ? 1 : 0.25,
+        brake: c.brake > 0.1 ? 1 : 0, lights: lights ? 1 : 0, tail: lights ? 1 : 0.25, su: [s, x],
       });
       (c as any)._m = m;
     }
@@ -1056,7 +1095,7 @@ export class Renderer {
     this.cars.drawShadows(prep, draws, 0.8);
     gl.depthMask(true);
     gl.disable(gl.BLEND);
-    this.cars.draw(prep, draws, [0.2, 0.9, 1.0]);
+    this.cars.draw((p) => { prep(p); p.f('uEnvOn', 0).v4('uCloud', 0, 0, 0, 0).v4('uAerial', 0, 0, 0, 0); }, draws, [0.2, 0.9, 1.0]);
     if (msaa) {
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, this.ms.fb);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.plain.fb);

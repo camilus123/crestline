@@ -30,6 +30,7 @@ uniform vec4 uBolt; // azimuth, intensity, seed, unused
 uniform vec3 uFogC;
 uniform float uMist;
 uniform float uLite; // lightest preset: one cloud noise instead of four
+uniform float uEnv;  // 1: draw the unrolled sky (see main)
 const float PI = 3.14159265;
 
 float ridge(float x, float seed){
@@ -49,8 +50,16 @@ float skyline(float x, float seed, out float win){
 }
 
 void main(){
-  vec4 p = uInvVP * vec4(vNdc, 1.0, 1.0);
-  vec3 dir = normalize(p.xyz / p.w - uCamPos);
+  vec3 dir;
+  if (uEnv > 0.5) {
+    // the whole sky unrolled onto a rectangle (across: all the way round; up: straight down to straight up),
+    // for the reflections on the cars
+    float az = vNdc.x * 3.14159265, el = vNdc.y * 1.57079633;
+    dir = vec3(sin(az) * cos(el), sin(el), cos(az) * cos(el));
+  } else {
+    vec4 p = uInvVP * vec4(vNdc, 1.0, 1.0);
+    dir = normalize(p.xyz / p.w - uCamPos);
+  }
   // rotate into world azimuth
   float ch = cos(uHeading), sh = sin(uHeading);
   vec3 wd = vec3(dir.x * ch + dir.z * sh, dir.y, -dir.x * sh + dir.z * ch);
@@ -220,11 +229,13 @@ export class Sky {
     p.v3('uFogC', look.fogColor).f('uMist', look.mist);
   }
   lite = false;
-  draw(invVP: Float32Array, cam: number[], heading: number, alt: number, time: number, flash: number, bolt: number[]): void {
+  /** invVP null: the unrolled sky for reflections (into whatever target is bound) */
+  draw(invVP: Float32Array | null, cam: number[], heading: number, alt: number, time: number, flash: number, bolt: number[]): void {
     const gl = this.gl;
     const p = this.prog.use();
-    p.f('uLite', this.lite ? 1 : 0);
-    p.m4('uInvVP', invVP).v3('uCamPos', cam).f('uHeading', heading).f('uAlt', alt).f('uTime', time).f('uFlash', flash);
+    p.f('uLite', this.lite ? 1 : 0).f('uEnv', invVP ? 0 : 1);
+    if (invVP) p.m4('uInvVP', invVP);
+    p.v3('uCamPos', cam).f('uHeading', heading).f('uAlt', alt).f('uTime', time).f('uFlash', flash);
     p.v4('uBolt', bolt[0], bolt[1], bolt[2], 0);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);

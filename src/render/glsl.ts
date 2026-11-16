@@ -23,7 +23,24 @@ float fbm2(vec2 p){ float s=0.0, a=0.5; for(int i=0;i<2;i++){ s+=a*vnoise(p); p=
 `;
 
 /** Path texture access and bent-space placement. */
-export const PATH = `
+/**
+ * Cloud shadows: how much direct sun reaches the ground at track position s, lateral position u (1 = all of it).
+ * Fixed to the ground and drifting along the track; worked out per vertex (per car), never per pixel, from one
+ * tiling noise texture. The s scale is chosen on the CPU so that a whole number of tiles fits a lap.
+ */
+export const CLOUD = `
+uniform mediump sampler2D uCloudT;
+uniform vec4 uCloud;  // strength (0 = none), s scale, u scale, drift
+uniform vec2 uCloud2; // noise level where shade begins, and where it is full
+float cloudShade(float s, float u){
+  if (uCloud.x <= 0.0) return 1.0;
+  float n = textureLod(uCloudT, vec2(s * uCloud.y + uCloud.w, u * uCloud.z), 0.0).r * 0.65
+          + textureLod(uCloudT, vec2(s * uCloud.y * 2.0 - uCloud.w * 0.6, u * uCloud.z * 2.0 + 0.37), 0.0).r * 0.35;
+  return 1.0 - uCloud.x * smoothstep(uCloud2.x, uCloud2.y, n);
+}
+`;
+
+export const PATH = CLOUD + `
 uniform sampler2D uPath;
 uniform vec4 uPathInfo; // dFirst, step, count, maxD
 uniform float uLoopLen; // circuit lap length (0 for stages)
@@ -130,6 +147,7 @@ uniform vec3 uAmbBot;
 uniform vec3 uFogCol;
 uniform vec3 uFogSun;
 uniform vec4 uFog; // density, height falloff, base height, max
+uniform vec4 uAerial; // colour the far distance fades towards, and how far it may go (0..1)
 uniform vec3 uCamPos;
 uniform vec4 uHead[4];
 uniform vec4 uHeadDir[4];
@@ -209,6 +227,10 @@ vec3 fogApply(vec3 col, vec3 wpos){
   // safety net: a NaN or infinite colour (from a degenerate normal, say) would be spread by bloom and motion blur
   // into a glowing column, so show the fog colour there instead
   if (any(isnan(col)) || any(isinf(col))) col = fc;
+  // air between here and there: even on a clear day the far distance loses contrast and takes on the colour of
+  // the sky at the horizon, in step with how far off it is (the fog above only starts where the track's own
+  // visibility ends, which left far hills as saturated as the verge)
+  col = mix(col, uAerial.rgb, uAerial.w * (1.0 - exp(-dist * 0.0011)));
   return mix(col, fc, f);
 }
 

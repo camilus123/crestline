@@ -605,6 +605,35 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.7.0 (2026-11-16) — the "nearly free" image-quality batch (on `v3`)
+Six changes to the picture. None is switchable; all but the last apply on every preset.
+1. **Shading baked into the models** (`MB.bakeShade`, at model build): tree crowns darker low down, inside and
+   underneath and lighter at the top; trunks darker under the crown; everything solid a little darker where it
+   meets the ground. Vertex colours only: no cost per frame. Lit windows, neon, rotor blades and flags untouched.
+2. **Cloud shadows** on tracks with broken cloud and the sun up (cover 0.12-0.9, not at night): soft shade a few
+   hundred metres across, fixed to the ground, drifting along the track with the clouds' speed. Worked out per
+   vertex for terrain and road, once per object and per car (never per pixel), from the existing noise texture:
+   two texture reads in the vertex shaders. Takes up to 42 % of the direct sunlight. A whole number of tiles
+   fits a lap, so there is no seam at the line.
+3. **Air** (`uAerial` in `fogApply`): the far distance fades towards the horizon's colour with distance (up to
+   42 %, less where the track's own fog is heavy, 40 % of that at night). One `exp` per pixel.
+4. **Terrain**: the coarse ground texture repeated every 32 m; a second copy at another size with swapped axes is
+   mixed in patch by patch. One more texture read per terrain pixel.
+5. **Change-over between full and distance models**: over the last 25 m (or a fifth of the detail distance)
+   before the switch both are drawn through complementary screen-door patterns. Not for the second, far switch.
+6. **Cars reflect the sky itself** (not on presets with simple sky and effects): the sky is drawn every frame
+   into a 128x64 unrolled picture, read by the car shader in place of the two-colour gradient. The car shader
+   also reads its reflection once per pixel now, not in eight material branches.
+- Found by `tests/shadowpic.mjs` and fixed before delivery: on the first frame with sun shadows the cars were
+  refused by the driver (the new reflection sampler sat on texture unit 0, where a shadow map was bound).
+  `uEnvT` and `uCloudT` now have fixed units, like the shadow maps.
+- Checked: six scenarios side by side with v3.6.1 at High (rally, night, mountains, snow, desert, forest), and
+  rally with sun shadows and AO: no errors, changes as intended. `tests/pair.mjs` makes such pairs.
+- **Cost: not measured on real hardware.** On the software GPU a Forest frame at High is about 10 % slower
+  (terrain +20 %, scenery +8 %), but texture reads are far dearer there than on a graphics card. Needs a
+  benchmark run on the target PC: Admiral had 0.3-0.5 ms in hand on Forest and Futuristic.
+- Not done from the list: nothing; "larger-scale variation" was done as item 4.
+
 ## v3.6.1 (2026-11-16) — what each graphics option does (on `v3`)
 User, after trying v3.6.0 ("looks like it works"): explanations for the graphics options.
 - A help box at the top of the graphics screen shows one or two sentences about the option in focus: what it

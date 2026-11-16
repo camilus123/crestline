@@ -160,6 +160,46 @@ export class MB {
   get vertexCount(): number {
     return this.pos.length / 3;
   }
+  /**
+   * Shading that never changes, worked into the vertex colours once when the model is built (so it costs nothing
+   * to draw, on any preset): the crown of a tree darker low down, deep inside and underneath, lighter at the top;
+   * trunks dark under their crown; everything solid a little darker where it meets the ground.
+   * Lit windows, lamps and neon are left alone, and so are rotor blades and flags (they move).
+   */
+  bakeShade(): this {
+    const n = this.vertexCount;
+    if (!n) return this;
+    const P = this.pos, A = this.aux;
+    const leaf = (i: number) => A[i * 4] > 0 && A[i * 4] < 242 && A[i * 4 + 1] === 0; // sways, but is no rotor or flag
+    let y0 = Infinity, y1 = -Infinity, fy0 = Infinity, fy1 = -Infinity, fx = 0, fz = 0, fn = 0;
+    for (let i = 0; i < n; i++) {
+      const y = P[i * 3 + 1];
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      if (leaf(i)) { if (y < fy0) fy0 = y; if (y > fy1) fy1 = y; fx += P[i * 3]; fz += P[i * 3 + 2]; fn++; }
+    }
+    if (fn) { fx /= fn; fz /= fn; }
+    let fr = 1e-6;
+    for (let i = 0; i < n; i++) if (leaf(i)) fr = Math.max(fr, Math.hypot(P[i * 3] - fx, P[i * 3 + 2] - fz));
+    const contact = Math.max(0.05, Math.min(0.9, 0.14 * (y1 - y0)));
+    const sm = (t: number) => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+    for (let i = 0; i < n; i++) {
+      if (A[i * 4 + 1] > 0 || A[i * 4] >= 242) continue;
+      const y = P[i * 3 + 1];
+      let k = 1;
+      if (leaf(i) && fy1 - fy0 > 0.3) {
+        k *= 0.72 + 0.38 * sm((y - fy0) / (fy1 - fy0));
+        k *= 0.86 + 0.14 * Math.min(1, Math.hypot(P[i * 3] - fx, P[i * 3 + 2] - fz) / fr);
+        if (this.nrm[i * 3 + 1] < -0.2) k *= 0.88;
+      } else if (!leaf(i)) {
+        k *= 0.72 + 0.28 * sm((y - y0) / contact);
+        if (fn && fy1 - fy0 > 0.3 && y > fy0) k *= 0.78;
+      }
+      const q = Math.sqrt(k); // (colours are stored as square roots)
+      for (let c = 0; c < 3; c++) this.col[i * 4 + c] = Math.max(0, Math.min(255, Math.round(this.col[i * 4 + c] * q)));
+    }
+    return this;
+  }
   pack(): ArrayBuffer {
     const n = this.vertexCount;
     const buf = new ArrayBuffer(n * 32);

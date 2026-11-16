@@ -642,6 +642,7 @@ export function buildModel(type: number, variant = 0, lod = false): MB {
   const f = LIB[type as O];
   if (f) f(b);
   else b.box(0, 0, 0, 1, 1, 1, M('#ff00ff'));
+  if (type !== O.PEAK) b.bakeShade();
   return b;
 }
 
@@ -694,7 +695,7 @@ export function buildFarTree(type: number, variant = 0): MB {
     case O.WILLOW: farBroad(['#6a8a3a', '#7a9a42'], 5.6, 3.6, bark, 0.45); break;
     default: return buildModel(type, variant);
   }
-  return b;
+  return b.bakeShade();
 }
 
 export function hasModel(type: number): boolean {
