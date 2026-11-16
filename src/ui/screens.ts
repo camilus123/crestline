@@ -524,6 +524,26 @@ function settings(g: Game, back: string): Screen {
  * that range: the arrows move in fine steps, and Enter or a click on the number lets you type one.
  */
 type Gfx = { key: keyof Quality; label: string; vals: (number | boolean)[]; fmt: (v: any) => string; free?: [number, number, number] };
+/** What each option does, in a sentence or two, shown for the row in focus (and as its hover tooltip). */
+const GFX_HELP: Partial<Record<keyof Quality, string>> = {
+  scale: 'How many pixels the 3D picture is drawn with, as a share of the screen. Lower is blurrier and much faster: the strongest setting for frame rate. The HUD and menus stay sharp.',
+  minScale: 'With dynamic resolution on (Settings), the game lowers the render resolution when frames run late. This is the lowest it may go.',
+  dpr: 'Phones and tablets pack 2-3 device pixels into each screen point. This caps how many of them are used: ×1 is soft and fast, higher is sharper and slower. No effect on most desktop monitors.',
+  msaa: 'Smooths jagged edges by sampling each pixel several times. Costly at high resolutions, and on some phones it causes stutter.',
+  shadows: 'Real shadows cast by the sun from trees, buildings and cars, at this shadow-map size. Off draws a soft blob under each object instead. One of the most expensive options.',
+  ssao: 'Darkens creases and the places where things meet the ground, for depth. Moderate cost.',
+  bloom: 'The glow around bright things: lamps, neon, the sun, tail lights. More levels spread it wider. Off is the cheapest.',
+  lite: 'Full: detailed clouds, motion blur at speed, heat haze, rain on the lens and sharpening. Simple: a plainer sky and none of those, noticeably faster on phones and laptops.',
+  dist: 'How far ahead the world is drawn before it fades into haze, as a multiple of the track\'s own visibility. Higher costs more everywhere; fog and weather still limit what you see.',
+  scenery: 'How much of the roadside scenery is placed: trees, rocks, signs, fences. Lower thins it out.',
+  woods: 'The woodland set back from the road on tracks with trees: how far out it is drawn. Off removes it.',
+  lod: 'Within this distance, trees, buildings and scenery use their full models; beyond it, lighter ones. Lower is faster, and the switch becomes easier to notice.',
+  terrLite: 'Full: a finer ground mesh, smoother hills. Light: half the detail, a little faster.',
+  lamps: 'At night, how many of the nearest street lamps really light the road, cars and scenery. The rest only glow.',
+  particles: 'Dust, smoke, spray and sparks thrown up by the cars: how much of it there is.',
+  weather: 'How dense the falling rain and snow look. Grip and visibility on those tracks do not change.',
+  cap60: 'What dynamic resolution aims for: your screen\'s refresh rate, or a steady 60 frames per second (better on slower devices).',
+};
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const GFX_LIST: Gfx[] = [
   { key: 'scale', label: 'Render resolution', vals: [], free: [0.3, 1, 0.05], fmt: (v) => Math.round(v * 100) + ' %' },
@@ -562,6 +582,10 @@ function graphics(g: Game, back: string): Screen {
   const title = h('h3', {});
   const panel = h('div', { class: 'panel', style: 'width:min(46rem,94vw)' }, title,
     h('div', { class: 'info', style: 'margin-bottom:.5rem' }, 'A preset sets all of these; change any of them here. Options you changed are marked ●. Picking a preset in Settings resets them. Where a number is underlined, press Enter or click it to type any value.'));
+  // what the option in focus does: stays in view at the top of the list while it scrolls
+  const help = h('div', { class: 'info gfxhelp' }, '');
+  panel.append(help);
+  const helps: string[] = [];
   const rows: HTMLElement[] = [];
   const paintAll = () => {
     const q = g.effectiveQuality();
@@ -632,6 +656,8 @@ function graphics(g: Game, back: string): Screen {
     };
     paint();
     rows.push(row);
+    helps.push(GFX_HELP[o.key] ?? '');
+    row.title = GFX_HELP[o.key] ?? '';
     panel.append(bind(menu, row, r++, 0, o.free ? { activate: edit } : {}));
   }
   const reset = h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Reset to the preset'), h('span', { class: 'val' }, ''));
@@ -639,6 +665,7 @@ function graphics(g: Game, back: string): Screen {
   const backR = h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Back'), h('span', { class: 'val' }, ''));
   panel.append(bind(menu, backR, r++, 0, { activate: () => g.show('settings', { back }) }));
   paintAll();
+  menu.onFocus = (i) => { help.textContent = helps[i] ?? (i === helps.length ? 'Puts every option back to what the preset chosen in Settings uses.' : ''); };
   menu.focus = 0;
   menu.paint();
   menu.onBack = () => g.show('settings', { back });

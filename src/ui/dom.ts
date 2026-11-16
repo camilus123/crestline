@@ -73,6 +73,8 @@ export class Menu {
   focus = 0;
   onBack: (() => void) | null = null;
   onTab: (() => void) | null = null;
+  /** called whenever the menu is repainted, with the focused item's index (for help text that follows the focus) */
+  onFocus: ((i: number) => void) | null = null;
   constructor(private sfx: Sfx) {}
   add(it: Item): Item {
     this.items.push(it);
@@ -112,6 +114,7 @@ export class Menu {
       const en = !it.enabled || it.enabled();
       it.el.classList.toggle('dis', !en);
     });
+    this.onFocus?.(this.focus);
   }
   setFocus(el: HTMLElement): void {
     const i = this.items.findIndex((it) => it.el === el);

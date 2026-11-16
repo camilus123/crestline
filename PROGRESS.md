@@ -605,6 +605,13 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.6.1 (2026-11-16) — what each graphics option does (on `v3`)
+User, after trying v3.6.0 ("looks like it works"): explanations for the graphics options.
+- A help box at the top of the graphics screen shows one or two sentences about the option in focus: what it
+  does and roughly what it costs. It follows keyboard, gamepad and mouse focus and stays in view while the list
+  scrolls (a hover-only tooltip would not exist on a gamepad or a phone); the same text is each row's hover
+  tooltip. Texts are in `GFX_HELP` in screens.ts. `Menu.onFocus` added for this.
+
 ## v3.6.0 (2026-11-16) — graphics options take any value; progress strip readable in daylight (on `v3`)
 - **Free values.** Render resolution, dynamic resolution floor, pixel ratio limit, draw distance, roadside
   clutter, woodland, full-detail distance, street-lamp lights, particles and rain and snow now move in fine
