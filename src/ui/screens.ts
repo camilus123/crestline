@@ -518,26 +518,42 @@ function settings(g: Game, back: string): Screen {
 }
 
 // ---------------------------------------------------------------- graphics options
-/** Every option a quality preset sets, adjustable on its own. Values are the steps offered. */
-const GFX: { key: keyof Quality; label: string; vals: (number | boolean)[]; fmt: (v: any) => string; note?: string }[] = [
-  { key: 'scale', label: 'Render resolution', vals: [0.5, 0.6, 0.7, 0.75, 0.8, 0.9, 1], fmt: (v) => Math.round(v * 100) + ' %' },
-  { key: 'minScale', label: 'Dynamic resolution floor', vals: [0.4, 0.5, 0.6, 0.75, 0.85, 1], fmt: (v) => Math.round(v * 100) + ' %' },
-  { key: 'dpr', label: 'Pixel ratio limit (phones)', vals: [1, 1.25, 1.5, 2, 3], fmt: (v) => '×' + v },
+/**
+ * Every option a quality preset sets, adjustable on its own.
+ * `vals` are the steps the arrows move through. An option with `free` [least, most, step] takes any value in
+ * that range: the arrows move in fine steps, and Enter or a click on the number lets you type one.
+ */
+type Gfx = { key: keyof Quality; label: string; vals: (number | boolean)[]; fmt: (v: any) => string; free?: [number, number, number] };
+const r2 = (v: number) => Math.round(v * 100) / 100;
+const GFX_LIST: Gfx[] = [
+  { key: 'scale', label: 'Render resolution', vals: [], free: [0.3, 1, 0.05], fmt: (v) => Math.round(v * 100) + ' %' },
+  { key: 'minScale', label: 'Dynamic resolution floor', vals: [], free: [0.3, 1, 0.05], fmt: (v) => Math.round(v * 100) + ' %' },
+  { key: 'dpr', label: 'Pixel ratio limit (phones)', vals: [], free: [1, 3, 0.25], fmt: (v) => '×' + r2(v) },
   { key: 'msaa', label: 'Anti-aliasing (MSAA)', vals: [0, 2, 4, 8], fmt: (v) => (v ? v + '×' : 'Off') },
   { key: 'shadows', label: 'Sun shadows', vals: [0, 1024, 2048, 4096], fmt: (v) => (v ? v + ' px' : 'Off (blobs)') },
   { key: 'ssao', label: 'Ambient occlusion', vals: [false, true], fmt: (v) => (v ? 'On' : 'Off') },
   { key: 'bloom', label: 'Bloom', vals: [0, 3, 4, 5, 6], fmt: (v) => (v ? v + ' levels' : 'Off') },
   { key: 'lite', label: 'Sky and screen effects', vals: [true, false], fmt: (v) => (v ? 'Simple' : 'Full') },
-  { key: 'dist', label: 'Draw distance', vals: [0.36, 0.6, 0.8, 1, 1.2, 1.45], fmt: (v) => '×' + v },
-  { key: 'scenery', label: 'Roadside clutter', vals: [0.5, 0.8, 1], fmt: (v) => Math.round(v * 100) + ' %' },
-  { key: 'woods', label: 'Woodland', vals: [0, 0.4, 0.65, 0.8, 0.9, 1.1], fmt: (v) => (v ? '×' + v : 'Off') },
-  { key: 'lod', label: 'Full-detail distance', vals: [40, 70, 110, 170, 260, 450], fmt: (v) => v + ' m' },
+  { key: 'dist', label: 'Draw distance', vals: [], free: [0.3, 2, 0.05], fmt: (v) => '×' + r2(v) },
+  { key: 'scenery', label: 'Roadside clutter', vals: [], free: [0.3, 1, 0.05], fmt: (v) => Math.round(v * 100) + ' %' },
+  { key: 'woods', label: 'Woodland', vals: [], free: [0, 1.5, 0.05], fmt: (v) => (v ? '×' + r2(v) : 'Off') },
+  { key: 'lod', label: 'Full-detail distance', vals: [], free: [20, 600, 10], fmt: (v) => Math.round(v) + ' m' },
   { key: 'terrLite', label: 'Terrain mesh', vals: [true, false], fmt: (v) => (v ? 'Light' : 'Full') },
-  { key: 'lamps', label: 'Street-lamp lights', vals: [4, 6, 8, 12, 16], fmt: (v) => String(v) },
-  { key: 'particles', label: 'Particles', vals: [0.25, 0.4, 0.7, 1, 1.25, 1.5], fmt: (v) => '×' + v },
-  { key: 'weather', label: 'Rain and snow', vals: [0.3, 0.4, 0.7, 1, 1.2, 1.4], fmt: (v) => '×' + v },
+  { key: 'lamps', label: 'Street-lamp lights', vals: [], free: [0, 16, 1], fmt: (v) => String(Math.round(v)) },
+  { key: 'particles', label: 'Particles', vals: [], free: [0, 2, 0.05], fmt: (v) => '×' + r2(v) },
+  { key: 'weather', label: 'Rain and snow', vals: [], free: [0, 2, 0.05], fmt: (v) => '×' + r2(v) },
   { key: 'cap60', label: 'Dynamic resolution target', vals: [true, false], fmt: (v) => (v ? '60 fps' : 'Screen refresh') },
 ];
+// the steps of a free option: its range in fine steps, plus every preset's own value (so a preset's value can
+// always be reached exactly with the arrows)
+const GFX: Gfx[] = GFX_LIST.map((o) => {
+  if (!o.free) return o;
+  const [lo, hi, step] = o.free;
+  const set = new Set<number>();
+  for (let k = 0; lo + k * step <= hi + 1e-9; k++) set.add(r2(lo + k * step));
+  for (const q of QUALITY) set.add(q[o.key] as number);
+  return { ...o, vals: [...set].sort((a, b) => a - b) };
+});
 
 function graphics(g: Game, back: string): Screen {
   const st = g.settings;
@@ -545,7 +561,7 @@ function graphics(g: Game, back: string): Screen {
   const base = () => QUALITY[st.quality];
   const title = h('h3', {});
   const panel = h('div', { class: 'panel', style: 'width:min(46rem,94vw)' }, title,
-    h('div', { class: 'info', style: 'margin-bottom:.5rem' }, 'A preset sets all of these; change any of them here. Options you changed are marked ●. Picking a preset in Settings resets them.'));
+    h('div', { class: 'info', style: 'margin-bottom:.5rem' }, 'A preset sets all of these; change any of them here. Options you changed are marked ●. Picking a preset in Settings resets them. Where a number is underlined, press Enter or click it to type any value.'));
   const rows: HTMLElement[] = [];
   const paintAll = () => {
     const q = g.effectiveQuality();
@@ -556,22 +572,67 @@ function graphics(g: Game, back: string): Screen {
     });
   };
   let r = 0;
+  const setVal = (o: Gfx, v: number | boolean) => {
+    st.qo = { ...(st.qo ?? {}), [o.key]: v };
+    if (v === base()[o.key]) delete (st.qo as any)[o.key];
+    g.applyQuality();
+    g.saveSettings();
+    paintAll();
+  };
   for (const o of GFX) {
-    const idx = () => {
-      const v = g.effectiveQuality()[o.key];
-      let best = 0;
-      o.vals.forEach((x, i) => { if (typeof x === 'boolean' ? x === v : Math.abs((x as number) - (v as number)) < Math.abs((o.vals[best] as number) - (v as number))) best = i; });
-      return best;
+    const cur = () => g.effectiveQuality()[o.key] as number | boolean;
+    const val = h('span', { class: 'val' });
+    const row = h('div', { class: 'row' }, h('span', { class: 'lab' }, o.label), val);
+    let editing: HTMLInputElement | null = null;
+    const paint = () => {
+      if (editing) return;
+      val.innerHTML = '';
+      val.append(h('span', { class: 'ar', 'data-dir': -1 }, '◀'), h('span', o.free ? { class: 'free', title: 'Click to type a value' } : {}, o.fmt(cur())), h('span', { class: 'ar', 'data-dir': 1 }, '▶'));
     };
-    const row = choiceRow(o.label, o.vals.map(o.fmt), idx, (i) => {
-      st.qo = { ...(st.qo ?? {}), [o.key]: o.vals[i] };
-      if (o.vals[i] === base()[o.key]) delete (st.qo as any)[o.key];
-      g.applyQuality();
-      g.saveSettings();
-      paintAll();
-    });
+    (row as any)._paint = paint;
+    // the arrows go to the next step above or below the present value, whatever it is (it may have been typed)
+    (row as any)._adjust = (d: number) => {
+      const v = cur(), n = o.vals.length;
+      let i: number;
+      if (typeof v === 'boolean') i = (o.vals.indexOf(v) + d + n) % n;
+      else if (d > 0) { i = o.vals.findIndex((x) => (x as number) > v + 1e-6); if (i < 0) i = 0; }
+      else { i = n - 1; while (i >= 0 && (o.vals[i] as number) >= v - 1e-6) i--; if (i < 0) i = n - 1; }
+      setVal(o, o.vals[i]);
+      return true;
+    };
+    // typing a value: Enter or a click on the number
+    const edit = () => {
+      if (!o.free || editing) return;
+      const [lo, hi, step] = o.free;
+      const pct = o.fmt(1).includes('%');
+      const inp = h('input', { class: 'txt', type: 'number', inputmode: 'decimal', step: pct ? step * 100 : step, min: pct ? lo * 100 : lo, max: pct ? hi * 100 : hi, value: pct ? Math.round((cur() as number) * 100) : r2(cur() as number), style: 'width:6em;text-align:right' }) as HTMLInputElement;
+      editing = inp;
+      val.innerHTML = '';
+      val.append(inp, h('span', { class: 'mono', style: 'opacity:.6' }, pct ? '%' : `${lo}–${hi}`));
+      g.input.typing = true;
+      const done = (keep: boolean) => {
+        if (editing !== inp) return;
+        editing = null;
+        g.input.typing = false;
+        let v = parseFloat(inp.value);
+        if (keep && isFinite(v)) {
+          if (pct) v /= 100;
+          v = Math.max(lo, Math.min(hi, v));
+          setVal(o, step >= 1 ? Math.round(v) : r2(v));
+        } else paint();
+      };
+      inp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') { e.preventDefault(); done(false); }
+      });
+      inp.addEventListener('blur', () => done(true));
+      inp.addEventListener('click', (e) => e.stopPropagation());
+      inp.focus();
+      inp.select();
+    };
+    paint();
     rows.push(row);
-    panel.append(bind(menu, row, r++, 0, {}));
+    panel.append(bind(menu, row, r++, 0, o.free ? { activate: edit } : {}));
   }
   const reset = h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Reset to the preset'), h('span', { class: 'val' }, ''));
   panel.append(bind(menu, reset, r++, 0, { activate: () => { st.qo = {}; g.applyQuality(); g.saveSettings(); paintAll(); } }));

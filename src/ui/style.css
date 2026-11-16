@@ -136,10 +136,13 @@ table.t tr.cut td{border-top:2px dashed var(--sun)}
 .hud .fuel{width:12em;margin-top:.5em}
 .hud .fuel .bar{height:.8em}
 .hud .fuel .bar i{background:linear-gradient(90deg,#ff3a3a,#ffd23f 30%,#3aff7a)}
-.hud .prog{position:absolute;left:24%;right:24%;bottom:2.2%;height:.45em;background:rgba(255,255,255,.1);transform:skewX(-20deg)}
-.hud .prog i{position:absolute;top:-.25em;width:.3em;height:.95em;background:#fff;opacity:.6}
-.hud .prog i.me{background:var(--mag);opacity:1;height:1.3em;top:-.42em;box-shadow:0 0 .6em var(--mag)}
-.hud .prog b{position:absolute;top:-.1em;width:2px;height:.65em;background:var(--gold)}
+/* the progress strip has to read over anything: a dark bar with a light edge, and every mark outlined in black
+   (it was a faint white bar with half-transparent marks, which vanished over a bright scene on a phone in daylight) */
+.hud .prog{position:absolute;left:24%;right:24%;bottom:2.2%;height:.5em;background:rgba(8,6,24,.78);border:1px solid rgba(255,255,255,.55);box-shadow:0 0 0 1px rgba(0,0,0,.6);transform:skewX(-20deg)}
+.hud .prog i{position:absolute;top:-.3em;width:.3em;height:1.05em;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.85)}
+.hud .prog i.me{background:var(--mag);height:1.4em;top:-.47em;box-shadow:0 0 0 1px rgba(0,0,0,.85),0 0 .6em var(--mag);z-index:1}
+.hud .prog b{position:absolute;top:-.15em;width:3px;height:.75em;background:var(--gold);box-shadow:0 0 0 1px rgba(0,0,0,.85)}
+.row .val .free{border-bottom:1px dashed rgba(5,217,232,.6);cursor:text}
 .hud .msg{position:absolute;left:0;right:0;top:34%;text-align:center;font-size:4.2em;font-style:italic;text-shadow:.06em .06em 0 var(--mag),0 0 .8em rgba(0,0,0,.7);animation:pop .35s both}
 .hud .msg small{display:block;font-size:.35em;letter-spacing:.3em;color:var(--gold);font-style:normal;margin-top:.3em}
 .hud .gap{font-family:'Share Tech Mono';font-size:1.4em;margin-top:.3em;padding:.1em .5em;background:rgba(10,6,32,.65);display:inline-block}

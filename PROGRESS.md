@@ -605,6 +605,22 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.6.0 (2026-11-16) — graphics options take any value; progress strip readable in daylight (on `v3`)
+- **Free values.** Render resolution, dynamic resolution floor, pixel ratio limit, draw distance, roadside
+  clutter, woodland, full-detail distance, street-lamp lights, particles and rain and snow now move in fine
+  steps over a wider range than the presets use (draw distance x0.3-2, detail distance 20-600 m, particles and
+  weather x0-2, woodland x0-1.5, resolution 30-100 %), and any value in the range can be typed: Enter or a
+  click on the (underlined) number. The arrows continue from whatever the value is. Presets' own values stay
+  reachable exactly. `tests/gfxopts.mjs` covers stepping, typing, clamping and surviving a reload.
+  Not measured: what the new extremes cost (draw distance x2, particles x2) on any real device.
+- **Progress strip** (user, phone in daylight: the road line and the opponents' marks could not be seen): it
+  was a 10 %-white bar with 60 %-white marks. Now a dark bar with a light edge; opponents solid white, stage
+  marks wider, every mark outlined in black.
+- **Desert dunes moving in bends: recorded as a known issue, not a bug to chase.** The user's reading, which
+  the code supports: the ground inside a bend is squeezed towards the road by a limit that moves as you drive
+  (the fold limit), so whatever stands on it slides a little; dunes are the largest features on any flat track,
+  so they show it most. Same family as the Mountains artefacts: a consequence of the bent, strip-shaped world.
+
 ## v3.5.7 (2026-11-15) — Futuristic: pylon glows on the lamps, no light patches on the road (released: `main` moved to it 2026-11-15, user: "it seems ok, let's move it to main")
 User's screenshot of Futuristic: lamp glows floating above the pylons; and a request to remove the light patches
 on the street there ("it looks wrong and the track looked better before that got there").
@@ -621,21 +637,16 @@ GitHub release entry are the user's to create (tag pushes are refused from this 
 known issues in the README (Mountains edge artefacts, Desert dunes in bends, stutter above Low on some phones,
 unconfirmed Brave glitches) and the to-do lists below.
 
-## To do (noted 2026-11-15, from the first full benchmark run on the target PC)
-- **Benchmark looks broken at the end of each run.** The cost and stage phases (the last 3 s of each 9.5 s case)
-  make the GPU finish every frame or every stage, so the frame rate drops and the picture stutters, and the next
-  track then loads; it reads as a hang. Fix: say on screen what is happening, or measure off screen / shorter.
-- **Benchmark frame cost is overstated on Firefox.** Measured 237 fps on Forest High while "cost" says 6.56 ms
-  (152 fps max): the read-back used to finish the GPU costs about 2 ms itself there. Needs a cheaper way to wait
-  (fence sync), or calibration against an empty frame.
-- **Track load leaks into the measured run.** Mountains Low and High show one 670-730 ms frame (1% low 14-15 fps);
-  the 1.5 s warm-up is not always enough for the 28,000-tree woodland build. Wait for a few steady frames.
-- **Graphics options should take free values** where that makes sense (draw distance, particles, rain and snow,
-  full-detail distance, woodland, render resolution, lamp lights), not only the steps the presets use.
-- Sky is the largest single stage on every preset at 3440x1440 (2.1-3.2 ms with full effects, 1.1-1.8 ms simple).
-  It is drawn first over the whole screen and then mostly covered; drawing it after the opaque scene, only where
-  nothing else is, should recover most of that.
-- Start-up was 10.7 s on Firefox / Windows.
+## To do (tidied 2026-11-16)
+Done since this list was first written: benchmark end-of-run stutter explained on screen and GPU timers used
+(v3.2.0); track load kept out of the measured run (v3.2.0); sky drawn last (v3.2.0); start-up 6.5 -> 2 s on Edge
+and 9.3 -> 5 s on Firefox on the target PC (v3.5.1-v3.5.3); free-value graphics options (v3.6.0).
+Still open:
+- Benchmark "cost" overstates on Firefox and on the Intel laptop (the read-back used to finish the GPU).
+- Stutter above Low on the Xiaomi 17T (not MSAA, not JavaScript); touch default preset from a measurement.
+- Cars on Mountains cost 0.39-0.46 ms with sun shadows against 0.08 on High (target PC).
+- Brave on Android: brief glitches reported, unconfirmed.
+- Night: reusable cloud texture; lamps limited to those near each surface (items 2 and 5 below).
 
 **Next work, agreed 2026-11-15** (1 and 2 done in v3.2.0, 4 and part of 6 in v3.3.0)
 1. Benchmark: use GPU timer queries for the stage times where the browser offers them (dropped in the v3.1.0
@@ -730,6 +741,7 @@ Costs are estimates for the target PC at 3440x1440, not measurements (240 Hz bud
 - v3: beyond the level-of-detail distance a tree swaps to its lighter model; the shapes match, but the swap to
   the simple distance tree further out (2.2x that distance) can be noticed if you look for it.
 - v3: the shape of the ground inside a bend changes a little as you drive through it (the fold limit moves).
+  On Desert this shows as dunes beside the road appearing to move in bends (accepted 2026-11-16, like Mountains).
 - Not measured: whether Ultra Low reaches ~60 fps on a mid-range phone, or what Psycho costs on the target PC.
   Only relative costs on a software GPU are known, per frame on an emulated phone: Ultra Low 1.4 s, Low 2.0 s,
   High 11.4 s, Psycho 45 s.
