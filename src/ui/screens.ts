@@ -501,6 +501,9 @@ function settings(g: Game, back: string): Screen {
   add(presetRow);
   add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Graphics options'), h('span', { class: 'val' }, (g.effectiveQuality().name.endsWith('(custom)') ? 'CUSTOM ' : '') + '▶')), { activate: () => g.show('graphics', { back }) });
   add(choiceRow('Dynamic resolution', ['Off', 'On'], () => (st.dynRes ? 1 : 0), (i) => { st.dynRes = i === 1; g.saveSettings(); }));
+  const paceRow = choiceRow('Frame pacing', ['Off', 'On'], () => (g.pacing ? 1 : 0), (i) => { st.pace = i === 1; g.saveSettings(); });
+  paceRow.title = 'When the device cannot keep up with the screen, draw at a steady slower rhythm (every 2nd or 3rd refresh) so that frames do not pile up and stall. Costs nothing when the device keeps up. On by default on phones and tablets.';
+  add(paceRow);
   add(sliderRow('Music volume', () => Math.round(st.musicVol * 20), (v) => { st.musicVol = v / 20; g.audio.setVolumes(st.musicVol, st.sfxVol); g.saveSettings(); }, 20));
   add(sliderRow('Effects volume', () => Math.round(st.sfxVol * 20), (v) => { st.sfxVol = v / 20; g.audio.setVolumes(st.musicVol, st.sfxVol); g.saveSettings(); }, 20));
   add(choiceRow('Camera shake', ['Off', 'On'], () => (st.shake ? 1 : 0), (i) => { st.shake = i === 1; g.saveSettings(); }));

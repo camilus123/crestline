@@ -262,7 +262,7 @@ export class Benchmark {
     line('CPU threads / memory', `${nav.hardwareConcurrency ?? '?'} / ${nav.deviceMemory ? nav.deviceMemory + ' GB' : '?'}`);
     line('browser', navigator.userAgent);
     line('start-up', `${(g.startupMs / 1000).toFixed(1)} s from opening the page to the third frame (shader compilation included)`);
-    line('your settings', `${mine.name}` + (qualityDiff(mine) ? `  [${qualityDiff(mine)}]` : '  (stock)') + `   dynamic resolution ${g.settings.dynRes ? 'on' : 'off'} (off during the benchmark)`);
+    line('your settings', `${mine.name}` + (qualityDiff(mine) ? `  [${qualityDiff(mine)}]` : '  (stock)') + `   dynamic resolution ${g.settings.dynRes ? 'on' : 'off'} (off during the benchmark)   frame pacing ${g.pacing ? 'on' : 'off'}`);
     L.push('');
     L.push('== Summary ==');
     L.push('fps = measured (never above the refresh rate) · cost = full frame with the GPU made to finish, no vsync · max fps = 1000 / cost');
@@ -340,7 +340,7 @@ export class Benchmark {
     L.push('== Data (JSON, one line) ==');
     const round = (x: number) => Math.round(x * 100) / 100;
     L.push(JSON.stringify({
-      v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh), syncMs: Math.round(this.syncMs * 1000) / 1000, stageSource: this.results[0]?.src ?? '',
+      v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh), pace: g.pacing, syncMs: Math.round(this.syncMs * 1000) / 1000, stageSource: this.results[0]?.src ?? '',
       threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), compileMs: this.compiles ? { together: Math.round(this.compiles.together), each: Object.fromEntries(this.compiles.each.map((x) => [x.name, Math.round(x.ms)])), probes: Object.fromEntries(this.compiles.probes.map((x) => [x.name, x.ok ? Math.round(x.ms) : -1])) } : null, yours: { name: mine.name, diff: qualityDiff(mine) },
       cases: this.results.map((r) => ({
         track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches,

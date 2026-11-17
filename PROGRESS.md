@@ -605,6 +605,31 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.8.0 (2026-11-17) — phones: frame pacing (on `v3`; effect on a real phone NOT yet measured)
+User's Xiaomi 17T (Mali-G720 MC8), v3.7.1, two browsers:
+- Mi Browser (120 Hz): Low 118 fps, no hitches (cost 5.1 ms, under the 8.3 ms budget). High 43 fps with 32-42
+  hitches per 5 s run, Admiral 47 with 34-48, Psycho 33. Median frame 16.6 ms, but p95 75-83 ms and p99 83-108 ms:
+  most frames are quick and about every fifth stalls for 5-10 refreshes. JavaScript is 3-4 ms (p99 8-12 ms).
+- Brave (reports ~60 Hz; some seconds show 88-92 fps, so the limit is probably the phone's refresh-rate choice
+  for that app, not a hard browser cap: not confirmed). Low 60, High 45, Admiral 50, Psycho 35; hitches 0-14,
+  frames mostly 16.7 / 33 / 50 ms. Start-up 0.8 s (Mi Browser 3.2 s). The picture corruption seen earlier in
+  Brave: user reports it gone.
+- In both, Admiral (no MSAA, with sun shadows and AO) costs less than High (4x MSAA, neither): 12.3 against
+  14.8 ms in Mi Browser. MSAA is the dearest single thing in High on this GPU.
+- Reading (a hypothesis, fitted to the figures above): the stalls come when the GPU cannot finish frames as fast
+  as the page hands them over; they queue, and the browser then holds the page for several refreshes.
+  Every case under the refresh budget has no hitches, every case over it has them, and they are far worse at
+  120 Hz. The software GPU here shows the same shape (median 13 ms, p95 440 ms).
+- **Frame pacing** (Settings, "Frame pacing"; unset = on for touch-first devices, off elsewhere, so the PC is
+  unchanged): after each frame a fence object is put in the GPU's queue; no new frame starts until it reports
+  done (at most 250 ms), and the resulting rhythm (every 2nd, 3rd... refresh) is held, with an occasional
+  attempt at a faster one that backs off (1.5 s doubling to 12 s) when it fails. `Game.skipFrame`.
+- The benchmark runs with the player's pacing setting and prints it in "your settings" (JSON `pace`), so the
+  same phone can be measured with it off and on.
+- `tests/pace.mjs` (software GPU, about 4 fps, so only the shape counts): off: p50 13 ms, p95 440, worst 532,
+  28 frames in 6 s; on: p50 267, p95 377, worst 400, 21 frames. Even rhythm, fewer frames. Whether a phone
+  gains (expected: 60 steady in place of 41-47 with stalls) or loses frames is for the user's benchmark to say.
+
 ## v3.7.1 (2026-11-16) — night sky: the band of faint light no longer breaks along a line (released: `main` moved to it 2026-11-16, user: "let's put this version as main")
 - User (KJGJHHMLH02, second half): a hard vertical edge through the blue haze of the night sky.
 - Cause, older than v3.7.0: the pattern of the star band was laid out on the compass angle, which wraps round
