@@ -605,7 +605,47 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.8.4 (2026-11-17) — frame pacing: frames judged against the rhythm, not the screen (on `v3`; NOT yet measured)
+## v3.9.0 (2026-11-17) — Commodore preset, progress strip under forced dark mode (on `v3`)
+**v3.8.4 measured on the Xiaomi 17T, Mi Browser, pacing on** (pacing off for comparison: the v3.8.2 run):
+
+| | fps on | fps off | hitches on (per 5 s run) | hitches off | rhythm |
+|---|---|---|---|---|---|
+| Low | 119.1 | 119.5 | 0 | 0 | every refresh |
+| High | 40.0 | 42.6 | 3 / 0 / 0 / 0 | 35-47 | every 3rd |
+| Admiral | 39.6 | 48.4 | 0 / 0 / 0 / 0 | 26-43 | every 3rd |
+| Psycho | 29.2 | 33.6 | 7 / 0 / 0 / 1 | 5-32 | every 4th |
+
+- The runaway to 20 fps is gone. The only hitches left are on the first track of a preset, while the rhythm is
+  being found; the three tracks that start on the remembered rhythm have none (Psycho on Futuristic: one, with a
+  step to every 5th refresh and back). Worst frame on those tracks 25-42 ms (High, Admiral), against 83-108 ms
+  without pacing.
+- The price: Admiral draws 18 % fewer frames (39.6 against 48.4), High 6 %, Psycho 13 %.
+- Night on Admiral ran at every 3rd refresh because that is what the preset had settled on on Forest; alone it
+  held every 2nd (60 fps) in v3.8.2. The memory is per preset, not per track, and the first attempt at a faster
+  rhythm comes after 7 s, which a 5 s benchmark case never reaches. In a race it would. Not measured.
+- Pacing stays off unless turned on. Whether it should be on by default on phones is for the player to say.
+
+**Progress strip dark on the phone** (user, with pictures: white opponent marks black, gold checkpoint ticks
+brown, the bar's light edge gone; fine on the PC).
+- Cause: the browser's forced dark mode, which repaints light CSS backgrounds dark. Reproduced here with
+  Chromium's own (`--blink-settings=forceDarkModeEnabled=true`): the same black marks and brown ticks. That the
+  phone has this mode on is inferred from the match, not confirmed.
+- Probed what survives it: backgrounds, gradients, inset shadows and outlines are repainted, borders greyed,
+  `color-scheme` declarations made no difference with that switch; SVG fills are left alone.
+- Fix: the marks, the ticks and the bar's edge are painted by small inline SVGs in the element's text colour
+  (`hud.ts`, `style.css`). `tests/forcedark.mjs` captures the strip with the mode off and on; the new build looks
+  the same in both.
+- Not checked: other light backgrounds in menus under that mode (text is not affected by it).
+
+**Commodore preset** (the user's own phone settings, from his screenshot): resolution 80 % (floor 60 %), pixel
+ratio limit 2, no MSAA, sun shadows 1024, ambient occlusion on, bloom 3, simple sky and effects, draw distance
+0.85, roadside clutter 80 %, woodland 0.6, full detail to 250 m, full terrain, 16 lamp lights, particles and
+weather 0.8, resolution scaler aiming at the screen's refresh. Preset number 7 (appended, so stored preset
+numbers do not shift). Name chosen by me, not by the user.
+- In the benchmark suite: Low / Commodore / High / Psycho + yours, so 16 to 20 cases and about a quarter longer.
+- Not measured on any real device yet. Touch devices still default to Ultra Low.
+
+## v3.8.4 (2026-11-17) — frame pacing: frames judged against the rhythm, not the screen (on `v3`; measured since: see v3.9.0)
 **v3.8.3 measured on the Xiaomi 17T, Mi Browser, pacing on (dynamic resolution now off in the player's settings):**
 - Low 117.3 fps (rhythm 1). High 39.7 fps, hitches 2 / 0 / 0 / 1, started on the remembered rhythm 3 on three
   tracks: the memory does what it was for.

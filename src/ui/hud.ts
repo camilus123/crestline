@@ -135,9 +135,14 @@ class PlayerHud {
     // progress strip
     const total = d.raceLen;
     if (!this.dots.length) {
-      for (const cpv of d.checkpoints.slice(0, -1)) this.c.prog.appendChild(h('b', { style: `left:${(cpv / total) * 100}%` }));
+      // Every mark is painted by a small SVG inside it, in the mark's text colour, and not as a CSS background:
+      // a browser's forced dark mode repaints light backgrounds dark (white marks came out black on a phone, the
+      // gold ones brown) but leaves SVG fills and light text colours alone.
+      const fill = '<svg preserveAspectRatio="none"><rect width="100%" height="100%" fill="currentColor"/></svg>';
+      this.c.prog.appendChild(h('span', { html: '<svg preserveAspectRatio="none"><rect width="100%" height="100%" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2"/></svg>' }));
+      for (const cpv of d.checkpoints.slice(0, -1)) this.c.prog.appendChild(h('b', { style: `left:${(cpv / total) * 100}%`, html: fill }));
       for (const c of race.cars) {
-        const e = h('i', { class: c.isPlayer ? 'me' : '' });
+        const e = h('i', { class: c.isPlayer ? 'me' : '', html: fill });
         this.c.prog.appendChild(e);
         this.dots.push(e);
       }
@@ -146,7 +151,7 @@ class PlayerHud {
       const f = Math.max(0, Math.min(1, c.dist / total));
       this.dots[i].style.left = (f * 100).toFixed(2) + '%';
       if (c === car) this.dots[i].className = 'me';
-      else if (c.isPlayer) this.dots[i].style.background = 'var(--cyan)';
+      else if (c.isPlayer) this.dots[i].style.color = 'var(--cyan)';
     });
     // start lights
     if (!race.started) {

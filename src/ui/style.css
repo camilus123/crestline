@@ -138,10 +138,13 @@ table.t tr.cut td{border-top:2px dashed var(--sun)}
 .hud .fuel .bar i{background:linear-gradient(90deg,#ff3a3a,#ffd23f 30%,#3aff7a)}
 /* the progress strip has to read over anything: a dark bar with a light edge, and every mark outlined in black
    (it was a faint white bar with half-transparent marks, which vanished over a bright scene on a phone in daylight) */
-.hud .prog{position:absolute;left:24%;right:24%;bottom:2.2%;height:.5em;background:rgba(8,6,24,.78);border:1px solid rgba(255,255,255,.55);box-shadow:0 0 0 1px rgba(0,0,0,.6);transform:skewX(-20deg)}
-.hud .prog i{position:absolute;top:-.3em;width:.3em;height:1.05em;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.85)}
-.hud .prog i.me{background:var(--mag);height:1.4em;top:-.47em;box-shadow:0 0 0 1px rgba(0,0,0,.85),0 0 .6em var(--mag);z-index:1}
-.hud .prog b{position:absolute;top:-.15em;width:3px;height:.75em;background:var(--gold);box-shadow:0 0 0 1px rgba(0,0,0,.85)}
+/* the light parts are SVG fills in the element's text colour, not CSS backgrounds or borders: see hud.ts */
+.hud .prog{position:absolute;left:24%;right:24%;bottom:2.2%;height:.5em;background:rgba(8,6,24,.78);box-shadow:0 0 0 1px rgba(0,0,0,.6);transform:skewX(-20deg)}
+.hud .prog svg{position:absolute;left:0;top:0;width:100%;height:100%;display:block;overflow:hidden}
+.hud .prog span{position:absolute;left:0;top:0;right:0;bottom:0}
+.hud .prog i{position:absolute;top:-.3em;width:.3em;height:1.05em;color:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.85)}
+.hud .prog i.me{color:var(--mag);height:1.4em;top:-.47em;box-shadow:0 0 0 1px rgba(0,0,0,.85),0 0 .6em var(--mag);z-index:1}
+.hud .prog b{position:absolute;top:-.15em;width:3px;height:.75em;color:var(--gold);box-shadow:0 0 0 1px rgba(0,0,0,.85)}
 .gfxhelp{position:sticky;top:0;z-index:2;min-height:3.9em;margin:0 -.4rem .4rem;padding:.45rem .6rem;background:rgba(10,6,30,.96);border-left:3px solid var(--cyan);color:var(--txt)}
 .row .val .free{border-bottom:1px dashed rgba(5,217,232,.6);cursor:text}
 .hud .msg{position:absolute;left:0;right:0;top:34%;text-align:center;font-size:4.2em;font-style:italic;text-shadow:.06em .06em 0 var(--mag),0 0 .8em rgba(0,0,0,.7);animation:pop .35s both}

@@ -50,6 +50,9 @@ export const QUALITY: Quality[] = [
   // Psycho tuned for 240 Hz at 3440x1440 on the target PC: no MSAA, slightly shorter view, fewer particles.
   // Kept last so that the preset numbers stored in players' settings do not shift.
   { name: 'Admiral', scale: 1.0, minScale: 0.85, msaa: 0, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
+  // The player's settings for his phone (Xiaomi 17T, Mali-G720): 80 % resolution and no MSAA (the two things that
+  // GPU pays most for), simple sky and effects, a shorter view, but sun shadows (small map) and ambient occlusion kept.
+  { name: 'Commodore', scale: 0.8, minScale: 0.6, msaa: 0, bloom: 3, dist: 0.85, particles: 0.8, weather: 0.8, scenery: 0.8, woods: 0.6, lamps: 16, lite: true, shadows: 1024, ssao: true, dpr: 2, lod: 250, terrLite: false, cap60: false },
 ];
 /** index of the default preset (High) */
 export const Q_DEFAULT = 3;

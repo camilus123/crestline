@@ -23,7 +23,7 @@ export const BENCH_TRACKS: { code: string; what: string }[] = [
   { code: 'KIGJHGSHI15', what: 'Night (street lights)' },
   { code: 'TUORSWWUS14', what: 'Futuristic (buildings, neon)' },
 ];
-export const BENCH_PRESETS = ['Low', 'High', 'Psycho'];
+export const BENCH_PRESETS = ['Low', 'Commodore', 'High', 'Psycho'];
 
 interface Phase { id: 'warm' | 'play' | 'cost' | 'stages'; dur: number }
 // (automated tests on a software GPU shorten the phases: window.__benchQuick)
