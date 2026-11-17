@@ -76,12 +76,15 @@ for (const [T, name] of [[1000 / 120, '120 Hz'], [1000 / 60, '60 Hz']] as [numbe
     const fit = Math.min(maxN, Math.ceil(frac * 1.1 + 0.15));
     check(`${name}, strict browser, cost ${frac} refreshes`, r.n >= Math.min(maxN, Math.ceil(frac)) && r.n <= Math.min(maxN, fit + 1), r);
   }
-  // a race started on the remembered rhythm: no climbing, and the first attempt at a faster one after 7 s
-  const m = run(T, T * 2.2, 12, { hint: 3 });
-  const first = m.log.split(' ').slice(3)[0] ?? '99:0';
-  check(`${name}, cost 2.2, started on the remembered rhythm`, (m.n === 3 || m.n === 2) && parseFloat(first) >= 7.9 && m.worst <= 3 * T + 1, m);
-  const m2 = run(T, T * 0.55, 20, { hint: 3 }); // remembered too slow: it must find its way back up
-  check(`${name}, light load, remembered rhythm too slow`, m2.fps > 0.95 * 1000 / T && m2.n === 1, m2);
+  // a race started on the remembered rhythm: no climbing from 1; a faster one is tried at once (it fails here)
+  // and then left alone for longer each time
+  const m = run(T, T * 2.6, 20, { hint: 3, hold: 1 });
+  const tries = m.log.split(' ').slice(3).filter((e) => e.endsWith(':2')).map((e) => parseFloat(e));
+  check(`${name}, cost 2.6, started on the remembered rhythm`, m.n === 3 && tries[0] < 6 && tries[1] - tries[0] > 7, m);
+  // (at 120 Hz the model's chip is still clocked down from the menu when the race starts, and the rule steps to 4
+  // for a second before coming back: allowed)
+  const m2 = run(T, T * 0.55, 8, { hint: 3 }); // remembered from a heavier track: back at every refresh within 4 s
+  check(`${name}, light load, remembered rhythm too slow`, m2.fps > 0.95 * 1000 / T && m2.n === 1 && parseFloat(m2.log.split(' ').pop()!) < 4, m2);
   // what v3.8.1 got wrong on the phone: back on a light load after a heavy spell, the chip has clocked itself down
   const h = run(T, T * 0.55, 16, { heavyUntil: 4000 });
   check(`${name}, heavy for 4 s, then light`, h.fps > 0.95 * 1000 / T && h.n === 1, h);

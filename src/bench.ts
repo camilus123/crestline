@@ -1,9 +1,10 @@
 // Benchmark: the same fixed suite on every run, so results can be compared between runs, builds and devices.
 //
-// Four tracks (heavy scenery, big terrain, many lights, many buildings), each at three fixed presets with their
-// stock options, plus once more at the player's own settings when those differ from all three. One player, a bot
+// Four tracks (heavy scenery, big terrain, many lights, many buildings), each at five fixed presets with their
+// stock options, plus once more at the player's own settings when those differ from all five. One player, a bot
 // driving, the same car, render resolution fixed at the preset's scale (dynamic resolution off). Each case:
-//   warm-up   1.5 s or more: until the track has loaded and frame times are steady (not measured)
+//   warm-up   1.5 to 8 s: until the track has loaded and frame times are steady; with frame pacing on, also until
+//                    the rhythm has been found and has stood for 2.5 s (not measured)
 //   play      5 s    normal frames: fps, lows, frame-time percentiles, CPU time, draw counters, and the GPU time
 //                    of each render stage where the browser has GPU timers (they cost nothing to use)
 //   cost      1 s    the GPU is made to finish every frame: frame cost, not limited by vsync
@@ -23,7 +24,7 @@ export const BENCH_TRACKS: { code: string; what: string }[] = [
   { code: 'KIGJHGSHI15', what: 'Night (street lights)' },
   { code: 'TUORSWWUS14', what: 'Futuristic (buildings, neon)' },
 ];
-export const BENCH_PRESETS = ['Low', 'Commodore', 'High', 'Psycho'];
+export const BENCH_PRESETS = ['Low', 'High', 'Psycho', 'Admiral', 'Commodore'];
 
 interface Phase { id: 'warm' | 'play' | 'cost' | 'stages'; dur: number }
 // (automated tests on a software GPU shorten the phases: window.__benchQuick)
@@ -213,6 +214,8 @@ export class Benchmark {
       const w = this.warmIv.slice(-20), sorted = w.slice().sort((x, y) => x - y);
       over = w.length >= 20 && sorted[19] < Math.max(sorted[10] * 2.5, 0.012);
       if (!over && this.t > 4 && w.length < 20) over = true; // (a device too slow to draw 20 frames in 4 s)
+      // with frame pacing on, also not until the rhythm has been found and has stood for 2.5 s
+      if (over && this.g.pacing && !this.g.pacer.settled(performance.now())) over = false;
     }
     if (over && id === 'warm') this.warmT = this.t;
     // with GPU timers the stage times came from the normal run: no need for the slow stage-by-stage phase
@@ -345,8 +348,8 @@ export class Benchmark {
     L.push('fps per second of the measured runs, in order: ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
     if (g.pacing) {
       L.push('');
-      L.push('== Frame pacing (a frame on every Nth refresh; time from the start of the case, measuring starts after the warm-up of 1.5 s or more) ==');
-      for (const r of this.results) L.push(`${r.what.split(' (')[0]} / ${r.settings}: average ${r.rhythm.toFixed(1)} · ${r.paceLog}`);
+      L.push('== Frame pacing (a frame on every Nth refresh; times from the start of the case. The rhythm is found during the warm-up, which lasts until it has stood for 2.5 s or 8 s are up; no faster one is tried in the 5 measured seconds) ==');
+      for (const r of this.results) L.push(`${r.what.split(' (')[0]} / ${r.settings}: measured from ${r.warm.toFixed(1)} s, average ${r.rhythm.toFixed(1)} · ${r.paceLog}`);
     }
     L.push('');
     L.push('== Data (JSON, one line) ==');

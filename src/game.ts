@@ -530,6 +530,7 @@ export class Game {
     // (the benchmark's cost and stage phases make the GPU finish inside the frame: nothing to learn from those)
     const measuring = !!this.bench && this.bench.phase.id !== 'warm' && this.bench.phase.id !== 'play';
     const active = this.pacing && !measuring;
+    this.pacer.hold = !!this.bench && this.bench.phase.id === 'play';
     if (active) {
       const key = this.renderer.quality.name;
       if (this.paceHintDue) { this.paceHintDue = false; this.pacer.hint(now, this.paceMemo.get(key) ?? 1); }

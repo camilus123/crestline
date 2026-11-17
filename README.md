@@ -22,7 +22,7 @@ generated in code.
   ambient occlusion, 8x anti-aliasing), plus Admiral (Psycho without anti-aliasing) and Commodore (shadows and
   ambient occlusion at a phone's price: 80 % resolution, no anti-aliasing, simple sky), and every option a preset
   sets can be changed on its own. The game pauses, and stops drawing, while its window is not in focus.
-- **Benchmark:** a fixed suite (four tracks at four presets, plus your own settings) that reports frame rate,
+- **Benchmark:** a fixed suite (four tracks at five presets, plus your own settings if they differ) that reports frame rate,
   frame cost, the cost of each render stage and how long each shader program takes to compile, as text you
   can copy.
 

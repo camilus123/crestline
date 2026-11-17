@@ -605,6 +605,39 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## v3.9.1 (2026-11-17) — benchmark: five presets, measured once the pacing rhythm has settled (on `v3`)
+User: the opponent marks on the phone are the right colour now (v3.9.0 fix confirmed). Asked for the benchmark
+to run Low, High, Psycho, Admiral and Commodore.
+
+**v3.9.0 measured on the Xiaomi 17T, Mi Browser, pacing on:**
+
+| | fps | frame cost | hitches (per 5 s run) | rhythm |
+|---|---|---|---|---|
+| Low | 119.5 | 6.7 ms | 0 | every refresh |
+| Commodore | 40.0 | 8.5 ms (7.2-9.5) | 0 | every 3rd, "remembered" from the first second |
+| High | 38.3 | 17.0 ms | 3 / 1 / 0 / 0 | every 3rd, 4th at times on Mountains and Futuristic |
+| Psycho | 24.6 | 25.6 ms | 3 / 0 / 0 / 0 | every 5th after Forest |
+
+- Commodore costs half of what High does, and every one of its frames came 25.0-25.1 ms after the last: as even
+  as it gets. But 8.5 ms fits two refreshes (16.4 ms) twice over, so 40 fps is not what it can do: the rhythm
+  "every 3rd" was remembered from before the benchmark (the player's own races or the menus on this preset) and
+  the rule waited 7 s before trying a faster one, longer than a case lasts. Same story for Psycho: Forest pushed
+  it to every 5th and the three lighter tracks inherited that. Why the player's own session had settled on
+  every 3rd is not known.
+- Expected for Commodore, NOT measured: every 2nd refresh, 60 fps. Its cost is just over one refresh (8.2 ms).
+
+**Changes**
+- Benchmark presets: Low, High, Psycho, Admiral, Commodore (20 cases; a sixth column only for settings that
+  differ from all five).
+- A race that starts on a remembered rhythm tries a faster one at once (about 1.5 s in), not after 7 s. If that
+  fails it is left alone for 8 s, then 16, 32.
+- With pacing on, the benchmark's warm-up lasts until the rhythm has stood unchanged for 2.5 s (8 s at most), and
+  no faster rhythm is tried during the 5 measured seconds (`Pacer.hold`). The report says so, and gives the time
+  measuring started for each case. So the table now shows what each preset settles on for each track; the search
+  is in the pacing log, not in the fps. `Pacer.settled` now means "unchanged for 2.5 s" (it also decides what is
+  remembered, so a rhythm passed through on the way up is no longer stored).
+- `tests/pace.test.ts`: 28 pass (remembered start: first attempt within seconds, the next not for 7 s or more).
+
 ## v3.9.0 (2026-11-17) — Commodore preset, progress strip under forced dark mode (on `v3`)
 **v3.8.4 measured on the Xiaomi 17T, Mi Browser, pacing on** (pacing off for comparison: the v3.8.2 run):
 

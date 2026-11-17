@@ -13,7 +13,8 @@
 //  - after every change, and at the start of a race, nothing is judged for a moment (a phone that has been
 //    drawing less clocks itself down and needs a few frames to speed up again; loading is not load).
 //  - a race starts at the rhythm the last race on the same settings ended with (v3.8.2 on the phone: every case
-//    spent 2-3.5 s finding it again, with the stalls that takes).
+//    spent 2-3.5 s finding it again, with the stalls that takes), and tries a faster one at once: the last race
+//    may have been on a heavier track.
 // History: v3.8.0 waited for a GPU fence (on the phone it reported 30-50 ms late whatever the load: 17-29 fps on
 // every preset). v3.8.1 had this rule without the pauses and the memory: the stalls went (40-50 per run to 0-3),
 // but it climbed during loading, came down one step per 1.5 s at best and fell off the fastest rhythm again and
@@ -35,6 +36,7 @@ export class Pacer {
   private badUntil = 0;        // ...which is not tried again before this time (ms)
   private back = 2000;         // how long a failed rhythm is left alone (ms; doubles with each failure in a row)
   private badRun = 0;          // bad half seconds in a row
+  private changedAt = 0;       // when the rhythm last changed (ms)
   private w = { ref: 0, late: 0, stall: false }; // the current half second: refreshes, late ones, a stall
   private winAt = 0;           // when it began (ms)
 
@@ -45,23 +47,28 @@ export class Pacer {
   private clearWindow(): void { const w = this.w; w.ref = 0; w.late = 0; w.stall = false; }
   /** start again at every refresh (a new race: what the last one needed says nothing about this one) */
   reset(now: number, log = true): void {
-    this.n = 1; this.sinceDraw = 0; this.badN = 0; this.back = 2000; this.dropAt = -1e9; this.badRun = 0;
+    this.n = 1; this.sinceDraw = 0; this.badN = 0; this.back = 2000; this.dropAt = -1e9; this.badRun = 0; this.changedAt = now;
     this.clearWindow();
     this.grace = now + 1000;
     if (log) this.note(now, 'start');
   }
-  /** the rhythm in use if it has stood for a while (0 while one is being tried or nothing has been judged yet) */
-  settled(now: number): number { return now >= this.grace && now - this.dropAt > 2500 ? this.n : 0; }
+  /** the rhythm in use if it has stood unchanged for 2.5 s (0 while it is still being found or one is being tried) */
+  settled(now: number): number { return now >= this.grace && now - this.changedAt > 2500 ? this.n : 0; }
+  /** while true no faster rhythm is tried (the benchmark's measured seconds: they show the rhythm that was found) */
+  hold = false;
   /**
    * Start a race at the rhythm the last race on the same settings ended with (call after reset), so that it does
-   * not have to be found again through two or three seconds of stalls. A faster one is first tried after 7 s.
+   * not have to be found again through two or three seconds of stalls. A faster one is tried straight away, about
+   * 1.5 s in (v3.8.3-v3.9.0 waited 7 s: on the phone a light track then ran a whole benchmark case, and the first
+   * seconds of a race, at the rhythm a heavy one had needed, 40 fps where it could hold 60).
    */
   hint(now: number, n: number): void {
     if (n <= 1 || !this.period) return;
     this.n = Math.min(n, Math.max(2, Math.floor(50 / this.period)));
     this.badN = this.n - 1;
     this.back = 4000;
-    this.badUntil = now + 7000;
+    this.badUntil = now;
+    this.changedAt = now;
     this.note(now, 'remembered');
   }
   /**
@@ -121,10 +128,12 @@ export class Pacer {
           this.badUntil = now + this.back;
         }
         this.n++;
+        this.changedAt = now;
         this.grace = now + 300;
         this.note(now, w.stall ? 'stall' : 'late ' + Math.round(late * 100) + '%');
-      } else if (this.n > 1 && !bad && late < 0.03 && (this.n - 1 > this.badN || now > this.badUntil)) {
+      } else if (this.n > 1 && !this.hold && !bad && late < 0.03 && (this.n - 1 > this.badN || now > this.badUntil)) {
         this.n--;
+        this.changedAt = now;
         this.dropAt = now;
         this.grace = now + 300;
         this.note(now, 'try');
