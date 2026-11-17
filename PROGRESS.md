@@ -605,6 +605,31 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## State after v3.9.1 (2026-11-17): phone measured, PC not
+**v3.9.1 measured on the Xiaomi 17T, Mi Browser, pacing on (each case measured once its rhythm had settled):**
+
+| | fps (Forest / Mountains / Night / Futuristic) | average | hitches | settled rhythm |
+|---|---|---|---|---|
+| Low | 119.3 / 119.7 / 119.3 / 119.5 | 119.4 | 0 | every refresh |
+| High | 40.8 / 40.0 / 39.4 / 38.4 | 39.7 | 1 / 0 / 0 / 0 | every 3rd |
+| Psycho | 29.8 / 30.0 / 39.6 / 25.4 | 31.2 | 0 | every 4th (3rd on Night, 4th-5th on Futuristic) |
+| Admiral | 40.2 / 40.0 / 57.8 / 39.6 | 44.4 | 1 / 0 / 1 / 0 | every 3rd (2nd on Night) |
+| Commodore | 59.0 / 58.4 / 59.9 / 58.8 | 59.0 | 1 / 0 / 0 / 1 | every 2nd |
+
+- The prediction for Commodore (60 fps on all four tracks) held. Its frame cost is 8.4 ms, 0.2 ms over one refresh.
+- The early attempt after a remembered start works as meant: Night on Admiral and on Psycho found their own
+  faster rhythm; Commodore tries every refresh at 1.5 s on each track, fails, and stays on every 2nd.
+- Against the morning (v3.7.1, same phone and browser, no pacing): High 43.3 fps with 32-42 hitches per run and
+  worst frames of 92-100 ms; Admiral 47.4 with 34-48 and 67-108 ms. Now worst frames are 33-50 ms (High),
+  33-58 ms (Admiral), 25-42 ms (Commodore).
+- **Not measured since v3.7.1: the PC.** v3.8.0-v3.9.1 touched the frame loop (the pacing check runs at every
+  refresh even when pacing is off), the HUD strip and the preset list. Nothing there should cost anything at
+  240 Hz, but no run says so yet. Wanted before `main` moves.
+- Open, none of it measured: pacing together with dynamic resolution (the benchmark switches the scaler off; in
+  play the scaler aims at every refresh while pacing holds every 2nd or 3rd, so it will sit at the preset's
+  floor, and the two may push each other back and forth); pacing in Brave (60 Hz) with the current rule; whether
+  pacing should be on by default on phones; the default preset for touch devices (still Ultra Low).
+
 ## v3.9.1 (2026-11-17) — benchmark: five presets, measured once the pacing rhythm has settled (on `v3`)
 User: the opponent marks on the phone are the right colour now (v3.9.0 fix confirmed). Asked for the benchmark
 to run Low, High, Psycho, Admiral and Commodore.
