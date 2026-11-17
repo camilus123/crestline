@@ -605,7 +605,31 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.8.3 (2026-11-17) — frame pacing: a race starts on the rhythm the last one found (on `v3`; NOT yet measured)
+## v3.8.4 (2026-11-17) — frame pacing: frames judged against the rhythm, not the screen (on `v3`; NOT yet measured)
+**v3.8.3 measured on the Xiaomi 17T, Mi Browser, pacing on (dynamic resolution now off in the player's settings):**
+- Low 117.3 fps (rhythm 1). High 39.7 fps, hitches 2 / 0 / 0 / 1, started on the remembered rhythm 3 on three
+  tracks: the memory does what it was for.
+- **Admiral 20.0 fps on all four tracks**, rhythm 6 "remembered" 0.1-0.4 s into the very first Admiral case, so
+  the 6 came from before the benchmark: the player's own races (and the menus) on Admiral. Psycho 24.9 fps:
+  Forest climbed 2, 3, 4, 5 ("stall" each time) and the other three started on the remembered 5.
+  v3.8.2 held Admiral at 45.6 and Psycho at 31.9, so these settings do not need rhythm 5 or 6.
+- Player, after races on Admiral: "feels ok most of the time and frame pacing makes the start of the forest track
+  feel better". With the log above, part of that play was probably at 20-24 fps (inferred, not seen).
+- Cause, reproduced in the model before changing anything: every late callback counted, and any gap of four
+  refreshes was a "stall". A browser that holds the page back while a frame is unfinished delays the callback
+  after each drawn frame by that frame's whole cost, at any rhythm. A frame of 26 ms is then a "stall" every
+  time, whatever N is, and attempts at a faster rhythm fail on the first such gap. Model with that browser,
+  v3.8.3 rule: cost 1.8, 2.6 and 3.1 refreshes all end on N = 6 (20 fps).
+- v3.8.4: a frame is judged when it is drawn, against the rhythm: late by the refreshes it comes after its turn;
+  a stall is a frame four refreshes late. The refresh interval may now only fall (in that browser the callbacks
+  are all late while skipping too, and an interval believed too long sent the model to N = 1 at 12 fps).
+- `tests/pace.test.ts`: the strict browser added (cost 1.8-3.6 refreshes, 120 and 60 Hz): ends on N = 3, 3, 4, 5
+  at 120 Hz. 28 cases pass. In the lenient browser a rhythm one step too fast is now left alone when no frame is
+  more than one refresh late (model: 54 fps on frames of 17 and 25 ms where v3.8.3 chose a flat 40).
+- Tests run for this build: the model, `tests/pace.mjs`, `tests/flow.mjs`. Not rerun: `tests/benchrun.mjs`
+  (the report code is unchanged since v3.8.3, where it passed with `PACE=1`).
+
+## v3.8.3 (2026-11-17) — frame pacing: a race starts on the rhythm the last one found (on `v3`; measured since: see v3.8.4)
 **v3.8.2 measured on the Xiaomi 17T, Mi Browser, pacing off and on (average over four tracks):**
 
 | | fps off | fps on | hitches off (per 5 s run) | hitches on | worst frame off | worst frame on |

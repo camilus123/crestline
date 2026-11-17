@@ -5,7 +5,7 @@
 // after a loading stall), not what a real device will do.
 import { Pacer } from '../src/pace';
 
-function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: number; pacing?: boolean; heavyUntil?: number; hint?: number } = {}) {
+function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: number; pacing?: boolean; heavyUntil?: number; hint?: number; hold?: number } = {}) {
   const p = new Pacer();
   const pacing = opts.pacing ?? true;
   let gpuFree = 0;              // when the GPU finishes what it has
@@ -27,7 +27,7 @@ function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: num
     }
     if (opts.loadStallAt !== undefined && Math.abs(now - opts.loadStallAt) < T / 2) blockedUntil = now + 180; // a loading stall
     if (now < blockedUntil) continue;
-    if (queue.length >= 2) continue; // the browser holds the page back
+    if (queue.length >= (opts.hold ?? 2)) continue; // the browser holds the page back
     if (opts.hint && now >= 1000 && !hinted) { hinted = true; p.reset(now); p.hint(now, opts.hint); } // a new race after the menu
     const skip = p.tick(now, pacing);
     ns.push(p.n);
@@ -61,14 +61,25 @@ for (const [T, name] of [[1000 / 120, '120 Hz'], [1000 / 60, '60 Hz']] as [numbe
     const maxN = Math.max(2, Math.floor(50 / T)); // the rule never goes below 20 frames a second
     const need = Math.min(maxN, Math.ceil(frac * 1.1 - 1e-9)); // rhythm that fits the cost with the chip at full speed (+10 % jitter)
     // light load: every refresh; heavy: the fitting rhythm or one slower, and little hunting
-    const ok = frac < 0.9 ? r.fps > 0.95 * 1000 / T : r.n >= Math.min(maxN, Math.ceil(frac)) && r.n <= Math.min(maxN, need + 1) && r.changes <= 8;
+    const ok = frac < 0.9 ? r.fps > 0.95 * 1000 / T : r.n >= Math.min(maxN, Math.ceil(frac)) - 1 && r.n <= Math.min(maxN, need + 1) && r.changes <= 8 && r.worst <= (r.n + 1) * T + 1;
+    // (this browser lets two frames wait, so a rhythm one step too fast still runs without a gap longer than one
+    // extra refresh; the rule lets that be)
     check(`${name}, cost ${frac} refreshes`, ok, r);
     console.log(`       (pacing off: fps ${off.fps.toFixed(1)}, p99 ${off.p99.toFixed(1)}, worst ${off.worst.toFixed(1)})`);
+  }
+  // a browser that holds the page back while even one frame is unfinished: every callback after a drawn frame
+  // comes a whole frame late, whatever the rhythm. (v3.8.3 on the phone: the rule read those gaps as stalls and
+  // climbed to the slowest rhythm it has, 20 fps, on settings that hold 40.)
+  for (const frac of [1.8, 2.6, 3.1, 3.6]) {
+    const r = run(T, T * frac, 30, { hold: 1 });
+    const maxN = Math.max(2, Math.floor(50 / T));
+    const fit = Math.min(maxN, Math.ceil(frac * 1.1 + 0.15));
+    check(`${name}, strict browser, cost ${frac} refreshes`, r.n >= Math.min(maxN, Math.ceil(frac)) && r.n <= Math.min(maxN, fit + 1), r);
   }
   // a race started on the remembered rhythm: no climbing, and the first attempt at a faster one after 7 s
   const m = run(T, T * 2.2, 12, { hint: 3 });
   const first = m.log.split(' ').slice(3)[0] ?? '99:0';
-  check(`${name}, cost 2.2, started on the remembered rhythm`, m.n === 3 && parseFloat(first) >= 7.9, m);
+  check(`${name}, cost 2.2, started on the remembered rhythm`, (m.n === 3 || m.n === 2) && parseFloat(first) >= 7.9 && m.worst <= 3 * T + 1, m);
   const m2 = run(T, T * 0.55, 20, { hint: 3 }); // remembered too slow: it must find its way back up
   check(`${name}, light load, remembered rhythm too slow`, m2.fps > 0.95 * 1000 / T && m2.n === 1, m2);
   // what v3.8.1 got wrong on the phone: back on a light load after a heavy spell, the chip has clocked itself down

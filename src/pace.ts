@@ -5,8 +5,9 @@
 // queue is full the browser stops the page for several refreshes at once (seen on a phone: most frames 8-17 ms,
 // every fifth 75-150 ms). So frames are drawn on every Nth refresh only, and N follows what the refresh callbacks
 // themselves show, judged in half seconds:
-//  - a bad half second (more than a tenth of the refreshes late, or one gap of four refreshes) twice in a row:
-//    N + 1 (one alone can be a hiccup), down to 20 frames a second at most;
+//  - each drawn frame is judged against the rhythm: it is late by the refreshes it comes after its turn;
+//  - a bad half second (more than a tenth of the refreshes lost to lateness, or one frame four refreshes late)
+//    twice in a row: N + 1 (one alone can be a hiccup), down to 20 frames a second at most;
 //  - a clean half second (under 3 % late): N - 1, at once if that rhythm has not failed lately; a rhythm that
 //    failed straight after being tried goes back up after one bad half second and is left alone for 2 s, then 4, 8, 16, 32;
 //  - after every change, and at the start of a race, nothing is judged for a moment (a phone that has been
@@ -34,13 +35,14 @@ export class Pacer {
   private badUntil = 0;        // ...which is not tried again before this time (ms)
   private back = 2000;         // how long a failed rhythm is left alone (ms; doubles with each failure in a row)
   private badRun = 0;          // bad half seconds in a row
-  private w = { t: 0, ref: 0, late: 0, stall: false }; // the current half second
+  private w = { ref: 0, late: 0, stall: false }; // the current half second: refreshes, late ones, a stall
+  private winAt = 0;           // when it began (ms)
 
   private note(now: number, why: string): void {
     this.log.push({ t: now, n: this.n, why });
     if (this.log.length > 300) this.log.shift();
   }
-  private clearWindow(): void { const w = this.w; w.t = 0; w.ref = 0; w.late = 0; w.stall = false; }
+  private clearWindow(): void { const w = this.w; w.ref = 0; w.late = 0; w.stall = false; }
   /** start again at every refresh (a new race: what the last one needed says nothing about this one) */
   reset(now: number, log = true): void {
     this.n = 1; this.sinceDraw = 0; this.badN = 0; this.back = 2000; this.dropAt = -1e9; this.badRun = 0;
@@ -75,10 +77,11 @@ export class Pacer {
       if (this.hist.length >= 30 && this.hist.length % 15 === 0) {
         const s = this.hist.slice().sort((a, b) => a - b);
         const est = Math.max(2, s[Math.floor(s.length * 0.1)]);
-        // While every refresh is drawn, callbacks that are all late look exactly like a slower screen, so the
-        // estimate may only fall then. While refreshes are being skipped the callbacks are light and on time,
-        // and the estimate is trusted both ways (screens do change their rate).
-        if (!this.period || est < this.period || this.n > 1) this.period = est;
+        // The estimate may only fall. Callbacks that are all late look exactly like a slower screen (a browser
+        // that holds the page back while a frame is unfinished delays every one of them), and a refresh interval
+        // believed too long wrecks the rhythm, while one believed too short costs nothing: on a screen that has
+        // really gone from 120 to 60 Hz, "every 2nd refresh of 120" is every refresh of 60.
+        if (!this.period || est < this.period) this.period = est;
       }
     }
     if (!active || !this.period) {
@@ -89,40 +92,45 @@ export class Pacer {
     const T = this.period;
     if (d >= 250) this.grace = Math.max(this.grace, now + 500); // a long halt (loading, the tab was away)
     const k = d > 0 && d < 250 ? Math.max(1, Math.round(d / T)) : 1; // refreshes since the last callback
-    const w = this.w;
-    if (now < this.grace) this.clearWindow();
-    else {
-      w.t += d; w.ref += k; w.late += k - 1;
-      if (k >= 4) w.stall = true;
-      if (w.t >= 500) {
-        const late = w.late / Math.max(1, w.ref);
-        const maxN = Math.max(2, Math.floor(50 / T)); // never below 20 frames a second
-        const bad = w.stall || late > 0.1;
-        const tried = now - this.dropAt < 2500;
-        this.badRun = bad ? this.badRun + 1 : 0;
-        // one bad half second can be a hiccup (two in a row are load), unless a faster rhythm was just tried
-        if (bad && (this.badRun >= 2 || tried) && this.n < maxN) {
-          this.badRun = 0;
-          if (tried) { // the rhythm just tried has failed
-            this.back = this.badN === this.n ? Math.min(32000, this.back * 2) : 2000;
-            this.badN = this.n;
-            this.badUntil = now + this.back;
-          }
-          this.n++;
-          this.grace = now + 300;
-          this.note(now, w.stall ? 'stall' : 'late ' + Math.round(late * 100) + '%');
-        } else if (this.n > 1 && !bad && late < 0.03 && (this.n - 1 > this.badN || now > this.badUntil)) {
-          this.n--;
-          this.dropAt = now;
-          this.grace = now + 300;
-          this.note(now, 'try');
-        }
-        this.clearWindow();
-      }
-    }
     this.sinceDraw += k;
     if (this.sinceDraw < this.n) return true;
+    // A frame is drawn now. It is judged against the rhythm, not against the screen: what counts is how many
+    // refreshes later than its turn it comes. (Up to v3.8.3 every late callback counted, and any gap of four
+    // refreshes was a "stall". A browser that holds the page back while a frame is unfinished makes the callback
+    // after each drawn frame late by that frame's whole cost, at any rhythm; on the phone the rule read that as
+    // overload without end and climbed to its slowest rhythm, 20 fps, on settings that hold 40.)
+    const m = this.sinceDraw; // refreshes since the last drawn frame
     this.sinceDraw = 0;
+    const w = this.w;
+    if (now < this.grace) { this.clearWindow(); this.winAt = now; return false; }
+    w.ref += m; w.late += Math.max(0, m - this.n);
+    if (m >= this.n + 4) w.stall = true;
+    if (now - this.winAt >= 500) {
+      this.winAt = now;
+      const late = w.late / Math.max(1, w.ref);
+      const maxN = Math.max(2, Math.floor(50 / T)); // never below 20 frames a second
+      const bad = w.stall || late > 0.1;
+      const tried = now - this.dropAt < 2500;
+      this.badRun = bad ? this.badRun + 1 : 0;
+      // one bad half second can be a hiccup (two in a row are load), unless a faster rhythm was just tried
+      if (bad && (this.badRun >= 2 || tried) && this.n < maxN) {
+        this.badRun = 0;
+        if (tried) { // the rhythm just tried has failed
+          this.back = this.badN === this.n ? Math.min(32000, this.back * 2) : 2000;
+          this.badN = this.n;
+          this.badUntil = now + this.back;
+        }
+        this.n++;
+        this.grace = now + 300;
+        this.note(now, w.stall ? 'stall' : 'late ' + Math.round(late * 100) + '%');
+      } else if (this.n > 1 && !bad && late < 0.03 && (this.n - 1 > this.badN || now > this.badUntil)) {
+        this.n--;
+        this.dropAt = now;
+        this.grace = now + 300;
+        this.note(now, 'try');
+      }
+      this.clearWindow();
+    }
     return false;
   }
 }
