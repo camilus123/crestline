@@ -605,7 +605,27 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.8.0 (2026-11-17) — phones: frame pacing (on `v3`; effect on a real phone NOT yet measured)
+## v3.8.1 (2026-11-17) — frame pacing redone after the phone said no (on `v3`; effect NOT yet measured)
+**v3.8.0 measured on the Xiaomi 17T, Mi Browser, same build, pacing off and on:**
+- Off: as v3.7.1 (Low 118.6 fps, 0 hitches; High 42.0 with 41-47 hitches; Admiral 46.9 with 31-48; Psycho 33.2).
+- On: Low 21.2 fps, High 18.7, Admiral 20.4, Psycho 17.6. Hitches 0 in 15 of 16 cases, frames evenly 33-66 ms.
+- So the prediction (steady 60 on High and Admiral) was wrong, and the default-on setting made the phone
+  several times slower. Cause: the GPU fence reports 30-50 ms after the frame is handed over even when the
+  frame costs 6-8 ms (Low settled at one frame per 4 refreshes), so "wait for the fence" waits for the
+  browser's pipeline, not for the GPU.
+- What the run does show: with frames spaced out, the 75-150 ms stalls disappear. That supports the queueing
+  reading of the stutter; it says nothing yet about which rhythm the phone can hold.
+- v3.8.1: the fence is gone. Frames are drawn on every Nth refresh, and N follows the refresh callbacks' own
+  timing: in each half second, more than 10 % late refreshes or one gap of 4+ refreshes raises N (to 6 at most);
+  under 3 % late lowers it again as an attempt, with the same back-off as before. `Game.skipFrame`.
+- **Frame pacing is now off unless the player turns it on** (Settings), on every device.
+- The refresh-rate estimate comes from the refresh callbacks while pacing (v3.8.0 reported "24 Hz").
+- The benchmark resets the rhythm in its cost and stage phases (they make the GPU finish inside the frame) and,
+  with pacing on, prints the average rhythm of each case (JSON `rhythm`).
+- `tests/pace.mjs` on the software GPU (4-7 fps, most gaps longer than the 250 ms the rule ignores) only shows
+  that it runs without errors; it cannot say whether the rule finds the right rhythm.
+
+## v3.8.0 (2026-11-17) — phones: frame pacing, first attempt (on `v3`; measured since: it failed, see v3.8.1)
 User's Xiaomi 17T (Mali-G720 MC8), v3.7.1, two browsers:
 - Mi Browser (120 Hz): Low 118 fps, no hitches (cost 5.1 ms, under the 8.3 ms budget). High 43 fps with 32-42
   hitches per 5 s run, Admiral 47 with 34-48, Psycho 33. Median frame 16.6 ms, but p95 75-83 ms and p99 83-108 ms:
