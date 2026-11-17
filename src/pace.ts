@@ -11,6 +11,8 @@
 //    failed straight after being tried goes back up after one bad half second and is left alone for 2 s, then 4, 8, 16, 32;
 //  - after every change, and at the start of a race, nothing is judged for a moment (a phone that has been
 //    drawing less clocks itself down and needs a few frames to speed up again; loading is not load).
+//  - a race starts at the rhythm the last race on the same settings ended with (v3.8.2 on the phone: every case
+//    spent 2-3.5 s finding it again, with the stalls that takes).
 // History: v3.8.0 waited for a GPU fence (on the phone it reported 30-50 ms late whatever the load: 17-29 fps on
 // every preset). v3.8.1 had this rule without the pauses and the memory: the stalls went (40-50 per run to 0-3),
 // but it climbed during loading, came down one step per 1.5 s at best and fell off the fastest rhythm again and
@@ -45,6 +47,20 @@ export class Pacer {
     this.clearWindow();
     this.grace = now + 1000;
     if (log) this.note(now, 'start');
+  }
+  /** the rhythm in use if it has stood for a while (0 while one is being tried or nothing has been judged yet) */
+  settled(now: number): number { return now >= this.grace && now - this.dropAt > 2500 ? this.n : 0; }
+  /**
+   * Start a race at the rhythm the last race on the same settings ended with (call after reset), so that it does
+   * not have to be found again through two or three seconds of stalls. A faster one is first tried after 7 s.
+   */
+  hint(now: number, n: number): void {
+    if (n <= 1 || !this.period) return;
+    this.n = Math.min(n, Math.max(2, Math.floor(50 / this.period)));
+    this.badN = this.n - 1;
+    this.back = 4000;
+    this.badUntil = now + 7000;
+    this.note(now, 'remembered');
   }
   /**
    * Called at every refresh callback with its time (ms). `active` false: pacing is off (or the moment is not to

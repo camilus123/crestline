@@ -5,7 +5,7 @@
 // after a loading stall), not what a real device will do.
 import { Pacer } from '../src/pace';
 
-function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: number; pacing?: boolean; heavyUntil?: number } = {}) {
+function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: number; pacing?: boolean; heavyUntil?: number; hint?: number } = {}) {
   const p = new Pacer();
   const pacing = opts.pacing ?? true;
   let gpuFree = 0;              // when the GPU finishes what it has
@@ -15,6 +15,7 @@ function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: num
   const draws: number[] = [];
   const ns: number[] = [];
   let blockedUntil = 0;
+  let hinted = false;
   p.reset(0);
   for (let i = 0, now = 0; now < seconds * 1000; i++, now = i * T) {
     while (queue.length && queue[0] <= now) queue.shift();
@@ -27,6 +28,7 @@ function run(T: number, cost: number, seconds: number, opts: { loadStallAt?: num
     if (opts.loadStallAt !== undefined && Math.abs(now - opts.loadStallAt) < T / 2) blockedUntil = now + 180; // a loading stall
     if (now < blockedUntil) continue;
     if (queue.length >= 2) continue; // the browser holds the page back
+    if (opts.hint && now >= 1000 && !hinted) { hinted = true; p.reset(now); p.hint(now, opts.hint); } // a new race after the menu
     const skip = p.tick(now, pacing);
     ns.push(p.n);
     if (skip) continue;
@@ -63,6 +65,12 @@ for (const [T, name] of [[1000 / 120, '120 Hz'], [1000 / 60, '60 Hz']] as [numbe
     check(`${name}, cost ${frac} refreshes`, ok, r);
     console.log(`       (pacing off: fps ${off.fps.toFixed(1)}, p99 ${off.p99.toFixed(1)}, worst ${off.worst.toFixed(1)})`);
   }
+  // a race started on the remembered rhythm: no climbing, and the first attempt at a faster one after 7 s
+  const m = run(T, T * 2.2, 12, { hint: 3 });
+  const first = m.log.split(' ').slice(3)[0] ?? '99:0';
+  check(`${name}, cost 2.2, started on the remembered rhythm`, m.n === 3 && parseFloat(first) >= 7.9, m);
+  const m2 = run(T, T * 0.55, 20, { hint: 3 }); // remembered too slow: it must find its way back up
+  check(`${name}, light load, remembered rhythm too slow`, m2.fps > 0.95 * 1000 / T && m2.n === 1, m2);
   // what v3.8.1 got wrong on the phone: back on a light load after a heavy spell, the chip has clocked itself down
   const h = run(T, T * 0.55, 16, { heavyUntil: 4000 });
   check(`${name}, heavy for 4 s, then light`, h.fps > 0.95 * 1000 / T && h.n === 1, h);

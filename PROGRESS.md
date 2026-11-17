@@ -605,7 +605,34 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.8.2 (2026-11-17) — frame pacing, third rule, with a log in the report (on `v3`; effect NOT yet measured)
+## v3.8.3 (2026-11-17) — frame pacing: a race starts on the rhythm the last one found (on `v3`; NOT yet measured)
+**v3.8.2 measured on the Xiaomi 17T, Mi Browser, pacing off and on (average over four tracks):**
+
+| | fps off | fps on | hitches off (per 5 s run) | hitches on | worst frame off | worst frame on |
+|---|---|---|---|---|---|---|
+| Low | 119.5 | 119.7 | 0 | 0 | 17-25 ms | 9-17 ms |
+| High | 42.6 | 40.0 | 35-47 | 1-7 | 83-108 ms | 58-83 ms |
+| Admiral | 48.4 | 45.6 | 26-43 | 2-14 | 58-100 ms | 58-83 ms |
+| Psycho | 33.6 | 31.9 | 5-32 | 3-10 | 83-175 ms | 83-108 ms |
+
+- Low is whole again (rhythm 1.0 in all four cases, no change logged).
+- High and Admiral: 6 % fewer frames; hitches down to a twelfth (High) and a quarter (Admiral). Not zero.
+- The pacing log says where the remaining ones come from. Every heavy case climbs 1 -> 2 at 2.0 s and 2 -> 3
+  at 3.4 s (the warm-up ends at 1.5 s, so the climb is inside the measured 5 s), then tries the faster rhythm
+  after 1-2 s and fails ("stall"). High and Admiral settle on every 3rd refresh (40 fps), Night Admiral on every
+  2nd (60), Psycho on every 3rd or 4th. So most of a 5 s case is spent finding the rhythm, which a race of
+  minutes does once. Not separable from this data: how many hitches remain once it has settled.
+- v3.8.3: the rhythm each quality preset settled on is remembered for the session (`Game.paceMemo`,
+  `Pacer.settled`, `Pacer.hint`); the next race on that preset starts there, and a faster rhythm is first tried
+  after 7 s. In the benchmark the first track of each preset still climbs; the other three start settled.
+- `tests/pace.test.ts`: two more cases (remembered rhythm right; remembered rhythm too slow for a light load:
+  back at every refresh after 9 s). 20 pass.
+- Not measured, and the benchmark cannot: play with dynamic resolution on, which is what the player has on the
+  phone. There the resolution falls to the preset's floor first (High 60 %, Admiral 85 %), so the rhythm may
+  well be faster than the benchmark's. Open: with pacing at every 2nd refresh the resolution scaler still aims
+  at every refresh and so stays at the floor.
+
+## v3.8.2 (2026-11-17) — frame pacing, third rule, with a log in the report (on `v3`; measured since: see v3.8.3)
 **v3.8.1 measured on the Xiaomi 17T, Mi Browser, pacing off and on (average over four tracks):**
 
 | | fps off | fps on | hitches off (per 5 s run) | hitches on | 1 % low off | 1 % low on |

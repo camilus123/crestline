@@ -522,11 +522,21 @@ export class Game {
   get pacing(): boolean { return this.settings.pace === true; }
   /** on which refreshes frames are drawn (see pace.ts) */
   pacer = new Pacer();
-  paceReset(): void { this.pacer.reset(performance.now(), this.pacing); }
+  paceReset(): void { this.pacer.reset(performance.now(), this.pacing); this.paceHintDue = true; }
+  /** the rhythm each quality preset settled on (this session), to start the next race on it */
+  private paceMemo = new Map<string, number>();
+  private paceHintDue = false;
   private skipFrame(now: number): boolean {
     // (the benchmark's cost and stage phases make the GPU finish inside the frame: nothing to learn from those)
     const measuring = !!this.bench && this.bench.phase.id !== 'warm' && this.bench.phase.id !== 'play';
-    return this.pacer.tick(now, this.pacing && !measuring);
+    const active = this.pacing && !measuring;
+    if (active) {
+      const key = this.renderer.quality.name;
+      if (this.paceHintDue) { this.paceHintDue = false; this.pacer.hint(now, this.paceMemo.get(key) ?? 1); }
+      const n = this.pacer.settled(now);
+      if (n) this.paceMemo.set(key, n);
+    }
+    return this.pacer.tick(now, active);
   }
   private frameBody(now: number, forceDt?: number): void {
     const t0 = performance.now();
