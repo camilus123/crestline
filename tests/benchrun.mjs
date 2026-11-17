@@ -16,6 +16,8 @@ p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await p.addInitScript((nt) => { window.__benchQuick = true; if (nt) window.__noGpuTimers = true; }, !!process.env.NOTIMERS);
 await p.goto('file://' + path.join(root, 'dist/crestline.html') + '?screen=bench' + (q ? '&q=' + q : ''), { waitUntil: 'commit', timeout: 120000 });
 await p.waitForTimeout(3000);
+// PACE=1: with frame pacing on (the report must then carry its pacing section)
+if (process.env.PACE) await p.evaluate(() => { window.__crest.settings.pace = true; });
 await p.keyboard.press('Enter');
 const t0 = Date.now();
 const labels = new Set();

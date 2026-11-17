@@ -605,7 +605,40 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## v3.8.1 (2026-11-17) — frame pacing redone after the phone said no (on `v3`; effect NOT yet measured)
+## v3.8.2 (2026-11-17) — frame pacing, third rule, with a log in the report (on `v3`; effect NOT yet measured)
+**v3.8.1 measured on the Xiaomi 17T, Mi Browser, pacing off and on (average over four tracks):**
+
+| | fps off | fps on | hitches off (per 5 s run) | hitches on | 1 % low off | 1 % low on |
+|---|---|---|---|---|---|---|
+| Low | 119.1 | 71.4 | 0 | 0-4 | 60-89 | 20-60 |
+| High | 41.7 | 36.8 | 8-48 | 0-3 | 8-13 | 14-24 |
+| Admiral | 48.4 | 36.5 | 25-51 | 0-2 | 9-17 | 16-30 |
+| Psycho | 33.0 | 26.9 | 1-33 | 0 | 7-11 | 17-22 |
+
+- The stalls go: worst frames 83-150 ms without pacing, 33-75 ms with it. That part works.
+- The price is too high and Low is broken: its rhythm per case was 4.1, 2.0, 1.4, 1.1 (it should be 1), i.e.
+  it started each case slow and crept back; Night Low fell from 118 back to 52 fps in the last second.
+- Three faults read from the figures: (1) the rule climbs during loading and the first frames of a race;
+  (2) it comes down one step per 1.5 s at best; (3) trying the faster rhythm fails although the device can hold
+  it. For (3) the likely cause is the phone clocking itself down while it draws less: with pacing on, CPU work
+  that does not depend on the frame rate (HUD and audio) took 0.7-0.9 ms per frame in the Low cases that ran
+  slow, against 0.4 in those that ran at every refresh and in all of them without pacing. Not proven.
+- v3.8.2 rule (`src/pace.ts`, class `Pacer`, pure logic): judged in half seconds; two bad ones in a row raise N
+  (one alone is a hiccup); a clean one lowers it at once unless that rhythm failed lately (then 2 s, 4, ... 32);
+  a rhythm being tried goes back after one bad half second; nothing is judged for 0.3 s after a change, 1 s
+  after a race starts and 0.5 s after a halt of 250 ms or more; N never takes the game below 20 fps; the
+  refresh interval may only shrink while every refresh is drawn (constant lateness looks like a slower screen).
+- `tests/pace.test.ts`: the rule against a model device (GPU cost, a browser that holds the page back, a clock
+  governor), 120 and 60 Hz, cost 0.5 to 3.1 refreshes, a hiccup, heavy-then-light. All pass: light loads stay at
+  every refresh, heavy ones settle on the fitting rhythm with one attempt per 2-32 s. The model found two faults
+  before the phone had to (refresh estimate swallowing constant lateness; one hiccup changing the rhythm).
+  **The model does not reproduce the phone's stalls** (without pacing it is simply slower, and faster than with):
+  it checks the logic, not the benefit.
+- The report gets a "Frame pacing" section when pacing is on: per case the average rhythm and every change with
+  its time and reason (JSON `paceLog`). `tests/benchrun.mjs` takes `PACE=1`.
+- Still off unless turned on in Settings.
+
+## v3.8.1 (2026-11-17) — frame pacing redone after the phone said no (on `v3`; measured since: see v3.8.2)
 **v3.8.0 measured on the Xiaomi 17T, Mi Browser, same build, pacing off and on:**
 - Off: as v3.7.1 (Low 118.6 fps, 0 hitches; High 42.0 with 41-47 hitches; Admiral 46.9 with 31-48; Psycho 33.2).
 - On: Low 21.2 fps, High 18.7, Admiral 20.4, Psycho 17.6. Hitches 0 in 15 of 16 cases, frames evenly 33-66 ms.

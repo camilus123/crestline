@@ -14,7 +14,7 @@ const run = (on) => p.evaluate(async (on) => {
   let calls = 0, last = 0; const iv = []; const ns = [];
   const f = g.frame.bind(g), fb = g.frameBody.bind(g);
   g.frame = (...a) => { calls++; return f(...a); };
-  g.frameBody = (...a) => { const t = performance.now(); if (last) iv.push(t - last); last = t; ns.push(g.paceN); return fb(...a); };
+  g.frameBody = (...a) => { const t = performance.now(); if (last) iv.push(t - last); last = t; ns.push(g.pacer.n); return fb(...a); };
   await new Promise((r) => setTimeout(r, 6000));
   g.frame = f; g.frameBody = fb;
   const s = iv.slice().sort((a, b) => a - b), q = (x) => +(s[Math.floor((s.length - 1) * x)] ?? -1).toFixed(1);

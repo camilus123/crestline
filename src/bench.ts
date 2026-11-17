@@ -35,7 +35,7 @@ interface Case { track: number; q: Quality; label: string }
 interface CaseResult {
   track: string; what: string; settings: string; res: string;
   fps: number; low1: number; p50: number; p95: number; p99: number; worst: number; hitches: number;
-  cpuMs: number; cpuP99: number; costMs: number; calls: number; instances: number; verts: number; rhythm: number;
+  cpuMs: number; cpuP99: number; costMs: number; calls: number; instances: number; verts: number; rhythm: number; paceLog: string;
   stages: { name: string; cpu: number; gpu: number }[];
   /** where the stage GPU times came from */
   src: 'timer' | 'sync';
@@ -65,6 +65,7 @@ export class Benchmark {
   private k = 0;
   private t = 0;
   private iv: number[] = [];
+  private caseT0 = 0;
   private paceSum = 0; // sum of the pacing rhythm over the measured frames
   private cpu: number[] = [];
   private cost: number[] = [];
@@ -118,6 +119,8 @@ export class Benchmark {
 
   private startCase(): void {
     const c = this.cases[this.ci];
+    this.g.pacer.log.length = 0;
+    this.caseT0 = performance.now();
     this.g.benchRace(BENCH_TRACKS[c.track].code, c.q);
     this.g.renderer.forceScale = c.q.scale;
     this.iv = [];
@@ -169,6 +172,7 @@ export class Benchmark {
         hitches: ms.filter((x) => x > Math.max(med * 2, 25)).length,
         cpuMs: mean(this.cpu), cpuP99: pct(cs, 0.99), costMs: Math.max(0, mean(this.cost.slice(Math.floor(this.cost.length * 0.2))) - this.syncMs),
         calls: this.calls, instances: this.inst, verts: this.verts, rhythm: this.paceSum / Math.max(1, this.iv.length),
+        paceLog: this.g.pacer.log.map((e) => `${((e.t - this.caseT0) / 1000).toFixed(1)}s ${e.n} (${e.why})`).join(', '),
         stages: this.stageGpu
           ? this.order.map((n) => ({ name: n, cpu: this.stageCpu.get(n) ?? 0, gpu: n.endsWith('(CPU)') ? -1 : this.stageGpu!.get(n) ?? -1 }))
           : pf.order.map((n) => ({ name: n, cpu: this.stageCpu.get(n) ?? 0, gpu: n.endsWith('(CPU)') ? -1 : Math.max(0, pf.gpuAvg(n) - this.syncMs) })),
@@ -185,7 +189,7 @@ export class Benchmark {
     if (id === 'warm') this.warmIv.push(raw);
     if (id === 'play') {
       this.iv.push(raw);
-      this.paceSum += this.g.paceN;
+      this.paceSum += this.g.pacer.n;
       this.cpu.push(cpuMs);
       this.secN++;
       this.secT += raw;
@@ -339,7 +343,11 @@ export class Benchmark {
     }
     L.push('');
     L.push('fps per second of the measured runs, in order: ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
-    if (g.pacing) L.push('frame pacing rhythm (a frame on every Nth refresh; average per case, in order): ' + this.results.map((r) => r.rhythm.toFixed(1)).join(' '));
+    if (g.pacing) {
+      L.push('');
+      L.push('== Frame pacing (a frame on every Nth refresh; time from the start of the case, measuring starts after the warm-up of 1.5 s or more) ==');
+      for (const r of this.results) L.push(`${r.what.split(' (')[0]} / ${r.settings}: average ${r.rhythm.toFixed(1)} · ${r.paceLog}`);
+    }
     L.push('');
     L.push('== Data (JSON, one line) ==');
     const round = (x: number) => Math.round(x * 100) / 100;
@@ -347,7 +355,7 @@ export class Benchmark {
       v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh), pace: g.pacing, syncMs: Math.round(this.syncMs * 1000) / 1000, stageSource: this.results[0]?.src ?? '',
       threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), compileMs: this.compiles ? { together: Math.round(this.compiles.together), each: Object.fromEntries(this.compiles.each.map((x) => [x.name, Math.round(x.ms)])), probes: Object.fromEntries(this.compiles.probes.map((x) => [x.name, x.ok ? Math.round(x.ms) : -1])) } : null, yours: { name: mine.name, diff: qualityDiff(mine) },
       cases: this.results.map((r) => ({
-        track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches, rhythm: Math.round(r.rhythm * 100) / 100,
+        track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches, rhythm: Math.round(r.rhythm * 100) / 100, paceLog: r.paceLog,
         warmS: round(r.warm), wholeGpu: round(r.wholeGpu), cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),
         stages: Object.fromEntries(r.stages.map((s) => [s.name, round(s.name.endsWith('(CPU)') ? s.cpu : Math.max(0, s.gpu))])),
       })),

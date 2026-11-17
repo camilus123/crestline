@@ -1,6 +1,7 @@
 // Game controller: settings, sessions (arcade / championship), screen flow, the fixed-timestep loop,
 // split-screen views, audio routing, dynamic resolution, F3 overlay and benchmark.
 
+import { Pacer } from './pace';
 import { Audio } from './audio/audio';
 import { Input, DEFAULT_BINDINGS, Bindings } from './input';
 import { DT, NO_INPUT, CarInput } from './sim/car';
@@ -325,6 +326,7 @@ export class Game {
       track, mode: S.mode, difficulty: S.difficulty, players, rivals: S.rivals, playerSlots: S.slots.slice(0, st.players),
       fuel: S.mode === 'championship', seed: hashString(code) ^ S.index,
     };
+    this.paceReset();
     return new Race(cfg);
   }
 
@@ -518,65 +520,13 @@ export class Game {
   }
   /** frame pacing is on (off unless the player turns it on: its effect on real phones is still being measured) */
   get pacing(): boolean { return this.settings.pace === true; }
-  private rafLast = 0;          // time of the previous refresh callback (ms)
-  private rafHist: number[] = []; // intervals between refresh callbacks (ms), drawn or skipped
-  private rafT = 0;             // the screen's refresh interval as the callbacks show it (ms)
-  private sinceDraw = 0;        // screen refreshes since the last frame was drawn
-  /** frames are drawn on every paceN-th screen refresh */
-  paceN = 1;
-  private paceHold = 0;    // no attempt at a faster rhythm before this time (ms)
-  private paceBack = 1500; // how long to wait before the next attempt (ms)
-  private paceDrop = 0;    // when the last attempt started (ms)
-  private pw = { t: 0, ref: 0, late: 0, stall: false }; // the current half-second: time, refreshes, late ones, a stall
-  /**
-   * Frame pacing. A browser lets the page hand over frames faster than the GPU finishes them; the surplus queues
-   * up, and when the queue is full the browser stops the page for several refreshes at once (seen on a phone:
-   * most frames 8-17 ms, every fifth 75-150 ms). So frames are drawn on every Nth refresh only, and N follows
-   * what the refresh callbacks themselves show: callbacks arriving late (more than a tenth of the refreshes in
-   * half a second, or one gap of four refreshes) raise N; a clean spell lowers it again as an attempt, tried
-   * less often each time it fails.
-   * (v3.8.0 waited for a GPU fence instead. On the phone the fence reported 30-50 ms late whatever the load,
-   * and the frame rate fell to 17-29 fps on every preset: measured, removed.)
-   * Returns true if this refresh is to be skipped.
-   */
+  /** on which refreshes frames are drawn (see pace.ts) */
+  pacer = new Pacer();
+  paceReset(): void { this.pacer.reset(performance.now(), this.pacing); }
   private skipFrame(now: number): boolean {
-    const d = this.rafLast ? now - this.rafLast : 0;
-    this.rafLast = now;
-    if (d > 0 && d < 250) {
-      this.rafHist.push(d);
-      if (this.rafHist.length > 120) this.rafHist.shift();
-      if (this.rafHist.length >= 30 && this.rafHist.length % 15 === 0) {
-        const s = this.rafHist.slice().sort((a, b) => a - b);
-        this.rafT = Math.max(2, s[Math.floor(s.length * 0.1)]);
-      }
-    }
     // (the benchmark's cost and stage phases make the GPU finish inside the frame: nothing to learn from those)
     const measuring = !!this.bench && this.bench.phase.id !== 'warm' && this.bench.phase.id !== 'play';
-    if (!this.pacing || measuring || !this.rafT) {
-      this.paceN = 1; this.sinceDraw = 0; this.pw = { t: 0, ref: 0, late: 0, stall: false };
-      return false;
-    }
-    const k = d > 0 && d < 250 ? Math.max(1, Math.round(d / this.rafT)) : 1; // refreshes since the last callback
-    const w = this.pw;
-    w.t += d; w.ref += k; w.late += k - 1;
-    if (k >= 4) w.stall = true;
-    if (w.t >= 500) {
-      const late = w.late / Math.max(1, w.ref);
-      if (w.stall || late > 0.1) {
-        if (this.paceN < 6) this.paceN++;
-        this.paceBack = now - this.paceDrop < 1500 ? Math.min(12000, this.paceBack * 2) : 1500;
-        this.paceHold = now + this.paceBack;
-      } else if (this.paceN > 1 && late < 0.03 && now > this.paceHold) {
-        this.paceN--;
-        this.paceDrop = now;
-        this.paceHold = now + this.paceBack;
-      }
-      this.pw = { t: 0, ref: 0, late: 0, stall: false };
-    }
-    this.sinceDraw += k;
-    if (this.sinceDraw < this.paceN) return true;
-    this.sinceDraw = 0;
-    return false;
+    return this.pacer.tick(now, this.pacing && !measuring);
   }
   private frameBody(now: number, forceDt?: number): void {
     const t0 = performance.now();
@@ -750,7 +700,7 @@ export class Game {
     const s = this.dtHist.slice().sort((a, b) => a - b);
     if (s.length > 30) {
       // (with frame pacing, frames are further apart than refreshes: take the refresh callbacks' own interval)
-      this.refresh = this.paceN > 1 && this.rafT ? this.rafT / 1000 : Math.max(1 / 500, s[Math.floor(s.length * 0.1)]);
+      this.refresh = this.pacer.n > 1 && this.pacer.period ? this.pacer.period / 1000 : Math.max(1 / 500, s[Math.floor(s.length * 0.1)]);
       this.refreshBest = Math.min(this.refreshBest, this.refresh);
     }
     if (!this.settings.dynRes || this.manual) {
