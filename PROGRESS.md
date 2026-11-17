@@ -605,7 +605,25 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
-## State after v3.9.1 (2026-11-17): phone measured, PC not
+## Performance history page (2026-11-17, on `v3`, no new build)
+**v3.9.1 measured on the PC (RX 9070, Edge, 3440x1440, 240 Hz), pacing off:** Low, High and Commodore 239.8 fps,
+Admiral 239.6 (frame cost 4.19 ms; v3.7.0: 4.25), Psycho 213.8 (5.42 ms; v3.7.0: 5.40). Shader compile 1.8 s,
+start-up 2.1 s. So v3.8.0-v3.9.1 changed nothing measurable on the PC; the check asked for before `main` is done.
+- The same PC with pacing on: Psycho on Forest and Futuristic settles on every 2nd refresh, a flat 119.9 fps
+  (1 % low 117, longest frame 8.5 ms) where it ran 187-196 fps unpaced (1 % low 80, longest frame 12.6 ms).
+  Average over the four tracks 179.4 against 213.8. The other presets are untouched by it.
+- User asked for charts and tables for GitHub on how performance changed. All 37 reports attached during the
+  project (v3.1.0 to v3.9.1; PC in Edge and Firefox, the 17T in Mi Browser and Brave, the laptop, the old phone)
+  are reduced to `docs/perf/benchmarks.json`. `tools/perfcharts.py` draws four charts from it as SVG, light and
+  dark (`docs/perf/`): PC frame cost by version, shader compile time by version, phone stalls before and after
+  pacing, phone frame rate per preset. `docs/performance.md` holds the charts, the tables and what changed in
+  each version; linked from the README. Nothing older than v3.1.0 is in it: the fixed suite starts there.
+- **Found while putting the history together: v3.7.0's picture batch is not cheap on the phone.** Without
+  pacing, High cost 11.5 ms in v3.5.4 and 14.8 ms in v3.7.1 (52.9 to 43.3 fps), Psycho 18.3 to 21.1 ms. On the PC
+  it was 0.3-0.4 ms. Single runs, but the v3.8.x runs without pacing agree (High 15.5-16.5 ms). Which of the six
+  changes is responsible is not measured. Open.
+
+## State after v3.9.1 (2026-11-17): phone measured, PC not (PC measured since: see above)
 **v3.9.1 measured on the Xiaomi 17T, Mi Browser, pacing on (each case measured once its rhythm had settled):**
 
 | | fps (Forest / Mountains / Night / Futuristic) | average | hitches | settled rhythm |

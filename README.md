@@ -25,6 +25,8 @@ generated in code.
 - **Benchmark:** a fixed suite (four tracks at five presets, plus your own settings if they differ) that reports frame rate,
   frame cost, the cost of each render stage and how long each shader program takes to compile, as text you
   can copy.
+- **Performance history:** [docs/performance.md](docs/performance.md) charts how frame cost, start-up and
+  phone smoothness changed from version to version, from the benchmark reports of four devices.
 
 ## Controls (defaults)
 
