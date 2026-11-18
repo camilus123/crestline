@@ -44,6 +44,7 @@ export class Input {
   private padPrev: boolean[][] = [];
   private padAxPrev: number[][] = [];
   menuQueue: MenuKey[] = [];
+  private hadPad = false;
   /** on-screen touch controls (player 1), 0..1 per action */
   touch: Partial<Record<Action, number>> = {};
   /** set when a gamepad button was pressed since the game last looked (to hide the touch controls) */
@@ -104,6 +105,9 @@ export class Input {
   poll(dt: number): void {
     const pads = navigator.getGamepads ? Array.from(navigator.getGamepads()) : [];
     this.pads = pads;
+    // (the menus' key hints name the gamepad's buttons only while there is a gamepad)
+    const hasPad = pads.some((p) => p && p.connected);
+    if (hasPad !== this.hadPad) { this.hadPad = hasPad; document.body.classList.toggle('haspad', hasPad); }
     if (pads.some((p) => p && p.connected) && this.padOf[0] < 0) this.assignPads();
     for (const p of pads) {
       if (!p || !p.connected) continue;

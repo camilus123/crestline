@@ -73,6 +73,7 @@ since v3.5.0, building each program from scratch so that no cache can answer.
 | 3.5.3 | 1.8 s | 5.5 s |
 | 3.7.0 | 1.8 s | 5.5 s |
 | 3.9.1 | 1.8 s | – |
+| 3.9.3 | – | 5.5 s |
 <!-- /table -->
 
 The gain came in v3.5.1 and v3.5.2 from rewriting the terrain noise so that the compiler sees far fewer copies of
@@ -90,7 +91,7 @@ most frames quick, then one of 75 to 150 ms. Frame pacing (v3.8.0 to v3.9.1, an 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="perf/phone-pacing-dark.svg">
-  <img src="perf/phone-pacing-light.svg" width="760" alt="Two bar charts for the phone, before (v3.7.1, no pacing) and after (v3.9.1, pacing on). Stalls in 20 seconds: Low 3 to 0, High 150 to 1, Admiral 158 to 2, Psycho 72 to 0. Longest frame in ms: Low 66 to 25, High 100 to 50, Admiral 108 to 58, Psycho 158 to 67.">
+  <img src="perf/phone-pacing-light.svg" width="760" alt="Two bar charts for the phone, before (v3.7.1, no pacing) and after (v3.9.3, pacing on). Stalls in 20 seconds: Low 3 to 0, High 150 to 0, Admiral 158 to 1, Psycho 72 to 2. Longest frame in ms: Low 66 to 17, High 100 to 50, Admiral 108 to 42, Psycho 158 to 133.">
 </picture>
 
 It took six versions to get right, and the reports show each attempt, failures included:
@@ -108,6 +109,7 @@ It took six versions to get right, and the reports show each attempt, failures i
 | 3.8.4 | on | 119.1 | 40.0 | 39.6 | 29.2 | 3 | 0 | 8 |
 | 3.9.0 | on | 119.5 | 38.3 | – | 24.6 | 4 | – | 3 |
 | 3.9.1 | on | 119.5 | 39.7 | 44.4 | 31.2 | 1 | 2 | 0 |
+| 3.9.3 | on | 119.6 | 46.5 | 44.8 | 35.0 | 0 | 1 | 2 |
 <!-- /table -->
 
 Stalls are totals over the four tracks, 20 seconds in all.
@@ -118,33 +120,38 @@ Stalls are totals over the four tracks, 20 seconds in all.
 - **v3.8.3** read a browser habit (holding the page back while a frame is unfinished) as overload without end and
   drove Admiral to the slowest rhythm it has.
 - **From v3.8.4** each frame is judged against the rhythm it is meant to keep.
+- **v3.9.3** is not a pacing change: it is the frame-order fix described under "What got slower, and why".
 
-Two things to know when comparing the first and last rows:
+Three things to know when reading the table:
 
-- Pacing trades frames for evenness. High gives up 4 fps of average (43.3 to 39.7), Admiral 3, Psycho 2.
+- Pacing trades frames for evenness. Between v3.7.1 without it and v3.9.1 with it, High gave up 4 fps of average
+  (43.3 to 39.7), Admiral 3, Psycho 2. With the v3.9.3 fix on top, High and Psycho are faster than they were
+  before pacing (46.5 and 35.0 fps) and Admiral is 3 fps slower (44.8).
+- Not every stall is gone: Psycho still had two in the v3.9.3 run, one of them 133 ms long.
 - Since v3.9.1 the benchmark, with pacing on, starts measuring once the rhythm has settled. The second or two of
-  searching at the start of a race is therefore not in the v3.9.1 row; v3.8.2 and v3.8.4, measured the old way,
-  show what it adds.
+  searching at the start of a race is therefore not in the rows from v3.9.1 on; v3.8.2 and v3.8.4, measured the
+  old way, show what it adds.
 
 ## Phone: the presets today
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="perf/phone-presets-dark.svg">
-  <img src="perf/phone-presets-light.svg" width="760" alt="Bar chart: frame rate of each preset on the phone in v3.9.1 with frame pacing on. Low 119.5 fps, drawn on every refresh. Commodore 59.0, every 2nd refresh. Admiral 44.4, every 2nd to 3rd. High 39.7, every 3rd. Psycho 31.2, every 3rd to 5th.">
+  <img src="perf/phone-presets-light.svg" width="760" alt="Bar chart: frame rate of each preset on the phone in v3.9.3 with frame pacing on. Low 119.6 fps, drawn on every refresh. Commodore 59.8, every 2nd refresh. High 46.5, every 2nd to 3rd. Admiral 44.8, every 2nd to 3rd. Psycho 35.0, every 3rd to 4th.">
 </picture>
 
 <!-- table:phone-presets -->
 | Preset | fps | Lowest 1 % low | Frame cost | Stalls in 20 s | Longest frame |
 |---|---|---|---|---|---|
-| Low | 119.5 | 71.5 | 6.0 ms | 0 | 25 ms |
-| Commodore | 59.0 | 32.7 | 8.4 ms | 2 | 42 ms |
-| Admiral | 44.4 | 21.8 | 13.2 ms | 2 | 58 ms |
-| High | 39.7 | 20.0 | 13.8 ms | 1 | 50 ms |
-| Psycho | 31.2 | 15.0 | 22.0 ms | 0 | 67 ms |
+| Low | 119.6 | 71.7 | 5.7 ms | 0 | 17 ms |
+| Commodore | 59.8 | 40.0 | 8.7 ms | 0 | 25 ms |
+| High | 46.5 | 22.5 | 10.5 ms | 0 | 50 ms |
+| Admiral | 44.8 | 30.0 | 12.2 ms | 1 | 42 ms |
+| Psycho | 35.0 | 12.0 | 17.0 ms | 2 | 133 ms |
 <!-- /table -->
 
 Commodore (new in v3.9.0) keeps sun shadows and ambient occlusion but drops anti-aliasing and renders at 80 %
-resolution, the two things this chip pays most for. It is the heaviest preset that holds 60 fps on this phone.
+resolution, the two things this chip pays most for. It is the heaviest preset that holds 60 fps on this phone on
+all four tracks; High does on Mountains only.
 
 ## What got slower, and why
 
@@ -170,7 +177,18 @@ The other four effects (cloud shadows, haze, terrain texture, model change-over)
 between rounds, about 1.5 ms, so the test could not tell their cost from zero. Commodore, which has no sky
 picture, measured the same either way.
 
-What this does for frame rates on the phone is not measured yet: no benchmark has been run on v3.9.3.
+The benchmark on v3.9.3 (pacing on) against v3.9.1:
+
+| | fps, v3.9.1 | fps, v3.9.3 | Frame cost, v3.9.1 | Frame cost, v3.9.3 |
+|---|---|---|---|---|
+| High | 39.7 | 46.5 | 13.8 ms | 10.5 ms |
+| Psycho | 31.2 | 35.0 | 22.0 ms | 17.0 ms |
+| Admiral | 44.4 | 44.8 | 13.2 ms | 12.2 ms |
+| Commodore | 59.0 | 59.8 | 8.4 ms | 8.7 ms |
+
+High and Psycho, the two presets with anti-aliasing, got 3.3 and 5.0 ms of their frame back. High now holds 60 fps
+on Mountains and moves between 40 and 60 on the other tracks; at about 11 ms a frame it sits right at the edge of
+what this phone can keep up on every 2nd refresh. Admiral and Commodore, without anti-aliasing, hardly moved.
 
 ## Other devices
 
@@ -185,7 +203,9 @@ A laptop with integrated graphics (Intel Core 5 120U, Firefox, 60 Hz):
 <!-- /table -->
 
 The PC in Firefox reached the same frame rates as in Edge from v3.5.3 on (Admiral 239.6 fps, Psycho 229.7); in
-v3.1.0 it had managed 229.2 fps on High and 162.5 on Psycho.
+v3.1.0 it had managed 229.2 fps on High and 162.5 on Psycho. On v3.9.3 it was measured with frame pacing on, which
+on this machine only touches Psycho: Low, High and Commodore 239.8 fps, Admiral 239.7, and Psycho 205.7, held
+at a flat 120 on Forest.
 
 Measured once each, so no history to show: the same phone in Brave, which ran at 60 Hz (v3.7.1, no pacing: Low
 63.3 fps, High 45.2, Psycho 35.4), and an old phone with a PowerVR GE8320 chip (v3.4.3: 22.3 fps on Ultra Low,
@@ -193,6 +213,7 @@ Measured once each, so no history to show: the same phone in Brave, which ran at
 
 ## Not measured
 
+- v3.9.3 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
 - Frame pacing in any browser other than Mi Browser, or on any phone other than this one.
 - Frame pacing together with dynamic resolution. The benchmark switches dynamic resolution off.
 - The laptop and the old phone on any version after v3.5.0.

@@ -46,8 +46,16 @@ export function build(g: Game, id: string, arg?: any): Screen | null {
 function hdr(title: string): HTMLElement {
   return h('div', { class: 'hdr' }, h('div', { class: 'logo' }, 'CRESTLINE'), h('div', { class: 'ttl' }, title));
 }
+/**
+ * The key hints along the bottom. A key written "ENTER / A" is a keyboard key and a gamepad button; the gamepad
+ * half is shown only while a gamepad is connected, and says so ("PAD A"): shown always and bare, "A" and "B" read
+ * as the keyboard's A and B, which do nothing in the menus (reported 2026-11-18).
+ */
 function hint(...parts: [string, string][]): HTMLElement {
-  return h('div', { class: 'hint' }, ...parts.map(([k, v]) => h('span', {}, h('b', {}, k), ' ' + v)));
+  return h('div', { class: 'hint' }, ...parts.map(([k, v]) => {
+    const [key, pad] = k.split(' / ');
+    return h('span', {}, h('b', {}, key, ...(pad ? [h('i', { class: 'padhint' }, ' / PAD ' + pad)] : [])), ' ' + v);
+  }));
 }
 const STD_HINT = hint(['↑↓', 'SELECT'], ['←→', 'CHANGE'], ['ENTER / A', 'CONFIRM'], ['ESC / B', 'BACK']);
 

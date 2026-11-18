@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" font-family="system-ui,-apple-system,&quot;Segoe UI&quot;,sans-serif" role="img" aria-label="Phone: frame rate of each preset (v3.9.1, frame pacing on)">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" font-family="system-ui,-apple-system,&quot;Segoe UI&quot;,sans-serif" role="img" aria-label="Phone: frame rate of each preset (v3.9.3, frame pacing on)">
 <rect x="0.5" y="0.5" width="759" height="299" rx="8" fill="#fcfcfb" stroke="rgba(11,11,11,0.10)"/>
-<text x="20.0" y="28.0" font-size="15" fill="#0b0b0b" text-anchor="start" font-weight="600">Phone: frame rate of each preset (v3.9.1, frame pacing on)</text>
+<text x="20.0" y="28.0" font-size="15" fill="#0b0b0b" text-anchor="start" font-weight="600">Phone: frame rate of each preset (v3.9.3, frame pacing on)</text>
 <text x="20.0" y="47.0" font-size="12" fill="#52514e" text-anchor="start" font-weight="400">Xiaomi 17T, Mi Browser, 120 Hz screen. Average of four tracks. Higher is better.</text>
 <line x1="104.0" y1="74.0" x2="104.0" y2="260.0" stroke="#c3c2b7" stroke-width="1"/>
 <text x="104.0" y="276.0" font-size="10" fill="#898781" text-anchor="middle" font-weight="400">0</text>
@@ -14,23 +14,23 @@
 <text x="520.0" y="276.0" font-size="10" fill="#898781" text-anchor="middle" font-weight="400">120 fps</text>
 <text x="584.0" y="68.0" font-size="10" fill="#898781" text-anchor="start" font-weight="400">a frame is drawn on</text>
 <text x="94.0" y="96.6" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">Low</text>
-<path d="M104.0 84.6h410.1a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-410.1z" fill="#2a78d6"/>
-<text x="525.1" y="96.6" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">119.5</text>
+<path d="M104.0 84.6h410.6a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-410.6z" fill="#2a78d6"/>
+<text x="525.6" y="96.6" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">119.6</text>
 <text x="584.0" y="96.6" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every refresh</text>
 <text x="94.0" y="133.8" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">Commodore</text>
-<path d="M104.0 121.8h200.4a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-200.4z" fill="#2a78d6"/>
-<text x="315.4" y="133.8" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">59.0</text>
+<path d="M104.0 121.8h203.3a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-203.3z" fill="#2a78d6"/>
+<text x="318.3" y="133.8" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">59.8</text>
 <text x="584.0" y="133.8" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every 2nd refresh</text>
-<text x="94.0" y="171.0" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">Admiral</text>
-<path d="M104.0 159.0h149.9a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-149.9z" fill="#2a78d6"/>
-<text x="264.9" y="171.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">44.4</text>
+<text x="94.0" y="171.0" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">High</text>
+<path d="M104.0 159.0h157.2a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-157.2z" fill="#2a78d6"/>
+<text x="272.2" y="171.0" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">46.5</text>
 <text x="584.0" y="171.0" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every 2nd to 3rd refresh</text>
-<text x="94.0" y="208.2" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">High</text>
-<path d="M104.0 196.2h133.5a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-133.5z" fill="#2a78d6"/>
-<text x="248.5" y="208.2" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">39.7</text>
-<text x="584.0" y="208.2" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every 3rd refresh</text>
+<text x="94.0" y="208.2" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">Admiral</text>
+<path d="M104.0 196.2h151.2a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-151.2z" fill="#2a78d6"/>
+<text x="266.2" y="208.2" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">44.8</text>
+<text x="584.0" y="208.2" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every 2nd to 3rd refresh</text>
 <text x="94.0" y="245.4" font-size="11" fill="#52514e" text-anchor="end" font-weight="400">Psycho</text>
-<path d="M104.0 233.4h104.2a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-104.2z" fill="#2a78d6"/>
-<text x="219.2" y="245.4" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">31.2</text>
-<text x="584.0" y="245.4" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every 3rd to 5th refresh</text>
+<path d="M104.0 233.4h117.3a4 4 0 0 1 4 4v8.0a4 4 0 0 1 -4 4h-117.3z" fill="#2a78d6"/>
+<text x="232.3" y="245.4" font-size="11" fill="#0b0b0b" text-anchor="start" font-weight="400">35.0</text>
+<text x="584.0" y="245.4" font-size="11" fill="#52514e" text-anchor="start" font-weight="400">every 3rd to 4th refresh</text>
 </svg>

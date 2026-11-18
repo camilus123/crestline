@@ -94,6 +94,8 @@ interface EngineVoice {
   pan: StereoPannerNode;
   intake: GainNode;
   car: Car | null;
+  /** a rival voice that has just been given another car stays silent until this time (s) */
+  muteUntil?: number;
 }
 
 export class Audio {
@@ -111,6 +113,8 @@ export class Audio {
   private reverbSend!: GainNode;
   ready = false;
   private suspended = false;
+  private lastUpdate = -1;
+  private lastActive = false;
 
   init(): void {
     if (this.ctx) {
@@ -119,7 +123,11 @@ export class Audio {
     }
     const AC = (window as any).AudioContext || (window as any).webkitAudioContext;
     if (!AC) return;
-    const ctx: AudioContext = new AC({ latencyHint: 'interactive' });
+    // On phones and tablets a larger sound buffer: with the smallest one ('interactive') the sound crackles as soon
+    // as the device is busy, which a race start with twenty cars makes it (reported on a phone, 2026-11-18). The
+    // price is some tens of milliseconds between a bump and its sound.
+    const touchFirst = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+    const ctx: AudioContext = new AC({ latencyHint: touchFirst ? 'balanced' : 'interactive' });
     this.ctx = ctx;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -12;
@@ -264,7 +272,13 @@ export class Audio {
   update(listeners: Car[], cars: Car[], delta: (a: number, b: number) => number, weather: { rain: number; wind: number; scen: number }, active: boolean): void {
     if (!this.ctx || !this.ready) return;
     const t = this.ctx.currentTime;
-    const k = 0.03;
+    // About 30 times a second is plenty: every value set here glides to its target over 30-100 ms anyway. Once
+    // per drawn frame meant some 70 scheduled changes a frame, 8,000 a second at 120 fps, for the sound thread to
+    // work through. (A change of the 'active' state is never held back.)
+    if (t - this.lastUpdate < 0.03 && active === this.lastActive) return;
+    this.lastUpdate = t;
+    this.lastActive = active;
+    const k = 0.04;
     // engines: player voices follow their car
     const lead = listeners[0];
     let ei = 0;
@@ -276,10 +290,19 @@ export class Audio {
     // rival voices: nearest rivals to the lead listener
     if (lead) {
       const near = cars.filter((c) => !c.isPlayer).map((c) => ({ c, d: delta(lead.s, c.s), dx: c.x - lead.x })).filter((o) => Math.abs(o.d) < 140).sort((a, b) => Math.abs(a.d) - Math.abs(b.d));
-      for (let i = 0; ei < this.engines.length; i++, ei++) {
-        const e = this.engines[ei];
-        const o = near[i];
+      // Each rival voice keeps its car while that car is among the nearest few. (It used to be "voice i plays the
+      // i-th nearest car": in a pack, as on the grid, the order changes all the time, and a voice that jumps to a
+      // car on the other side of the road at other revs makes a click.) A voice given a new car is silent for
+      // 60 ms while its pitch and position move over.
+      const voices = this.engines.slice(ei);
+      const keep = near.slice(0, voices.length + 2).map((o) => o.c);
+      for (const e of voices) if (e.car && !keep.includes(e.car)) e.car = null;
+      const free = near.map((o) => o.c).filter((c) => !voices.some((e) => e.car === c));
+      for (const e of voices) {
+        if (!e.car && free.length) { e.car = free.shift()!; e.muteUntil = t + 0.06; }
+        const o = e.car ? near.find((x) => x.c === e.car) : undefined;
         if (!o) {
+          e.car = null;
           e.out.gain.setTargetAtTime(0, t, 0.1);
           continue;
         }
@@ -288,7 +311,8 @@ export class Audio {
         // doppler: approaching (we are faster and behind) raises pitch slightly
         const rel = (o.c.v - lead.v) * Math.sign(-o.d || 1);
         const dop = 1 + Math.max(-0.12, Math.min(0.12, rel / 340));
-        this.driveEngine(e, o.c, att * 0.55, Math.max(-0.9, Math.min(0.9, o.dx / 6)), dop, active);
+        const muted = t < (e.muteUntil ?? 0);
+        this.driveEngine(e, o.c, muted ? 0 : att * 0.55, Math.max(-0.9, Math.min(0.9, o.dx / 6)), dop, active, muted ? 0.012 : 0.05);
         // whoosh when passing close
         if (Math.abs(o.d) < 6 && Math.abs(o.dx) < 4 && Math.abs(lead.v - o.c.v) > 6 && !(e as any)._wh) {
           (e as any)._wh = true;
@@ -328,12 +352,12 @@ export class Audio {
     rain.gain.gain.setTargetAtTime(weather.rain * 0.16, t, 0.2);
   }
 
-  private driveEngine(e: EngineVoice, car: Car, vol: number, pan: number, pitch: number, active: boolean): void {
+  private driveEngine(e: EngineVoice, car: Car, vol: number, pan: number, pitch: number, active: boolean, fade = 0.05): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime;
     const rpm = Math.max(car.spec.idle, car.rpm);
     const thr = car.throttle;
-    const k = 0.02;
+    const k = 0.035;
     const loW = 1 - Math.min(1, Math.max(0, (rpm - 2500) / 3000));
     const hiW = 1 - loW;
     const load = Math.min(1, thr * 1.2 + (car.limiter ? 0.5 : 0));
@@ -347,7 +371,7 @@ export class Audio {
     e.filter.frequency.setTargetAtTime(700 + rpm * 0.55 + load * 2200, t, k);
     (e.intake as any)._bp.frequency.setTargetAtTime(400 + rpm * 0.18, t, k);
     e.intake.gain.setTargetAtTime(load * (rpm / car.spec.redline) * 0.18, t, k);
-    e.out.gain.setTargetAtTime(active ? vol * 0.32 : vol * 0.12, t, 0.05);
+    e.out.gain.setTargetAtTime(active ? vol * 0.32 : vol * 0.12, t, fade);
     e.pan.pan.setTargetAtTime(pan, t, 0.05);
   }
 

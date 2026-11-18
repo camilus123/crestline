@@ -612,6 +612,40 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.9.4 (2026-11-18) — sturdier engine sound, key hints that say what they mean (on `v3`)
+**v3.9.3 measured** (both runs in `docs/perf/benchmarks.json`; page and charts updated).
+- Xiaomi 17T, Mi Browser, pacing on, against v3.9.1: High 46.5 fps (39.7), frame cost 10.5 ms (13.8); Psycho
+  35.0 (31.2), 17.0 ms (22.0); Admiral 44.8 (44.4), 12.2 ms (13.2); Commodore 59.8 (59.0); Low 119.6. Stalls
+  0 / 0 / 1 / 2 / 0 (Low, High, Admiral, Psycho, Commodore); Psycho's two were 133 and 125 ms long.
+- My prediction (High at 60 fps "on at least some tracks") held on one: Mountains 60.0. Forest 43.8, Night 42.2,
+  Futuristic 40.0: High settles on every 2nd refresh and then steps to every 3rd ("late 11-18 %") at a frame
+  cost of 11-12 ms. Commodore holds every 2nd at 8.5-10 ms. So on this phone the limit for every 2nd refresh is
+  about 10 ms of measured frame cost, not the 16.4 ms the refresh interval suggests.
+- PC, Firefox, pacing on: Low, High, Commodore 239.8 fps, Admiral 239.7, Psycho 205.7 (Forest held at 120 by
+  pacing). Frame costs as in Firefox v3.7.0 (High 3.34 ms both). No Edge run on v3.9.3.
+
+**Reported by the user**
+1. Phone: the sound crackles when camera shake is on and many opponents are in view (race start); fine with
+   shake off.
+   - Camera shake is one line in the renderer (it moves the camera); nothing in the sound code reads it or
+     anything derived from it. So the link is indirect, through load, and I have not found which load. NOT
+     explained. A guess only: a picture that changes in every tile every frame costs the phone more than a
+     still one on the grid.
+   - Changed, because each makes crackling less likely whatever the trigger:
+     - the sound buffer on touch-first devices is 'balanced', not the smallest ('interactive');
+     - the sound is updated about 30 times a second, not once per drawn frame: scheduled parameter changes at a
+       race start fall from 7,800 to 1,800 a second at 120 fps (`tests/audiorate.mjs`, old build and new);
+     - a rival's engine voice keeps its car while that car is among the nearest six, and is silent for 60 ms when
+       it does change. Before, voice i played the i-th nearest rival, and in the first 12 s of a race that order
+       changed 10 times, each time jumping a voice to another car's pitch and side (same test). The 60 ms
+       hand-over itself did not occur in the test run, so it is untested.
+   - Not verifiable here: whether the crackle is gone on the phone.
+2. PC: "A" and "B" do nothing in the menus although the hints say "ENTER / A", "ESC / B". The user meant the
+   keyboard's A and B; the hints meant gamepad buttons. The gamepad half of a hint is now shown only while a
+   gamepad is connected, as "PAD A" / "PAD B" (`hint()` in screens.ts, `body.haspad`). `tests/padhint.mjs`:
+   without a pad the hints read "ENTER CONFIRM · ESC BACK"; with one, PAD B goes back and PAD A confirms;
+   keyboard A and B still do nothing in a menu.
+
 ## v3.9.3 (2026-11-18) — the sky picture for reflections is drawn first: the phone's v3.7.0 cost found (on `v3`)
 **v3.9.2 picture cost test on the Xiaomi 17T, Mi Browser** (frame cost in ms; three rounds in order, median):
 

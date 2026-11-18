@@ -69,7 +69,7 @@ export function buildConstructor(g: Game): Screen {
   menu.add({ el: backB, row: row - 1, col: 5, activate: () => g.show('setup') });
   right.append(btns);
   const el = h('div', { class: 'scr bg scan' }, hdr(), h('div', { class: 'body' }, left, right),
-    h('div', { class: 'hint' }, h('span', {}, h('b', {}, '↑↓'), ' SELECT'), h('span', {}, h('b', {}, '←→'), ' ADJUST 4%'), h('span', {}, h('b', {}, 'ESC / B'), ' BACK')));
+    h('div', { class: 'hint' }, h('span', {}, h('b', {}, '↑↓'), ' SELECT'), h('span', {}, h('b', {}, '←→'), ' ADJUST 4%'), h('span', {}, h('b', {}, 'ESC', h('i', { class: 'padhint' }, ' / PAD B')), ' BACK')));
 
   let track: TrackData | null = null;
   let timer = 0;

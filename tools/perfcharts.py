@@ -160,7 +160,7 @@ def pc_frame_cost(mode):
 def shader_compile(mode):
     series, allv = [], set()
     for br in ['Edge', 'Firefox']:
-        vals = {r['version']: r['compileAllMs'] / 1000 for r in pick('pc', br, pacing=False) if r['compileAllMs']}
+        vals = {r['version']: r['compileAllMs'] / 1000 for r in pick('pc', br) if r['compileAllMs']}  # (pacing has no part in it)
         allv |= set(vals)
         series.append((br, vals))
     versions = sorted(allv, key=vkey)
@@ -192,7 +192,7 @@ def tables():
     T['pc-edge'] = rows
     comp = {}
     for br in ['Edge', 'Firefox']:
-        for r in pick('pc', br, pacing=False):
+        for r in pick('pc', br):
             if r['compileAllMs']:
                 comp.setdefault(r['version'], {})[br] = f"{r['compileAllMs'] / 1000:.1f} s"
     T['compile'] = ['| Version | Edge | Firefox |', '|---|---|---|'] + [f"| {v} | {comp[v].get('Edge', '–')} | {comp[v].get('Firefox', '–')} |" for v in sorted(comp, key=vkey)]
