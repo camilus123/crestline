@@ -535,12 +535,17 @@ function settings(g: Game, back: string): Screen {
  * that range: the arrows move in fine steps, and Enter or a click on the number lets you type one.
  */
 type Gfx = { key: keyof Quality; label: string; vals: (number | boolean)[]; fmt: (v: any) => string; free?: [number, number, number] };
-/** What each option does, in a sentence or two, shown for the row in focus (and as its hover tooltip). */
+/**
+ * What each option does, in a sentence or two, shown for the row in focus (and as its hover tooltip).
+ * No longer than about 190 characters: the box above the list holds three lines, and a text that makes it grow
+ * moves the rows under the mouse, which moves the focus, which changes the text (tests/smaaopt.mjs checks).
+ */
 const GFX_HELP: Partial<Record<keyof Quality, string>> = {
   scale: 'How many pixels the 3D picture is drawn with, as a share of the screen. Lower is blurrier and much faster: the strongest setting for frame rate. The HUD and menus stay sharp.',
   minScale: 'With dynamic resolution on (Settings), the game lowers the render resolution when frames run late. This is the lowest it may go.',
   dpr: 'Phones and tablets pack 2-3 device pixels into each screen point. This caps how many of them are used: ×1 is soft and fast, higher is sharper and slower. No effect on most desktop monitors.',
-  msaa: 'Smooths jagged edges by sampling each pixel several times. Costly at high resolutions, and on some phones it causes stutter.',
+  msaa: 'Smooths jagged edges by sampling each pixel several times. Costly at high resolutions, and on some phones it causes stutter. It does not reach edges inside textures or of leaves.',
+  smaa: 'Smooths jagged edges after the picture is drawn: road markings and leaves too, and bright edges that MSAA leaves stepped. Use it in place of MSAA: together they tested no better.',
   shadows: 'Real shadows cast by the sun from trees, buildings and cars, at this shadow-map size. Off draws a soft blob under each object instead. One of the most expensive options.',
   ssao: 'Darkens creases and the places where things meet the ground, for depth. Moderate cost.',
   bloom: 'The glow around bright things: lamps, neon, the sun, tail lights. More levels spread it wider. Off is the cheapest.',
@@ -561,6 +566,7 @@ const GFX_LIST: Gfx[] = [
   { key: 'minScale', label: 'Dynamic resolution floor', vals: [], free: [0.3, 1, 0.05], fmt: (v) => Math.round(v * 100) + ' %' },
   { key: 'dpr', label: 'Pixel ratio limit (phones)', vals: [], free: [1, 3, 0.25], fmt: (v) => '×' + r2(v) },
   { key: 'msaa', label: 'Anti-aliasing (MSAA)', vals: [0, 2, 4, 8], fmt: (v) => (v ? v + '×' : 'Off') },
+  { key: 'smaa', label: 'Anti-aliasing (SMAA)', vals: [false, true], fmt: (v) => (v ? 'On' : 'Off') },
   { key: 'shadows', label: 'Sun shadows', vals: [0, 1024, 2048, 4096], fmt: (v) => (v ? v + ' px' : 'Off (blobs)') },
   { key: 'ssao', label: 'Ambient occlusion', vals: [false, true], fmt: (v) => (v ? 'On' : 'Off') },
   { key: 'bloom', label: 'Bloom', vals: [0, 3, 4, 5, 6], fmt: (v) => (v ? v + ' levels' : 'Off') },

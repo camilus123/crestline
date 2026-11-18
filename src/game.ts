@@ -766,7 +766,7 @@ export class Game {
       `render     ${R.renderW}×${R.renderH}  (${Math.round((R.renderW / this.canvas.width) * 100)}%)\n` +
       `output     ${this.canvas.width}×${this.canvas.height}\n` +
       `version    ${__VERSION__}  build ${__BUILD_TIME__.slice(5, 16).replace('T', ' ')} UTC\n` +
-      `preset     ${R.quality.name}${this.settings.dynRes ? '  dyn-res' : ''}  MSAA ${R.quality.msaa}x\n` +
+      `preset     ${R.quality.name}${this.settings.dynRes ? '  dyn-res' : ''}  MSAA ${R.quality.msaa}x${R.quality.smaa ? ' + SMAA' : ''}\n` +
       `refresh    ~${(1 / this.refresh).toFixed(0)} Hz  (estimated from frame timing)`;
   }
 

@@ -18,18 +18,27 @@ await p.goto('file://' + path.join(root, 'dist/crestline.html') + '?screen=bench
 await p.waitForTimeout(3000);
 // PACE=1: with frame pacing on (the report must then carry its pacing section)
 if (process.env.PACE) await p.evaluate(() => { window.__crest.settings.pace = true; });
+// SMAA=1: the player's own settings are Low with SMAA on (the report must then time it as a stage of 'Yours')
+if (process.env.SMAA) await p.evaluate(() => { const g = window.__crest; g.settings.quality = 1; g.settings.qo = { smaa: true }; g.applyQuality(); });
 await p.keyboard.press('Enter');
 const t0 = Date.now();
+let report = '';
 const labels = new Set();
 while (Date.now() - t0 < 1500000) {
   await p.waitForTimeout(3000);
   const st = await p.evaluate(() => ({ screen: window.__crest.screenId, bar: document.querySelector('.benchbar')?.textContent ?? '', out: document.querySelector('.benchout')?.textContent ?? '' }));
   if (st.bar) labels.add(st.bar.split('·')[1]?.trim());
-  if (st.screen === 'bench' && st.out && Date.now() - t0 > 10000) { console.log('phases seen:', [...labels].join(' | ')); console.log(st.out); break; }
+  if (st.screen === 'bench' && st.out && Date.now() - t0 > 10000) { console.log('phases seen:', [...labels].join(' | ')); console.log(st.out); report = st.out; break; }
 }
 // the game must still be drawing after the report is up (it once died here on devices without GPU timers)
 const alive = await p.evaluate(async () => { const g = window.__crest; let n = 0; const f = g.frame.bind(g); g.frame = (...a) => { n++; return f(...a); }; await new Promise((r) => setTimeout(r, 4000)); g.frame = f; return n; });
 console.log('frames in the 4 s after the report:', alive);
 console.log('errors', JSON.stringify(errors));
 await b.close();
+if (process.env.SMAA) {
+  const stage = report.split('\n').filter((l) => l.startsWith('anti-aliasing (SMAA)'));
+  const ok = stage.length > 0 && /smaa false>true/.test(report) && /Yours: Low \(custom\)/.test(report) && /SMAA on/.test(report) && /Low: .*SMAA off/.test(report);
+  console.log('SMAA in the report:', ok ? 'yes' : 'NO', stage[0] ?? '');
+  if (!ok) process.exit(1);
+}
 if (alive < 1 || errors.length) process.exit(1);

@@ -214,6 +214,10 @@ Measured once each, so no history to show: the same phone in Brave, which ran at
 ## Not measured
 
 - v3.9.3 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
+- The SMAA anti-aliasing option added in v3.10.0, on any real graphics card. It is off in every preset, so
+  none of the figures on this page include it. To measure it: turn it on in Graphics options and run the
+  benchmark; the report then has a row for your settings beside the stock preset, and a stage line
+  "anti-aliasing (SMAA)".
 - Frame pacing in any browser other than Mi Browser, or on any phone other than this one.
 - Frame pacing together with dynamic resolution. The benchmark switches dynamic resolution off.
 - The laptop and the old phone on any version after v3.5.0.

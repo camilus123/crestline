@@ -18,6 +18,7 @@ import { Terrain } from './terrain';
 import { Post, PostParams } from './post';
 import { Scenery } from './scenery';
 import { Sky } from './sky';
+import { Smaa } from './smaa';
 import { MaterialTextures } from './textures';
 
 export interface Quality {
@@ -25,6 +26,7 @@ export interface Quality {
   scale: number; // render resolution (fraction of the output)
   minScale: number; // dynamic resolution never goes below this
   msaa: number; // samples (clamped to what the GPU supports)
+  smaa: boolean; // anti-aliasing after the fact (smaa.ts); may be combined with MSAA
   bloom: number; // bloom levels (0 = no bloom)
   dist: number; // draw distance factor
   particles: number;
@@ -45,18 +47,18 @@ export interface PictureFx { env: 'mid' | 'first' | 'off'; cloud: boolean; aeria
 export const FX_DEFAULT: PictureFx = { env: 'first', cloud: true, aerial: true, terrVar: true, dissolve: true };
 
 export const QUALITY: Quality[] = [
-  { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1, lod: 40, terrLite: true, cap60: true },
-  { name: 'Low', scale: 0.8, minScale: 0.4, msaa: 0, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4, scenery: 0.8, woods: 0.4, lamps: 6, lite: true, shadows: 0, ssao: false, dpr: 1.25, lod: 70, terrLite: true, cap60: true },
-  { name: 'Medium', scale: 0.8, minScale: 0.5, msaa: 2, bloom: 4, dist: 0.8, particles: 0.7, weather: 0.7, scenery: 1, woods: 0.65, lamps: 12, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 110, terrLite: false, cap60: false },
-  { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, bloom: 5, dist: 1.0, particles: 1, weather: 1, scenery: 1, woods: 0.8, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 170, terrLite: false, cap60: false },
-  { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 0.9, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 260, terrLite: false, cap60: false },
-  { name: 'Psycho', scale: 1.0, minScale: 0.85, msaa: 8, bloom: 6, dist: 1.45, particles: 1.5, weather: 1.4, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
+  { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, smaa: false, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1, lod: 40, terrLite: true, cap60: true },
+  { name: 'Low', scale: 0.8, minScale: 0.4, msaa: 0, smaa: false, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4, scenery: 0.8, woods: 0.4, lamps: 6, lite: true, shadows: 0, ssao: false, dpr: 1.25, lod: 70, terrLite: true, cap60: true },
+  { name: 'Medium', scale: 0.8, minScale: 0.5, msaa: 2, smaa: false, bloom: 4, dist: 0.8, particles: 0.7, weather: 0.7, scenery: 1, woods: 0.65, lamps: 12, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 110, terrLite: false, cap60: false },
+  { name: 'High', scale: 1.0, minScale: 0.6, msaa: 4, smaa: false, bloom: 5, dist: 1.0, particles: 1, weather: 1, scenery: 1, woods: 0.8, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 170, terrLite: false, cap60: false },
+  { name: 'Ultra', scale: 1.0, minScale: 0.75, msaa: 4, smaa: false, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 0.9, lamps: 16, lite: false, shadows: 0, ssao: false, dpr: 2, lod: 260, terrLite: false, cap60: false },
+  { name: 'Psycho', scale: 1.0, minScale: 0.85, msaa: 8, smaa: false, bloom: 6, dist: 1.45, particles: 1.5, weather: 1.4, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
   // Psycho tuned for 240 Hz at 3440x1440 on the target PC: no MSAA, slightly shorter view, fewer particles.
   // Kept last so that the preset numbers stored in players' settings do not shift.
-  { name: 'Admiral', scale: 1.0, minScale: 0.85, msaa: 0, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
+  { name: 'Admiral', scale: 1.0, minScale: 0.85, msaa: 0, smaa: false, bloom: 6, dist: 1.2, particles: 1.25, weather: 1.2, scenery: 1, woods: 1.1, lamps: 16, lite: false, shadows: 4096, ssao: true, dpr: 2, lod: 450, terrLite: false, cap60: false },
   // The player's settings for his phone (Xiaomi 17T, Mali-G720): 80 % resolution and no MSAA (the two things that
   // GPU pays most for), simple sky and effects, a shorter view, but sun shadows (small map) and ambient occlusion kept.
-  { name: 'Commodore', scale: 0.8, minScale: 0.6, msaa: 0, bloom: 3, dist: 0.85, particles: 0.8, weather: 0.8, scenery: 0.8, woods: 0.6, lamps: 16, lite: true, shadows: 1024, ssao: true, dpr: 2, lod: 250, terrLite: false, cap60: false },
+  { name: 'Commodore', scale: 0.8, minScale: 0.6, msaa: 0, smaa: false, bloom: 3, dist: 0.85, particles: 0.8, weather: 0.8, scenery: 0.8, woods: 0.6, lamps: 16, lite: true, shadows: 1024, ssao: true, dpr: 2, lod: 250, terrLite: false, cap60: false },
 ];
 /** index of the default preset (High) */
 export const Q_DEFAULT = 3;
@@ -101,6 +103,9 @@ export class Renderer {
   trafficData = new Float32Array(32 * 6);
   ms: MSTarget;
   plain: Target; // non-MSAA scene target (also MSAA resolve target)
+  smaa: Smaa | null = null; // exists while the option is on
+  /** tests only: mix the smoothed edges in plain linear light, as the upstream shader does */
+  smaaPlainMix = false;
   pathTex: WebGLTexture;
   path = new BentPath();
   track: Track | null = null;
@@ -248,6 +253,13 @@ export class Renderer {
     const prev = this.quality;
     this.quality = q;
     this.dynScale = q.scale;
+    // (its three shader programs start compiling now, in the background, not in the first frame that needs them)
+    if (q.smaa) this.smaa ??= new Smaa(this.gl, this.fmt, () => this.post.tri());
+    else if (this.smaa) {
+      // (three screen-sized textures, 14 bytes a pixel together: not kept for an option that is off)
+      this.smaa.dispose();
+      this.smaa = null;
+    }
     // scenery thinning and the deep woodland are built per track: rebuild if they changed
     if (this.track && this.scenery && (prev.scenery !== q.scenery || prev.woods !== q.woods)) {
       this.scenery = this.buildScenery(this.track, q);
@@ -482,9 +494,21 @@ export class Renderer {
       blur, vps: vpsUv, flash: this.flash, haze: this.quality.lite ? 0 : look.heatHaze, time: F.time, rainLens: this.quality.lite ? 0 : look.rain * (F.views[0]?.car.v > 5 ? 0.6 : 1),
       sharpen: this.quality.lite ? 0 : scale < 0.95 ? 1 : 0.3, fade: F.fade, fadeC: [0, 0, 0], hit: Math.max(...F.hit, 0), threshold: look.bloomThreshold,
     };
+    let scene = this.plain;
+    if (this.quality.smaa) {
+      pf.begin('anti-aliasing (SMAA)');
+      scene = this.antialias(rw, rh, g.exposure);
+      pf.end();
+    }
     pf.begin('post (bloom, blur, tonemap)');
-    this.post.run(this.plain, rw, rh, W, H, P, this.quality.bloom);
+    this.post.run(scene, rw, rh, W, H, P, this.quality.bloom, this.plain);
     pf.end();
+  }
+
+  /** the finished scene in `plain` with its edges smoothed (the option must be on) */
+  private antialias(rw: number, rh: number, exposure: number): Target {
+    this.smaa ??= new Smaa(this.gl, this.fmt, () => this.post.tri());
+    return this.smaa.run(this.plain, rw, rh, exposure, !this.smaaPlainMix);
   }
 
   /** draws one viewport; returns screen-space centre of the car (uv within the viewport) */
@@ -1142,10 +1166,10 @@ export class Renderer {
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.plain.fb);
       gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
     }
-    this.post.run(this.plain, W, H, W, H, {
+    this.post.run(this.quality.smaa ? this.antialias(W, H, 0.95) : this.plain, W, H, W, H, {
       bloom: 0.12, exposure: 0.95, sat: 1.15, contrast: 1.08, tint: [1, 1, 1], lift: [0, 0, 0], vignette: 0.5, blur: [[0.5, 0.5, 0, 0]], vps: [[0, 0, 1, 1]],
       flash: 0, haze: 0, time, rainLens: 0, sharpen: 0.3, fade: 0, fadeC: [0, 0, 0], hit: 0, threshold: 1.2,
-    }, this.quality.bloom);
+    }, this.quality.bloom, this.plain);
   }
 }
 

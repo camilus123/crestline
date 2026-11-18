@@ -16,9 +16,9 @@ await p.evaluate(() => { const g = window.__crest; g.settings.quality = 2; g.set
 await p.waitForTimeout(600);
 const log = { medium: await Q() };
 const row = (t) => p.locator('.row', { hasText: t });
-await row('Anti-aliasing').locator('[data-dir="-1"]').click(); await p.waitForTimeout(200);
+await row('Anti-aliasing (MSAA)').locator('[data-dir="-1"]').click(); await p.waitForTimeout(200);
 log.msaaDown = await Q();
-log.marked = await row('Anti-aliasing').locator('.lab').textContent();
+log.marked = await row('Anti-aliasing (MSAA)').locator('.lab').textContent();
 await p.reload({ waitUntil: 'commit' }); await p.waitForTimeout(1500);
 log.afterReload = await Q();
 await p.evaluate(() => { const g = window.__crest; g.settings.quality = 0; g.settings.qo = {}; g.applyQuality(); g.show('graphics'); });

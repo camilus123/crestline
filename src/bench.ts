@@ -451,7 +451,7 @@ export class Benchmark {
     const used: Quality[] = [];
     for (const c of this.cases) if (!used.includes(c.q)) used.push(c.q);
     for (const q of used) {
-      L.push(`${q.name}: scale ${q.scale} (min ${q.minScale}) · pixel ratio cap ${q.dpr} · MSAA ${q.msaa}x · bloom ${q.bloom} · distance x${q.dist} · scenery x${q.scenery} · woodland x${q.woods} · detail distance ${q.lod} m · ` +
+      L.push(`${q.name}: scale ${q.scale} (min ${q.minScale}) · pixel ratio cap ${q.dpr} · MSAA ${q.msaa}x · SMAA ${q.smaa ? 'on' : 'off'} · bloom ${q.bloom} · distance x${q.dist} · scenery x${q.scenery} · woodland x${q.woods} · detail distance ${q.lod} m · ` +
         `terrain ${q.terrLite ? 'light' : 'full'} · particles x${q.particles} · weather x${q.weather} · lamp lights ${q.lamps} · effects ${q.lite ? 'simple' : 'full'} · sun shadows ${q.shadows || 'off'} · AO ${q.ssao ? 'on' : 'off'}`);
     }
     L.push('');

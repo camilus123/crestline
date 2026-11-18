@@ -215,7 +215,8 @@ export class Post {
     gl.bindVertexArray(null);
     for (let i = 0; i < 6; i++) this.chain.push(new Target(gl, fmt.internal, fmt.format, fmt.type, false));
   }
-  private tri(): void {
+  /** draws a triangle that covers the viewport */
+  tri(): void {
     this.gl.bindVertexArray(this.vao);
     this.gl.drawArrays(this.gl.TRIANGLES, 0, 3);
   }
@@ -243,14 +244,15 @@ export class Post {
     this.tri();
     this.aoOn = true;
   }
-  run(scene: Target, rw: number, rh: number, outW: number, outH: number, P: PostParams, levels: number): void {
+  /** bloomFrom: the picture the glow is taken from, when it is not `scene` (the scene before anti-aliasing: same layout) */
+  run(scene: Target, rw: number, rh: number, outW: number, outH: number, P: PostParams, levels: number, bloomFrom: Target = scene): void {
     const gl = this.gl;
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.BLEND);
     gl.disable(gl.CULL_FACE);
     // bloom chain from the (possibly scaled) scene
     let w = Math.max(2, rw >> 1), h = Math.max(2, rh >> 1);
-    let src: Target = scene;
+    let src: Target = bloomFrom;
     let srcW = scene.w, srcH = scene.h;
     const n = Math.max(0, Math.min(levels, this.chain.length));
     if (n === 0) {

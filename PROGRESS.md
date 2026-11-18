@@ -612,6 +612,130 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.0 (2026-11-19) — SMAA anti-aliasing, as an option (on `v3`)
+User, on the two questions put to him: the MIT-licensed lookup tables are "acceptable and until we know how it
+affects performance let's keep it as an option".
+
+**What was added**
+- Graphics options → "Anti-aliasing (SMAA)", On / Off. Off in every preset, so no preset's picture or cost
+  changes: with it off the frame is pixel for pixel the v3.9.4 frame (High, Admiral, Commodore;
+  `tests/smaaopt.mjs`). It can be on together with MSAA.
+- `src/render/smaa.ts`: SMAA 1x, "high" settings (edge threshold 0.1, search 16 steps, diagonals 8, corner
+  rounding 25). Three full-screen passes on the finished 3D picture, before bloom and tone mapping: find edges,
+  work out how much of each edge pixel the true edge covers, mix each edge pixel with its neighbour.
+- It runs at the render resolution (so before the picture is scaled up), on both halves of a split screen, and
+  in the car showroom.
+- Its three shader programs and three screen-sized textures (14 bytes a pixel together: 69 MB at 3440x1440)
+  exist only while the option is on. Start-up for everyone else compiles nothing more.
+- The benchmark needs no change to measure it: with the option on, the report has a row "Yours: <preset>
+  (custom)" beside the stock preset on every track, a stage line "anti-aliasing (SMAA)", and its three
+  programs in the compile-time list.
+
+**Third-party code: what was taken, and under what terms** (`third_party/smaa/`)
+- From https://github.com/iryoku/smaa (MIT; Copyright 2013 Jimenez, Echevarria, Masia, Navarro, Gutierrez),
+  downloaded 2026-11-18: the two lookup tables (`AreaTex.h`, `SearchTex.h`), and `SMAA.hlsl`, from which the
+  three shaders were ported by hand. The user was asked about the tables only; the shader port comes from the
+  same project under the same licence. Said to him in the hand-over.
+- The tables are in `src/render/smaatables.ts`, same bytes, packed (179 KB to 38 KB of text) by
+  `tools/smaatables.py`; `src/render/inflate.ts` is a small inflater written for this (no library);
+  `tests/smaatables.test.ts`: both tables unpack to the SHA-256 of the originals; the inflater equals zlib on
+  564 streams of every block type.
+- MIT inside a GPL-3.0 project is allowed; the licence text is in the repo, the README names it, and the built
+  page carries a credit line. The README's licence section now also names the three fonts built into the page
+  (SIL OFL 1.1), which it had not.
+- The game file grew from 463 to 506 KB.
+
+**Where the port differs from the upstream shader, and why** (all in the header of `smaa.ts`)
+1. The picture is still scene light with a wide range where the pass runs. Edges are looked for in the picture
+   as the screen will show it (exposure, tone curve, square root). The mix is done in the light the screen
+   will give out (through the tone curve, mix, back). Measured (below): mixing in plain scene light, as
+   upstream would here, gains nothing on Futuristic and loses on Night.
+2. Bloom is taken from the picture before the pass, so the pass cannot change the glow of bright things.
+3. Coordinates run in texture space and the working textures are cleared whole: the picture may fill only a
+   corner of its texture (render resolution below 100 %). Test: 60 %, 100 %, 60 % again gives the first 60 %
+   picture back exactly.
+4. Upstream's colour edge detection compares the centre pixel with the pixel two to the left for its
+   local-contrast test; the luma variant and the paper compare the left pixel with ITS left. The port does the
+   latter. 155 of 64,000 texels of the test picture differ for it.
+5. A pixel's own edges are read exactly (`texelFetch`), the weights from a nearest-filtered texture. See the
+   bug below.
+6. Loops are bounded `for` loops, offsets are added by hand, every read names its mip level.
+
+**A bug found by the tests, in upstream as much as in the first port**
+- On the software GPU the tests use, one pixel in eight along a shallow edge came out wrong (a straight edge
+  rising 1 in 8: 61 where its neighbours gave 76 and 145, ideal 124). Cause: upstream reads a pixel's own edge
+  flags through a bilinear sampler at the texel centre and tests them against zero. A GPU that filters with
+  more than the usual 8 bits lets a trace of the neighbour's edge through; a pixel with no edge then does the
+  whole look-up and its weight halves the blend of the pixel beside it. 1,323 of 64,000 texels of the test
+  picture had such a weight.
+- Whether any of the user's GPUs filters that finely is NOT known. The exact read costs nothing and removes
+  the question.
+
+**Checked**
+- `tests/smaaref.mjs`, the port against the upstream shader (compiled through its own GLSL path), same input,
+  texel by texel, twice (picture filling the texture; in a corner of a larger one): edges 0 texels differ (with
+  item 4 applied to upstream too), weights 0 differ (with item 5 applied to upstream too), blend at most 17
+  texels differ by 1/255.
+- Same test, does it do the job: clean shapes at one sample per pixel against 64 samples per pixel, mean error
+  on the edge pixels in levels of 255: one long edge rising 1 in 25: 42.0 to 5.5; 1 in 8: 33.4 to 7.4; 1 in 3:
+  40.6 to 21.8; bars near level or upright 19.6 to 8.0; near a diagonal 16.2 to 8.0; any angle 19.9 to 8.6;
+  discs 19.3 to 12.3. What is left on a straight edge is where within the pixel the true edge runs, which a
+  method that sees only finished pixels cannot know, and that range grows with the slope. The test's pass marks
+  were set just above these figures after seeing them (my first guesses, 0.1 to 0.4 of the error left, were
+  too strict for the steeper edges).
+- `tests/smaapic.mjs`, in the game: one frozen moment on each benchmark track, bloom and sharpening off, at
+  960x540, against the same frame at 3840x2160 averaged down. Mean error in levels of 255 on the pixels with
+  an edge in them:
+
+  | | none | SMAA | SMAA, plain mix | MSAA 4x | MSAA 4x + SMAA |
+  |---|---|---|---|---|---|
+  | Forest | 3.57 | 2.93 | 3.10 | 2.64 | 2.70 |
+  | Mountains | 5.77 | 4.47 | 4.77 | 3.82 | 3.83 |
+  | Night | 4.54 | 3.93 | 4.15 | 3.51 | 3.35 |
+  | Futuristic | 5.05 | 3.91 | 5.07 | 3.67 | 4.30 |
+
+  - SMAA gets 59 to 83 % of the way from no anti-aliasing to MSAA 4x by this measure. On the pixels it changed,
+    the error fell to 75 % of what it was (average of the four); 55 to 63 % of those pixels came closer, 34 to
+    41 % moved away (thin and distant things, where a guess from the finished picture is often wrong).
+  - Away from edges the error rose by 0.06 to 0.20 levels: a slight softening of fine texture.
+  - On top of MSAA 4x it helped on Night only and hurt on Futuristic. So: one or the other.
+  - To the eye, in the frames (`review/v3/smaa_*.png`): MSAA 4x leaves bright edges stepped on Futuristic (its
+    samples are averaged in scene light); SMAA smooths them.
+  - At 480x270 the same order (edge-pixel error: Forest 6.03 none, 5.18 SMAA, 4.26 MSAA 4x; Futuristic 9.22,
+    7.46, 6.66). The pass marks 3 to 8 % of the pixels as edges at 960x540 (5 to 14 % at 480x270).
+- `tests/smaaopt.mjs`: on, in five arrangements (Admiral; High with MSAA 4x; Commodore at 80 %; Ultra Low
+  without bloom; Admiral with two players) and in the showroom: no GL error, no page error, 2 to 11 % of the
+  pixels change, turning it off gives the first picture back exactly. The option row turns it on, marks it,
+  and it survives a reload.
+- `tests/benchrun.mjs` with SMAA=1 (cut-down suite): the report carries the row "Yours: Low (custom)", the
+  diff "smaa false>true", "SMAA on" in the presets list and the three programs' compile times. Its stage line
+  read 0.00 there: the cut-down run measures one frame at 2 fps and that frame's timer result had not come
+  back. `tests/smaastage.mjs` therefore checks the stage timing on its own, six frames in each of the
+  profiler's two modes: the stage gets a time with the option on (GPU timers 23.4 ms, forced finish 24.9 ms
+  on the software GPU at 384x216) and is absent with it off.
+  - For scale only: on that software GPU the pass costs about what the whole post stage does (22.7 ms). That
+    ratio need not hold on a real GPU.
+- The option's help text. My second wording (323 characters) made the help box above the list a line taller;
+  the rows then moved under the mouse, the focus moved, the text changed, and the page flickered for ever
+  (the test's hover timed out: that is how it was found). The box holds about 190 characters; the text is
+  179 now, the limit is written beside the texts, and the test compares the box height with the other rows'.
+
+**NOT measured or seen**
+- What it costs on any real GPU. My estimate of 0.4 to 0.6 ms a frame on the PC at 3440x1440 is an estimate;
+  Admiral's average frame cost there was 4.19 ms in Edge (v3.9.1) against 4.17 ms for 240 fps, so any cost at
+  all can show. On the phone, Commodore holds 60 fps at 8.5 to 9.6 ms and the step down to 40 fps came at
+  about 10 ms (v3.9.3), so it has little room either.
+- Whether its shaders compile, and how fast, on Windows through Direct3D and on the phone's Mali driver. They
+  compile on Chromium's software GPU (ANGLE, the same shader translator as Chrome and Edge).
+- Nobody has looked at it on a real screen in motion. Morphological anti-aliasing can shimmer on thin moving
+  things; still frames do not show that.
+- The picture error figures are from four still frames at 960x540.
+
+**Also**
+- README: the stale known issue "Graphics options only offer the values the presets use" removed (free values
+  have been there since v3.6.0).
+- `Target` (gl.ts) takes a filter and can be disposed; `Post.run` takes the picture to bloom from.
+
 ## Release: `main` moved to v3.9.4 (2026-11-18, user: "3.9.4 fixed the audio problem and everything seems to work, let's move it to main")
 - The crackle on the phone with camera shake on is gone in v3.9.4 (user). Which of the three sound changes did
   it is not known, and neither is why shake mattered.

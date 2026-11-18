@@ -21,7 +21,8 @@ generated in code.
 - **Graphics:** a custom WebGL2 renderer. Quality presets from Ultra Low (phones) to Psycho (sun shadows,
   ambient occlusion, 8x anti-aliasing), plus Admiral (Psycho without anti-aliasing) and Commodore (shadows and
   ambient occlusion at a phone's price: 80 % resolution, no anti-aliasing, simple sky), and every option a preset
-  sets can be changed on its own. The game pauses, and stops drawing, while its window is not in focus.
+  sets can be changed on its own. A second kind of anti-aliasing, SMAA, is an option on its own (off in every
+  preset): it smooths edges after the picture is drawn, including those of leaves and road markings. The game pauses, and stops drawing, while its window is not in focus.
 - **Benchmark:** a fixed suite (four tracks at five presets, plus your own settings if they differ) that reports frame rate,
   frame cost, the cost of each render stage and how long each shader program takes to compile, as text you
   can copy.
@@ -62,6 +63,7 @@ npm run test:gen                 # track generator
 npm run test:sim                 # bots must be able to finish every course
 node tests/flow.mjs              # title screen to a race: no errors, no network requests
 node tests/benchrun.mjs 128x72   # the benchmark end to end (cut-down suite)
+node tests/smaaref.mjs           # the SMAA passes against the upstream shader (see the header for the two steps before it)
 ```
 
 ## Branches
@@ -79,7 +81,6 @@ node tests/benchrun.mjs 128x72   # the benchmark end to end (cut-down suite)
 - **Benchmark:** the last part of each run forces the graphics card to finish every frame, so the picture slows
   and stutters there; that is the measurement, not a hang, but it looks like one. On Firefox this also overstates
   the frame cost. Track loading can leak a hitch into the measured part of a run.
-- **Graphics options** only offer the values the presets use, not free values.
 - Dunes on Desert can appear to move in bends; the cause is not found yet.
 
 More in the "Known issues" section of `PROGRESS.md`.
@@ -87,3 +88,11 @@ More in the "Known issues" section of `PROGRESS.md`.
 ## Licence
 
 GPL-3.0, see `LICENSE`. Crestline uses no name, logo, asset, music or text from any existing game or car maker.
+
+Third-party parts, each under its own licence:
+
+- **SMAA** (the optional anti-aliasing: its two lookup tables, and shaders ported from its reference shader):
+  Copyright (C) 2013 Jorge Jimenez, Jose I. Echevarria, Belen Masia, Fernando Navarro, Diego Gutierrez; MIT
+  licence. Details and the licence text: `third_party/smaa/`.
+- **Fonts** built into the page: Chakra Petch, Russo One and Share Tech Mono, SIL Open Font License 1.1, from
+  the Fontsource packages (`node_modules/@fontsource/*/LICENSE`).

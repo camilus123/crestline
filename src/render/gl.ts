@@ -304,7 +304,7 @@ export class Target {
   depth: WebGLRenderbuffer | null = null;
   w = 0;
   h = 0;
-  constructor(private gl: GL, private internal: number, private format: number, private type: number, private withDepth: boolean) {
+  constructor(private gl: GL, private internal: number, private format: number, private type: number, private withDepth: boolean, private filter: number = WebGL2RenderingContext.LINEAR) {
     this.fb = gl.createFramebuffer()!;
     this.tex = gl.createTexture()!;
   }
@@ -315,8 +315,8 @@ export class Target {
     this.h = h;
     gl.bindTexture(gl.TEXTURE_2D, this.tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, this.internal, w, h, 0, this.format, this.type, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb);
@@ -333,6 +333,14 @@ export class Target {
     const gl = this.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb);
     gl.viewport(0, 0, this.w, this.h);
+  }
+  /** frees the GPU memory; the target must not be used again */
+  dispose(): void {
+    const gl = this.gl;
+    gl.deleteFramebuffer(this.fb);
+    gl.deleteTexture(this.tex);
+    if (this.depth) gl.deleteRenderbuffer(this.depth);
+    this.w = this.h = 0;
   }
 }
 
