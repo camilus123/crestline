@@ -605,6 +605,41 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   still being drawn in the 4 s after the report. Before the fix: 0 frames and the error above; after: 17.
 - The v3.5.5 focus changes stay (touch devices only pause on losing focus; any input wakes the game).
 
+## Standing instructions from the user
+- **Keep the performance tables up to date** (2026-11-18: "the performance tables are good, make sure to keep
+  them updated when necessary"). When a benchmark report arrives: `python3 tools/perfadd.py report.txt`, then
+  `python3 tools/perfcharts.py` (redraws the charts, rewrites the tables of `docs/performance.md`), then read
+  the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
+  not benchmark runs and do not go into the data file.
+
+## v3.9.2 (2026-11-18) — picture cost test: what each v3.7.0 effect costs on a device (on `v3`; NOT yet measured)
+User chose to find the phone's v3.7.0 cost before SMAA.
+- Read from the code before measuring anything: since v3.7.0 the small sky picture the cars reflect has been
+  drawn in the middle of the main picture (just before the cars), which means leaving the main render target and
+  coming back. A phone's GPU draws tile by tile and has to write the whole main picture out to memory and read it
+  back when that happens, anti-aliasing samples included. That fits what was measured (High, with 4x MSAA,
+  +3.3 ms; Admiral, without, +1.1 ms; Low, which has no sky picture, unchanged), but it is a suspicion, not a
+  finding. The sun-shadow maps have always been drawn after the main picture was cleared, the same pattern.
+- `Renderer.pic` (type `PictureFx`): switches for the sky picture's place in the frame ('mid' as released,
+  'first', 'off'), cloud shadows, haze, the terrain's second texture copy, the model change-over blend. With
+  'first' the sky picture is drawn before the shadow maps and the main picture is cleared again after the
+  off-screen passes (single view only). **Default unchanged: the build draws as v3.9.1 does.** The shaders gained
+  two branches so that a switched-off effect is really skipped (haze, terrain copy); no change to the picture.
+  Baked model shading has no switch: it is vertex colours, nothing per frame.
+- Picture cost test (button on the benchmark screen; `Benchmark` with `probe`): Forest and Mountains on High with
+  eight variants (as released, off-screen pictures first, each of five effects off, all five off) and on
+  Commodore with two (as released, off-screen pictures first: Commodore has no sky picture but has shadow maps).
+  Each case 1 s warm-up and 2 s with the GPU made to finish; three rounds interleaved, every second in reverse
+  order, because the phone's frame cost wanders by a millisecond or more between runs; the report gives the
+  median, the lowest and highest and the change against "as released". About 3.5 minutes. Pacing is ignored
+  during it. A diagnostic: to be removed once it has done its job.
+- `tests/picorder.mjs`: 'mid' and 'first' give the same picture pixel for pixel on High, Admiral and Commodore
+  (and the check can fail: switching the sky picture off changes 1,600-1,850 pixels). `tests/proberun.mjs`: the
+  test end to end, cut down. `tests/benchrun.mjs` passes after the report's device block was shared.
+- `tools/perfadd.py` adds reports to the data file (re-adding all 37 reproduces it byte for byte);
+  `tools/perfcharts.py` now also writes the page's tables (it reproduced the hand-made ones and added the
+  v3.9.0 phone row I had left out).
+
 ## Release: `main` moved to v3.9.1 (2026-11-17, user: "go")
 The released build is the one benchmarked on the PC and the phone (build 2026-11-17 18:21 UTC), not rebuilt.
 Frame pacing ships as an option, off by default; touch devices still start on Ultra Low.

@@ -24,6 +24,7 @@ Radeon RX 9070, Ryzen 9 5950X, 3440x1440 at 240 Hz, Edge.
   <img src="perf/pc-frame-cost-light.svg" width="760" alt="Line chart: frame cost of the Low, High, Psycho and Admiral presets on the PC from v3.2.0 to v3.9.1. All four fall until v3.5.3, rise a little at v3.7.0 and stay there. Admiral ends at 4.19 ms, just above one 240 Hz refresh of 4.17 ms.">
 </picture>
 
+<!-- table:pc-edge -->
 | Version | Low | High | Psycho | Admiral | Psycho fps | Admiral fps |
 |---|---|---|---|---|---|---|
 | 3.2.0 | 2.26 ms | 3.85 ms | 6.50 ms | – | 195.0 | – |
@@ -38,6 +39,7 @@ Radeon RX 9070, Ryzen 9 5950X, 3440x1440 at 240 Hz, Edge.
 | 3.5.3 | 1.77 ms | 2.89 ms | 5.12 ms | 3.87 ms | 219.9 | 239.8 |
 | 3.7.0 | 1.84 ms | 3.20 ms | 5.40 ms | 4.25 ms | 218.6 | 239.7 |
 | 3.9.1 | 1.81 ms | 3.19 ms | 5.42 ms | 4.19 ms | 213.8 | 239.6 |
+<!-- /table -->
 
 Low and High measured 239.8 fps in every one of these runs. Admiral is the Psycho preset without anti-aliasing
 and with a slightly shorter view; before v3.4.0 it was not a preset yet and ran as custom settings with the same
@@ -62,6 +64,7 @@ What moved the lines:
 A first start has to wait for the graphics driver to compile every shader program. The benchmark has timed that
 since v3.5.0, building each program from scratch so that no cache can answer.
 
+<!-- table:compile -->
 | Version | Edge | Firefox |
 |---|---|---|
 | 3.5.0 | 5.4 s | – |
@@ -70,6 +73,7 @@ since v3.5.0, building each program from scratch so that no cache can answer.
 | 3.5.3 | 1.8 s | 5.5 s |
 | 3.7.0 | 1.8 s | 5.5 s |
 | 3.9.1 | 1.8 s | – |
+<!-- /table -->
 
 The gain came in v3.5.1 and v3.5.2 from rewriting the terrain noise so that the compiler sees far fewer copies of
 the same code. Firefox compiles one program at a time, which is why it stays about three times slower than Edge.
@@ -91,6 +95,7 @@ most frames quick, then one of 75 to 150 ms. Frame pacing (v3.8.0 to v3.9.1, an 
 
 It took six versions to get right, and the reports show each attempt, failures included:
 
+<!-- table:phone-history -->
 | Version | Pacing | Low fps | High fps | Admiral fps | Psycho fps | High stalls | Admiral stalls | Psycho stalls |
 |---|---|---|---|---|---|---|---|---|
 | 3.1.0 | off | 119.1 | 53.5 | – | 33.2 | 166 | – | 97 |
@@ -101,7 +106,9 @@ It took six versions to get right, and the reports show each attempt, failures i
 | 3.8.2 | on | 119.7 | 40.0 | 45.6 | 31.9 | 13 | 32 | 30 |
 | 3.8.3 | on | 117.2 | 39.7 | 20.0 | 24.9 | 3 | 0 | 3 |
 | 3.8.4 | on | 119.1 | 40.0 | 39.6 | 29.2 | 3 | 0 | 8 |
+| 3.9.0 | on | 119.5 | 38.3 | – | 24.6 | 4 | – | 3 |
 | 3.9.1 | on | 119.5 | 39.7 | 44.4 | 31.2 | 1 | 2 | 0 |
+<!-- /table -->
 
 Stalls are totals over the four tracks, 20 seconds in all.
 
@@ -126,6 +133,7 @@ Two things to know when comparing the first and last rows:
   <img src="perf/phone-presets-light.svg" width="760" alt="Bar chart: frame rate of each preset on the phone in v3.9.1 with frame pacing on. Low 119.5 fps, drawn on every refresh. Commodore 59.0, every 2nd refresh. Admiral 44.4, every 2nd to 3rd. High 39.7, every 3rd. Psycho 31.2, every 3rd to 5th.">
 </picture>
 
+<!-- table:phone-presets -->
 | Preset | fps | Lowest 1 % low | Frame cost | Stalls in 20 s | Longest frame |
 |---|---|---|---|---|---|
 | Low | 119.5 | 71.5 | 6.0 ms | 0 | 25 ms |
@@ -133,6 +141,7 @@ Two things to know when comparing the first and last rows:
 | Admiral | 44.4 | 21.8 | 13.2 ms | 2 | 58 ms |
 | High | 39.7 | 20.0 | 13.8 ms | 1 | 50 ms |
 | Psycho | 31.2 | 15.0 | 22.0 ms | 0 | 67 ms |
+<!-- /table -->
 
 Commodore (new in v3.9.0) keeps sun shadows and ambient occlusion but drops anti-aliasing and renders at 80 %
 resolution, the two things this chip pays most for. It is the heaviest preset that holds 60 fps on this phone.
@@ -147,11 +156,13 @@ Without pacing, High went from 11.5 ms and 52.9 fps (v3.5.4) to 14.8 ms and 43.3
 
 A laptop with integrated graphics (Intel Core 5 120U, Firefox, 60 Hz):
 
+<!-- table:laptop -->
 | Version | Low fps | High fps | Psycho fps | Low cost | High cost | Psycho cost |
 |---|---|---|---|---|---|---|
 | 3.2.0 | 57.5 | 36.8 | 16.1 | 23.4 ms | 34.7 ms | 82.2 ms |
 | 3.4.3 | 60.0 | 52.5 | 20.3 | 13.5 ms | 20.6 ms | 56.4 ms |
 | 3.5.0 | 60.0 | 53.0 | 20.4 | 13.3 ms | 19.2 ms | 54.3 ms |
+<!-- /table -->
 
 The PC in Firefox reached the same frame rates as in Edge from v3.5.3 on (Admiral 239.6 fps, Psycho 229.7); in
 v3.1.0 it had managed 229.2 fps on High and 162.5 on Psycho.

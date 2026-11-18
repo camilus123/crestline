@@ -40,6 +40,10 @@ export interface Quality {
   terrLite: boolean; // terrain mesh with about 40 % of the vertices
   cap60: boolean; // the resolution scaler aims for 60 fps even on a faster screen (a 120 Hz phone)
 }
+export interface PictureFx { env: 'mid' | 'first' | 'off'; cloud: boolean; aerial: boolean; terrVar: boolean; dissolve: boolean }
+/** as released in v3.7.0 to v3.9.1 (see Renderer.pic) */
+export const FX_DEFAULT: PictureFx = { env: 'mid', cloud: true, aerial: true, terrVar: true, dissolve: true };
+
 export const QUALITY: Quality[] = [
   { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1, lod: 40, terrLite: true, cap60: true },
   { name: 'Low', scale: 0.8, minScale: 0.4, msaa: 0, bloom: 3, dist: 0.6, particles: 0.4, weather: 0.4, scenery: 0.8, woods: 0.4, lamps: 6, lite: true, shadows: 0, ssao: false, dpr: 1.25, lod: 70, terrLite: true, cap60: true },
@@ -111,6 +115,14 @@ export class Renderer {
   private shadowFB: WebGLFramebuffer | null = null;
   private shadowSize = 0;
   private viewBox = [0, 0, 1, 1];
+  /**
+   * Switches for the picture effects added in v3.7.0, for measuring what each costs (the picture cost test in
+   * bench.ts sets them; everything else leaves them alone).
+   * env: where in the frame the small sky picture the cars reflect is drawn. 'mid': in the middle of the main
+   * picture, just before the cars. 'first': before the main picture is started, and the main picture is cleared
+   * again on coming back from the off-screen passes (sky picture, shadow maps). 'off': not at all.
+   */
+  pic: PictureFx = { ...FX_DEFAULT };
   private shadowVP = new Float32Array(16);
   private shadowTex2: WebGLTexture | null = null;
   private shadowFB2: WebGLFramebuffer | null = null;
@@ -598,12 +610,12 @@ export class Renderer {
     const fogDen = look.fogDensity;
     // air: the far distance fades towards the horizon's colour. Less where the track's own fog already does it, and
     // at night (there the "horizon colour" is near black and would swallow the lit windows and lamps far off).
-    const aerK = 0.42 * Math.max(0.3, 1 - fogDen / 0.004) * (look.stars > 0.2 ? 0.4 : 1);
+    const aerK = this.pic.aerial ? 0.42 * Math.max(0.3, 1 - fogDen / 0.004) * (look.stars > 0.2 ? 0.4 : 1) : 0;
     const aerial = [0.6 * look.skyHorizon[0] + 0.4 * look.fogColor[0], 0.6 * look.skyHorizon[1] + 0.4 * look.fogColor[1], 0.6 * look.skyHorizon[2] + 0.4 * look.fogColor[2], aerK];
     // cloud shadows: only under broken cloud with the sun up (none under a clear sky, an overcast or at night)
     const cc = look.cloudCover;
     const cloudK = 0.42 * Math.max(0, Math.min(1, (cc - 0.12) / 0.2)) * Math.max(0, Math.min(1, (0.9 - cc) / 0.2))
-      * (look.stars > 0.2 || look.sunEl < 6 ? 0 : 1);
+      * (look.stars > 0.2 || look.sunEl < 6 || !this.pic.cloud ? 0 : 1);
     const tile = 1500; // metres of ground per tile of the noise texture: shadows a few hundred metres across
     const cloudS = loop > 0 ? Math.max(1, Math.round(loop / tile)) / loop : 1 / tile;
     const cloud = [cloudK, cloudS, 1 / tile, (F.time * 7 * Math.min(3, look.cloudSpeed / 0.004)) * cloudS % 1];
@@ -616,7 +628,7 @@ export class Renderer {
     const yCar = tr.y(sCar);
     const prep = (p: Program) => {
       p.m4('uViewProj', vp).tex('uPath', this.pathTex, 7).v4('uPathInfo', pathInfo).f('uLoopLen', loop);
-      p.v4('uTerr', T).v4('uTerr2', T2).f('uYCar', yCar);
+      p.v4('uTerr', T).v4('uTerr2', T2).f('uYCar', yCar).f('uTerrVar', this.pic.terrVar ? 1 : 0);
       p.v3('uSunDir', sunB).v3('uSunCol', look.sunColor).v3('uAmbTop', look.ambTop).v3('uAmbBot', look.ambBot);
       p.v3('uFogCol', look.fogColor).v3('uFogSun', look.fogSun).v4('uFog', fogDen, look.fogHeight, -20, look.fogMax).v3('uCamPos', eye);
       p.v4('uAerial', aerial).v4('uCloud', cloud).v2('uCloud2', cloudLo, cloudLo + 0.16).tex('uCloudT', this.tex.noise, 4);
@@ -649,6 +661,38 @@ export class Renderer {
     const emisK = night > 0 || race.scen === Scn.FUTURE ? 1.0 : 0.25;
 
     // ---------- sun shadow maps (Psycho) ----------
+    // What the cars reflect: the sky itself, drawn small and unrolled (not on the light presets).
+    // It is an off-screen picture, and so are the shadow maps below. A phone's GPU draws a picture tile by tile
+    // and must write the whole main picture out to memory, and read it back, every time the frame leaves it and
+    // returns; so the off-screen pictures are drawn first and the main picture is started (cleared) after them.
+    // v3.7.0 to v3.9.1 drew the sky picture in the middle of the main one, just before the cars.
+    const pic = this.pic;
+    const envOn = !this.quality.lite && pic.env !== 'off';
+    if (this.scenery) this.scenery.dissolve = pic.dissolve;
+    const drawEnv = (): void => {
+      if (!this.env) {
+        gl.activeTexture(gl.TEXTURE0 + 2); // (not whichever unit is active: that may be a shadow map's)
+        this.env = new Target(gl, this.fmt.internal, this.fmt.format, this.fmt.type, false);
+        this.env.resize(128, 64);
+        gl.bindTexture(gl.TEXTURE_2D, this.env.tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+      }
+      this.env.bind();
+      gl.disable(gl.SCISSOR_TEST);
+      gl.disable(gl.DEPTH_TEST);
+      gl.disable(gl.BLEND);
+      this.sky.setLook(look, sw);
+      this.sky.lite = false;
+      this.sky.draw(null, eye, heading, (tr.y(sCar) - this.meanY) + eye[1], F.time, this.flash, this.bolt);
+      this.curTarget!.bind();
+      const vb = this.viewBox;
+      gl.viewport(vb[0], vb[1], vb[2], vb[3]);
+      gl.scissor(vb[0], vb[1], vb[2], vb[3]);
+      gl.enable(gl.SCISSOR_TEST);
+      gl.enable(gl.DEPTH_TEST);
+    };
+    let offscreen = false; // an off-screen picture has been drawn since the main one was cleared
+    if (envOn && pic.env === 'first') { drawEnv(); offscreen = true; }
     // Two cascades. Near: everything, a 230 m box at the camera. Far: terrain and landmarks over 2.4 km, so a
     // mountain's shadow already lies on the distant road before it comes inside the detailed map.
     this.shadowLive = false;
@@ -732,7 +776,19 @@ export class Renderer {
       this.bindShadowUnit(this.shadowTex!);
       this.bindShadowUnit(this.shadowTex2!, SHADOW_UNIT2);
       this.shadowLive = true;
+      offscreen = true;
       pf.end();
+    }
+    if (offscreen && pic.env === 'first') {
+      // Start the main picture afresh, so that nothing of it has to be kept across the off-screen passes. Only
+      // when this view is the whole picture: with a split screen the other half is already drawn.
+      const vb = this.viewBox;
+      if (vb[0] === 0 && vb[1] === 0 && vb[2] === this.renderW && vb[3] === this.renderH) {
+        gl.depthMask(true);
+        gl.colorMask(true, true, true, true);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      }
     }
 
     gl.enable(gl.DEPTH_TEST);
@@ -824,30 +880,7 @@ export class Renderer {
     }
     pf.end();
     pf.begin('cars, traffic');
-    // what the cars reflect: the sky itself, drawn small and unrolled (not on the light presets)
-    const envOn = !this.quality.lite;
-    if (envOn) {
-      if (!this.env) {
-        gl.activeTexture(gl.TEXTURE0 + 2); // (not whichever unit is active: that may be a shadow map's)
-        this.env = new Target(gl, this.fmt.internal, this.fmt.format, this.fmt.type, false);
-        this.env.resize(128, 64);
-        gl.bindTexture(gl.TEXTURE_2D, this.env.tex);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
-      }
-      this.env.bind();
-      gl.disable(gl.SCISSOR_TEST);
-      gl.disable(gl.DEPTH_TEST);
-      gl.disable(gl.BLEND);
-      this.sky.setLook(look, sw);
-      this.sky.lite = false;
-      this.sky.draw(null, eye, heading, (tr.y(sCar) - this.meanY) + eye[1], F.time, this.flash, this.bolt);
-      this.curTarget!.bind();
-      const vb = this.viewBox;
-      gl.viewport(vb[0], vb[1], vb[2], vb[3]);
-      gl.scissor(vb[0], vb[1], vb[2], vb[3]);
-      gl.enable(gl.SCISSOR_TEST);
-      gl.enable(gl.DEPTH_TEST);
-    }
+    if (envOn && pic.env === 'mid') drawEnv();
     const prepC = (p: Program) => { prep(p); p.tex('uEnvT', envOn ? this.env!.tex : null, 2).f('uEnvOn', envOn ? 1 : 0); };
     this.drawTraffic(prep, race.traffic, sCar, maxD, a, F.time);
     this.cars.draw(prepC, draws, [0.2, 0.9, 1.0]);

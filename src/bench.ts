@@ -15,7 +15,7 @@
 // every number for pasting into a spreadsheet or back to the developer.
 
 import type { Game } from './game';
-import { QUALITY, type Quality } from './render/renderer';
+import { QUALITY, FX_DEFAULT, type Quality, type PictureFx } from './render/renderer';
 import { Program } from './render/gl';
 
 export const BENCH_TRACKS: { code: string; what: string }[] = [
@@ -32,7 +32,35 @@ const QK = (globalThis as any).__benchQuick ? 0.1 : 1;
 const PHASES: Phase[] = [{ id: 'warm', dur: 1.5 * QK }, { id: 'play', dur: 5 * QK }, { id: 'cost', dur: 1 * QK }, { id: 'stages', dur: 1 * QK }];
 const CASE_SECONDS = PHASES.reduce((a, p) => a + p.dur, 0);
 
-interface Case { track: number; q: Quality; label: string }
+interface Case { track: number; q: Quality; label: string; fx?: Partial<PictureFx>; round?: number }
+
+// The picture cost test: what each of the picture effects added in v3.7.0 costs on this device. (v3.7.0 was
+// measured on a desktop only, 0.3-0.4 ms a frame; a phone turned out to pay about 3 ms on High.)
+// Two tracks on High, the effects switched one at a time, and on Commodore the frame order alone; each case is a
+// short warm-up and 2 s with the GPU made to finish every frame. Frame cost on a phone varies by a millisecond
+// or more from one run to the next, as much as the differences looked for, so everything is run three times,
+// the rounds interleaved and every second round in reverse order (a phone that warms up and slows down then
+// handicaps each variant equally), and the median is reported with the lowest and highest.
+const PROBE_PHASES: Phase[] = [{ id: 'warm', dur: 1 * QK }, { id: 'cost', dur: 2 * QK }];
+const PROBE_TRACKS = [0, 1];
+const PROBE_ROUNDS = 3;
+const PROBE: { preset: string; variants: { label: string; fx: Partial<PictureFx> }[] }[] = [
+  { preset: 'High', variants: [
+    { label: 'as released', fx: {} },
+    { label: 'off-screen pictures first', fx: { env: 'first' } },
+    { label: 'no sky reflections', fx: { env: 'off' } },
+    { label: 'no cloud shadows', fx: { cloud: false } },
+    { label: 'no haze', fx: { aerial: false } },
+    { label: 'no terrain variation', fx: { terrVar: false } },
+    { label: 'no model blend', fx: { dissolve: false } },
+    { label: 'all five off', fx: { env: 'off', cloud: false, aerial: false, terrVar: false, dissolve: false } },
+  ] },
+  { preset: 'Commodore', variants: [
+    { label: 'as released', fx: {} },
+    { label: 'off-screen pictures first', fx: { env: 'first' } },
+  ] },
+];
+export const PROBE_SECONDS = PROBE_ROUNDS * PROBE_TRACKS.length * PROBE.reduce((a, p) => a + p.variants.length, 0) * 3.4;
 interface CaseResult {
   track: string; what: string; settings: string; res: string;
   fps: number; low1: number; p50: number; p95: number; p99: number; worst: number; hitches: number;
@@ -82,6 +110,9 @@ export class Benchmark {
   /** milliseconds one 'finish the GPU' read-back takes with nothing queued (taken off the measurements) */
   private syncMs = 0;
   private results: CaseResult[] = [];
+  private probeRes: { track: number; preset: string; variant: string; round: number; costMs: number }[] = [];
+  private phases: Phase[] = PHASES;
+  private caseSeconds = CASE_SECONDS;
   private secN = 0;
   private secT = 0;
   timeline: number[] = [];
@@ -89,17 +120,28 @@ export class Benchmark {
   label = '';
   readonly totalSeconds: number;
 
-  constructor(private g: Game, private done: (r: BenchReport) => void) {
+  constructor(private g: Game, private done: (r: BenchReport) => void, readonly probe = false) {
     const mine = g.effectiveQuality();
+    if (probe) {
+      this.phases = PROBE_PHASES;
+      this.caseSeconds = PROBE_SECONDS / (PROBE_ROUNDS * PROBE_TRACKS.length * PROBE.reduce((a, p) => a + p.variants.length, 0));
+      // (the automated test, on a software GPU: one round of one track)
+      const quickP = !!(globalThis as any).__benchQuick;
+      for (let round = 0; round < (quickP ? 1 : PROBE_ROUNDS); round++) {
+        const one: Case[] = [];
+        for (const t of quickP ? [0] : PROBE_TRACKS) for (const pr of PROBE) for (const v of pr.variants) one.push({ track: t, q: QUALITY.find((x) => x.name === pr.preset)!, label: v.label, fx: v.fx, round });
+        this.cases.push(...(round % 2 ? one.reverse() : one));
+      }
+    }
     // (the automated test runs a cut-down suite: a software GPU needs minutes per Psycho frame)
     const quick = !!(globalThis as any).__benchQuick;
     const presets = quick ? ['Ultra Low', 'Low'] : BENCH_PRESETS;
-    for (let t = 0; t < (quick ? 2 : BENCH_TRACKS.length); t++) {
+    for (let t = 0; !probe && t < (quick ? 2 : BENCH_TRACKS.length); t++) {
       for (const n of presets) this.cases.push({ track: t, q: QUALITY.find((x) => x.name === n)!, label: n });
       // the player's own settings too, unless they are exactly one of the presets above
       if (!(presets.includes(mine.name) && !qualityDiff(mine))) this.cases.push({ track: t, q: mine, label: 'Yours: ' + mine.name });
     }
-    this.totalSeconds = this.cases.length * CASE_SECONDS;
+    this.totalSeconds = this.cases.length * this.caseSeconds;
     // what a read-back costs when the GPU has nothing to do
     const pf = g.renderer.prof;
     pf.sync();
@@ -112,7 +154,7 @@ export class Benchmark {
   // (after the last phase of the last case k is one past the end while the shader timing runs: the game still asks
   // about the phase every frame, and an undefined one here stopped its frame loop on every device without GPU
   // timers)
-  get phase(): Phase { return PHASES[Math.min(this.k, PHASES.length - 1)]; }
+  get phase(): Phase { return this.phases[Math.min(this.k, this.phases.length - 1)]; }
   /** the game must finish the GPU at the end of this frame (whole-frame cost) */
   get finishFrames(): boolean { return !this.finishing && this.phase.id === 'cost'; }
   /** the game must not touch the render scale (fixed by the test) */
@@ -124,6 +166,7 @@ export class Benchmark {
     this.caseT0 = performance.now();
     this.g.benchRace(BENCH_TRACKS[c.track].code, c.q);
     this.g.renderer.forceScale = c.q.scale;
+    this.g.renderer.pic = { ...FX_DEFAULT, ...(c.fx ?? {}) };
     this.iv = [];
     this.paceSum = 0;
     this.cpu = [];
@@ -159,6 +202,12 @@ export class Benchmark {
         if ([...m.values()].some((v) => v > 0)) this.stageGpu = m;
         this.wholeGpu = pf.wholeAvg;
       }
+    }
+    if (this.probe && id === 'cost') {
+      const c = this.cases[this.ci];
+      const s = this.cost.slice(Math.floor(this.cost.length * 0.2)).sort((a, b) => a - b);
+      this.probeRes.push({ track: c.track, preset: c.q.name, variant: c.label, round: c.round ?? 0, costMs: Math.max(0, pct(s, 0.5) - this.syncMs) });
+      return;
     }
     if (id === 'stages' || (id === 'cost' && this.stageGpu)) {
       const c = this.cases[this.ci];
@@ -203,11 +252,13 @@ export class Benchmark {
     }
     if (id === 'cost') this.cost.push(cpuMs);
     const c = this.cases[this.ci];
-    const left = Math.max(0, (this.cases.length - this.ci) * CASE_SECONDS - PHASES.slice(0, this.k).reduce((a, p) => a + p.dur, 0) - this.t);
+    const left = Math.max(0, (this.cases.length - this.ci) * this.caseSeconds - this.phases.slice(0, this.k).reduce((a, p) => a + p.dur, 0) - this.t);
     const recent = this.iv.slice(-120);
     const fps = recent.length ? recent.length / recent.reduce((x, y) => x + y, 0) : 0;
     const doing = id === 'warm' ? 'loading' : id === 'play' ? `${fps.toFixed(0)} fps` : 'measuring the graphics card (the picture slows down, this is normal)';
-    this.label = `BENCHMARK ${this.ci + 1}/${this.cases.length} · ${BENCH_TRACKS[c.track].what.split(' (')[0]} · ${c.label} · ${doing} · ${Math.ceil(left)} s left`;
+    this.label = this.probe
+      ? `PICTURE COST TEST ${this.ci + 1}/${this.cases.length} · ${BENCH_TRACKS[c.track].what.split(' (')[0]} · ${c.q.name} · ${c.label} · ${Math.ceil(left)} s left (the picture is slow and jumps back: this is normal)`
+      : `BENCHMARK ${this.ci + 1}/${this.cases.length} · ${BENCH_TRACKS[c.track].what.split(' (')[0]} · ${c.label} · ${doing} · ${Math.ceil(left)} s left`;
     let over = this.t >= this.phase.dur;
     if (id === 'warm' && over && this.t < 8) {
       // not until the track has finished loading: the last 20 frames must be steady (none over 2.5x their median)
@@ -215,11 +266,11 @@ export class Benchmark {
       over = w.length >= 20 && sorted[19] < Math.max(sorted[10] * 2.5, 0.012);
       if (!over && this.t > 4 && w.length < 20) over = true; // (a device too slow to draw 20 frames in 4 s)
       // with frame pacing on, also not until the rhythm has been found and has stood for 2.5 s
-      if (over && this.g.pacing && !this.g.pacer.settled(performance.now())) over = false;
+      if (over && !this.probe && this.g.pacing && !this.g.pacer.settled(performance.now())) over = false;
     }
     if (over && id === 'warm') this.warmT = this.t;
     // with GPU timers the stage times came from the normal run: no need for the slow stage-by-stage phase
-    const last = this.k === PHASES.length - 1 || (id === 'cost' && !!this.stageGpu);
+    const last = this.k === this.phases.length - 1 || (id === 'cost' && !!this.stageGpu);
     if (over) {
       this.leave();
       this.k++;
@@ -233,6 +284,7 @@ export class Benchmark {
   restore(): void {
     const R = this.g.renderer;
     R.forceScale = null;
+    R.pic = { ...FX_DEFAULT };
     R.prof.mode = 'off';
     R.prof.whole = false;
     this.g.benchRestore();
@@ -242,6 +294,7 @@ export class Benchmark {
   private compiles: { each: { name: string; ms: number }[]; together: number; probes: { name: string; ms: number; ok: boolean }[] } | null = null;
   private finish(): void {
     this.restore();
+    if (this.probe) { this.finishing = true; this.done(this.probeReport()); return; }
     // last: how long the graphics driver takes over each shader program (what start-up waits for)
     this.finishing = true;
     const next = () => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
@@ -249,6 +302,66 @@ export class Benchmark {
       this.label = `BENCHMARK · timing shader compilation ${i + 1}/${n} (the picture stops for a moment each time, this is normal)`;
       return next();
     }, () => this.g.renderer.prof.sync()).then((c) => { this.compiles = c; }, () => { /* report without it */ }).then(() => this.done(this.report()));
+  }
+
+  private deviceLines(L: string[]): string {
+    const g = this.g, R = g.renderer, gl = R.gl;
+    const refresh = g.refreshRate;
+    const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+    const gpuName = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    const gpuVendor = dbg ? gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+    const nav = navigator as any;
+    const mine = g.effectiveQuality();
+    const line = (k: string, v: string) => L.push(k.padEnd(22) + v);
+    L.push('== Device ==');
+    line('GPU', `${gpuName}  (${gpuVendor})`);
+    line('output', `${R.canvas.width}x${R.canvas.height} px   device pixel ratio ${devicePixelRatio}   screen ${screen.width}x${screen.height}   refresh ~${refresh.toFixed(0)} Hz (estimated)`);
+    line('WebGL', `${gl.getParameter(gl.VERSION)}   max MSAA ${gl.getParameter(gl.MAX_SAMPLES)}   HDR targets ${R.hdr ? 'yes' : 'no'}   GPU timers ${R.prof.timerAvailable ? 'yes' : 'no'}`);
+    line('CPU threads / memory', `${nav.hardwareConcurrency ?? '?'} / ${nav.deviceMemory ? nav.deviceMemory + ' GB' : '?'}`);
+    line('browser', navigator.userAgent);
+    line('start-up', `${(g.startupMs / 1000).toFixed(1)} s from opening the page to the third frame (shader compilation included)`);
+    line('your settings', `${mine.name}` + (qualityDiff(mine) ? `  [${qualityDiff(mine)}]` : '  (stock)') + `   dynamic resolution ${g.settings.dynRes ? 'on' : 'off'} (off during the benchmark)   frame pacing ${g.pacing ? 'on' : 'off'}`);
+    return String(gpuName);
+  }
+
+  /** the report of the picture cost test */
+  private probeReport(): BenchReport {
+    const L: string[] = [];
+    const tracks = PROBE_TRACKS.filter((t) => this.probeRes.some((r) => r.track === t));
+    const rounds = 1 + Math.max(0, ...this.probeRes.map((r) => r.round));
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    L.push(`CRESTLINE v${__VERSION__} (build ${__BUILD_TIME__.slice(0, 16).replace('T', ' ')} UTC) — picture cost test, ${stamp} UTC`);
+    L.push(`What each picture effect added in v3.7.0 costs on this device: frame cost with the GPU made to finish, ${rounds} round${rounds > 1 ? 's' : ''}, median (lowest-highest).`);
+    L.push('');
+    const gpu = this.deviceLines(L);
+    L.push('');
+    L.push(`(making the GPU finish costs ${f2(this.syncMs)} ms per call on this device; that has been taken off)`);
+    const med = (a: number[]) => pct(a.slice().sort((x, y) => x - y), 0.5);
+    const cases: unknown[] = [];
+    for (const pr of PROBE) {
+      L.push('');
+      L.push(`== ${pr.preset}: frame cost in ms ==`);
+      L.push('variant'.padEnd(28) + tracks.map((t) => BENCH_TRACKS[t].what.split(' (')[0].padStart(24)).join('') + tracks.map((t) => ('change, ' + BENCH_TRACKS[t].what.split(' (')[0]).padStart(20)).join(''));
+      const base = tracks.map((t) => med(this.probeRes.filter((r) => r.track === t && r.preset === pr.preset && r.variant === 'as released').map((r) => r.costMs)));
+      for (const v of pr.variants) {
+        let row = v.label.padEnd(28), diff = '';
+        tracks.forEach((t, i) => {
+          const c = this.probeRes.filter((r) => r.track === t && r.preset === pr.preset && r.variant === v.label).sort((a, b) => a.round - b.round).map((r) => r.costMs);
+          const lo = Math.min(...c), hi = Math.max(...c);
+          row += `${f2(med(c))} (${f2(lo)}-${f2(hi)})`.padStart(24);
+          const d = med(c) - base[i];
+          diff += (v.label === 'as released' ? '–' : (d >= 0 ? '+' : '') + f2(d)).padStart(20);
+          cases.push({ track: BENCH_TRACKS[t].code, preset: pr.preset, variant: v.label, costMs: c.map((x) => Math.round(x * 100) / 100) });
+        });
+        L.push(row + diff);
+      }
+    }
+    L.push('');
+    L.push('A change smaller than the spread between rounds (the figures in brackets) means nothing.');
+    L.push('');
+    L.push('== Data (JSON, one line) ==');
+    L.push(JSON.stringify({ v: __VERSION__, probe: 'picture', when: stamp, gpu, out: [this.g.renderer.canvas.width, this.g.renderer.canvas.height], hz: Math.round(this.g.refreshRate), syncMs: Math.round(this.syncMs * 1000) / 1000, cases }));
+    return { text: L.join('\n'), timeline: [], scaleLine: [], refresh: this.g.refreshRate };
   }
 
   private report(): BenchReport {
@@ -265,14 +378,7 @@ export class Benchmark {
     L.push(`CRESTLINE v${__VERSION__} (build ${__BUILD_TIME__.slice(0, 16).replace('T', ' ')} UTC) — benchmark, ${stamp} UTC`);
     L.push(`Fixed suite: ${BENCH_TRACKS.length} tracks x ${BENCH_PRESETS.join(' / ')}` + (this.cases.length > BENCH_TRACKS.length * BENCH_PRESETS.length ? ' + your settings' : '') + '; 1 player, bot driving, resolution fixed at each preset\'s scale.');
     L.push('');
-    L.push('== Device ==');
-    line('GPU', `${gpuName}  (${gpuVendor})`);
-    line('output', `${R.canvas.width}x${R.canvas.height} px   device pixel ratio ${devicePixelRatio}   screen ${screen.width}x${screen.height}   refresh ~${refresh.toFixed(0)} Hz (estimated)`);
-    line('WebGL', `${gl.getParameter(gl.VERSION)}   max MSAA ${gl.getParameter(gl.MAX_SAMPLES)}   HDR targets ${R.hdr ? 'yes' : 'no'}   GPU timers ${R.prof.timerAvailable ? 'yes' : 'no'}`);
-    line('CPU threads / memory', `${nav.hardwareConcurrency ?? '?'} / ${nav.deviceMemory ? nav.deviceMemory + ' GB' : '?'}`);
-    line('browser', navigator.userAgent);
-    line('start-up', `${(g.startupMs / 1000).toFixed(1)} s from opening the page to the third frame (shader compilation included)`);
-    line('your settings', `${mine.name}` + (qualityDiff(mine) ? `  [${qualityDiff(mine)}]` : '  (stock)') + `   dynamic resolution ${g.settings.dynRes ? 'on' : 'off'} (off during the benchmark)   frame pacing ${g.pacing ? 'on' : 'off'}`);
+    this.deviceLines(L);
     L.push('');
     L.push('== Summary ==');
     L.push('fps = measured (never above the refresh rate) · cost = full frame with the GPU made to finish, no vsync · max fps = 1000 / cost');

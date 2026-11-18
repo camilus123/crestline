@@ -4,7 +4,7 @@ import type { Game } from '../game';
 import { MenuKey, ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS } from '../input';
 import { CARS } from '../sim/specs';
 import { fuelPlan } from '../sim/race';
-import { BENCH_PRESETS, BENCH_TRACKS, type BenchReport } from '../bench';
+import { BENCH_PRESETS, BENCH_TRACKS, PROBE_SECONDS, type BenchReport } from '../bench';
 import { LIVERIES } from '../sim/roster';
 import { decodeCode, normalizeCode } from '../track/codes';
 import { SCENARIO_NAMES } from '../track/defs';
@@ -742,7 +742,9 @@ function bench(g: Game): Screen {
   const copyB = h('div', { class: 'btn', style: 'display:none' }, h('span', {}, 'Copy report'));
   const saveB = h('div', { class: 'btn', style: 'display:none' }, h('span', {}, 'Save report'));
   const backB = h('div', { class: 'btn' }, h('span', {}, 'Back'));
-  panel.append(chart, out, h('div', { class: 'benchbtns' }, startB, copyB, saveB, backB));
+  // (a diagnostic, to go again once it has done its job: what each picture effect of v3.7.0 costs on this device)
+  const probeB = h('div', { class: 'btn', title: `About ${Math.round(PROBE_SECONDS / 30) / 2} minutes. Measures what each of the picture effects added in v3.7.0 costs on this device. The picture is slow and keeps jumping back to the start: that is the test.` }, h('span', {}, 'Picture cost test'));
+  panel.append(chart, out, h('div', { class: 'benchbtns' }, startB, copyB, saveB, backB, probeB));
   let rep: BenchReport | null = null;
   const draw = (r: BenchReport) => {
     const c = chart.getContext('2d');
@@ -782,20 +784,20 @@ function bench(g: Game): Screen {
     rep = r;
     out.textContent = r.text;
     out.style.display = '';
-    chart.style.display = '';
+    chart.style.display = r.timeline.length ? '' : 'none';
     copyB.style.display = '';
     saveB.style.display = '';
     draw(r);
   };
-  const run = () => {
+  const run = (probe = false) => {
     g.startBenchmark((r) => {
       store.set('lastBenchmark3', r);
       g.show('bench');
-    });
+    }, probe);
   };
   const last = store.get<BenchReport | null>('lastBenchmark3', null);
   if (last && last.text) showRep(last);
-  bind(menu, startB, 0, 0, { activate: run });
+  bind(menu, startB, 0, 0, { activate: () => run() });
   bind(menu, copyB, 0, 1, { activate: () => { if (rep) void navigator.clipboard?.writeText(rep.text).then(() => toast('Report copied'), () => toast('Copy failed – select the text manually')); } });
   bind(menu, saveB, 0, 2, { activate: () => {
     if (!rep) return;
@@ -808,6 +810,7 @@ function bench(g: Game): Screen {
     toast('Report saved to your downloads');
   } });
   bind(menu, backB, 0, 3, { activate: () => g.show('settings') });
+  bind(menu, probeB, 0, 4, { activate: () => run(true) });
   menu.setFocus(startB);
   menu.onBack = () => g.show('settings');
   // the report is long: the body grows with it (never squeezed to the window) and the screen scrolls

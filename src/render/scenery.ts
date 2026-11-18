@@ -342,6 +342,8 @@ export class Scenery {
   backdropDist = 0.8;
   /** beyond this distance ahead, models with a lighter version are drawn with it */
   lodDist = 160;
+  /** blend the full model into the distance model over the last stretch (false only in the picture cost test) */
+  dissolve = true;
   /** draw with the depth-only program (sun shadow maps): same vertices, no shading, and the linker drops the
    *  vertex work that only fed the shading (normals, colours, lights) */
   depthOnly = false;
@@ -616,7 +618,7 @@ export class Scenery {
       if (set.adj && !set.far) this.placeLandmarks(set, path, sCar, loop, r);
       const near = this.depthOnly && set.caster ? set.caster : set.mesh;
       // the last stretch before the split is drawn with both models, dissolving from one to the other
-      const band = set.far && ahead > split && !this.depthOnly ? Math.min(25, split * 0.2) : 0;
+      const band = set.far && ahead > split && !this.depthOnly && this.dissolve ? Math.min(25, split * 0.2) : 0;
       if (band > 0) p.v3('uLodFade', split - band, band, 1);
       for (let k = 0; k < r.length; k += 2) near.drawInstances(r[k], r[k + 1]);
       if (set.far && ahead > split) {

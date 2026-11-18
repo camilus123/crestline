@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Draws the charts of docs/performance.md from docs/perf/benchmarks.json.
+"""Draws the charts of docs/performance.md from docs/perf/benchmarks.json and rewrites its tables.
 
+    python3 tools/perfadd.py new-report.txt     (first, when there is a new report)
     python3 tools/perfcharts.py
+
+The tables in docs/performance.md between "<!-- table:NAME -->" and "<!-- /table -->" are replaced. The prose
+around them, and the charts' descriptions for screen readers, quote figures too: read those after every update.
 
 Each chart is written twice (…-light.svg, …-dark.svg); the page picks one by the reader's colour scheme.
 Plain SVG, no dependencies. Colours: four categorical hues in a fixed order (checked for colour-blind separation
@@ -166,7 +170,62 @@ def shader_compile(mode):
     return versions, series
 
 
-PHONE_BEFORE, PHONE_AFTER = '3.7.1', '3.9.1'
+PHONE_BEFORE = '3.7.1'  # the last version before frame pacing
+PHONE_AFTER = max((r['version'] for r in RUNS if r['device'] == 'phone' and r['browser'] == 'Mi Browser' and r['pacing']), key=vkey)
+
+
+def tables():
+    fps = lambda c: mean(x['fps'] for x in c)
+    cost = lambda c: mean(x['costMs'] for x in c)
+    hit = lambda c: sum(x['hitches'] for x in c)
+    worst = lambda c: max(x['worst'] for x in c)
+    low = lambda c: min(x['low1'] for x in c)
+
+    def cell(run, name, f, fmt='{:.1f}'):
+        c = preset(run, name)
+        return fmt.format(f(c)) if c else '–'
+    T = {}
+    rows = ['| Version | Low | High | Psycho | Admiral | Psycho fps | Admiral fps |', '|---|---|---|---|---|---|---|']
+    for r in pick('pc', 'Edge', pacing=False):
+        rows.append(f"| {r['version']} | " + ' | '.join(cell(r, n, cost, '{:.2f} ms') for n in ['Low', 'High', 'Psycho', 'Admiral'])
+                    + f" | {cell(r, 'Psycho', fps)} | {cell(r, 'Admiral', fps)} |")
+    T['pc-edge'] = rows
+    comp = {}
+    for br in ['Edge', 'Firefox']:
+        for r in pick('pc', br, pacing=False):
+            if r['compileAllMs']:
+                comp.setdefault(r['version'], {})[br] = f"{r['compileAllMs'] / 1000:.1f} s"
+    T['compile'] = ['| Version | Edge | Firefox |', '|---|---|---|'] + [f"| {v} | {comp[v].get('Edge', '–')} | {comp[v].get('Firefox', '–')} |" for v in sorted(comp, key=vkey)]
+    # the phone: one row per version, with pacing on where that version was measured so
+    by = {}
+    for r in pick('phone', 'Mi Browser'):
+        if r['version'] not in by or r['pacing']:
+            by[r['version']] = r
+    rows = ['| Version | Pacing | Low fps | High fps | Admiral fps | Psycho fps | High stalls | Admiral stalls | Psycho stalls |', '|---|---|---|---|---|---|---|---|---|']
+    for v in sorted(by, key=vkey):
+        r = by[v]
+        rows.append(f"| {v} | {'on' if r['pacing'] else 'off'} | " + ' | '.join(cell(r, n, fps) for n in ['Low', 'High', 'Admiral', 'Psycho']) + ' | '
+                    + ' | '.join(cell(r, n, hit, '{:.0f}') for n in ['High', 'Admiral', 'Psycho']) + ' |')
+    T['phone-history'] = rows
+    r = pick('phone', 'Mi Browser', PHONE_AFTER, True)[-1]
+    names = sorted([n for n in ['Low', 'Commodore', 'Admiral', 'High', 'Psycho'] if preset(r, n)], key=lambda n: -fps(preset(r, n)))
+    T['phone-presets'] = ['| Preset | fps | Lowest 1 % low | Frame cost | Stalls in 20 s | Longest frame |', '|---|---|---|---|---|---|'] + [
+        f"| {n} | {cell(r, n, fps)} | {cell(r, n, low)} | {cell(r, n, cost)} ms | {cell(r, n, hit, '{:.0f}')} | {cell(r, n, worst, '{:.0f}')} ms |" for n in names]
+    T['laptop'] = ['| Version | Low fps | High fps | Psycho fps | Low cost | High cost | Psycho cost |', '|---|---|---|---|---|---|---|'] + [
+        f"| {r['version']} | " + ' | '.join(cell(r, n, fps) for n in ['Low', 'High', 'Psycho']) + ' | ' + ' | '.join(cell(r, n, cost, '{:.1f} ms') for n in ['Low', 'High', 'Psycho']) + ' |'
+        for r in pick('laptop', 'Firefox')]
+    return T
+
+
+def write_tables():
+    import re
+    path = os.path.join(ROOT, 'docs', 'performance.md')
+    md = open(path).read()
+    for name, rows in tables().items():
+        pat = re.compile(r'(<!-- table:' + re.escape(name) + r' -->\n).*?(<!-- /table -->)', re.S)
+        assert pat.search(md), f'docs/performance.md has no table marker "{name}"'
+        md = pat.sub(lambda m: m.group(1) + '\n'.join(rows) + '\n' + m.group(2), md)
+    open(path, 'w').write(md)
 
 
 def phone_pacing(mode):
@@ -243,6 +302,7 @@ if __name__ == '__main__':
         b = shader_compile(mode)
         c = phone_pacing(mode)
         d = phone_presets(mode)
+    write_tables()
     print('versions', a[0])
     for lab, vals in a[1]:
         print(lab, {k: round(v, 2) for k, v in vals.items()})

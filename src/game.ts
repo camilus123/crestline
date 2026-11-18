@@ -528,7 +528,7 @@ export class Game {
   private paceHintDue = false;
   private skipFrame(now: number): boolean {
     // (the benchmark's cost and stage phases make the GPU finish inside the frame: nothing to learn from those)
-    const measuring = !!this.bench && this.bench.phase.id !== 'warm' && this.bench.phase.id !== 'play';
+    const measuring = !!this.bench && (this.bench.probe || (this.bench.phase.id !== 'warm' && this.bench.phase.id !== 'play'));
     const active = this.pacing && !measuring;
     this.pacer.hold = !!this.bench && this.bench.phase.id === 'play';
     if (active) {
@@ -772,7 +772,7 @@ export class Game {
 
   // ---------------------------------------------------------------- benchmark
   private benchSaved: Partial<Settings> | null = null;
-  startBenchmark(done: (report: BenchReport) => void): void {
+  startBenchmark(done: (report: BenchReport) => void, probe = false): void {
     // the same conditions on every run: one player, the same car, no music restarts
     const st = this.settings;
     this.benchSaved = { players: st.players, cars: st.cars.slice(), colors: st.colors.slice(), manual: st.manual.slice(), song: st.song };
@@ -793,7 +793,7 @@ export class Game {
       this.session = null;
       this.startAttract();
       done(rep);
-    });
+    }, probe);
   }
   /** benchmark: start one case (a track at a set of quality options) */
   benchRace(code: string, q: Quality): void {

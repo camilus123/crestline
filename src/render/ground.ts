@@ -253,6 +253,7 @@ const TERR_FS = PRELUDE + NOISE + LIGHT + `
 in vec3 vW; in vec3 vN; in vec2 vSU; in float vOff; in float vSlope; in float vFlags; in float vEdge; in vec2 vAlt; in float vCloud;
 out vec4 o;
 uniform sampler2D uGround; uniform sampler2D uNoiseT;
+uniform float uTerrVar; // 1: mix in the second copy of the coarse texture (0 only in the picture cost test)
 uniform vec3 uG0; uniform vec3 uG1; uniform vec3 uG2;
 uniform int uGType;
 uniform vec3 uShoulder;
@@ -268,7 +269,8 @@ void main(){
   // slope or meadow. A second copy at another size, with its axes swapped, is mixed in patch by patch (the
   // patches come from noise that does not repeat), so no single period is left to see. Both sizes fit the 600 m
   // wrap of s a whole number of times.
-  vec4 g2 = mix(texture(uGround, uv * 0.19 + 0.31), texture(uGround, uv.yx * 0.13 + 0.7), smoothstep(0.35, 0.65, nz.g));
+  vec4 g2 = texture(uGround, uv * 0.19 + 0.31);
+  if (uTerrVar > 0.5) g2 = mix(g2, texture(uGround, uv.yx * 0.13 + 0.7), smoothstep(0.35, 0.65, nz.g));
   float t = mix(g.r, g2.r, smoothstep(30.0, 200.0, dist)) * 0.6 + big * 0.6 - 0.1;
   vec3 c = mix(uG0, uG1, clamp(t, 0.0, 1.0));
   c = mix(c, uG2, clamp(g.b * 0.8 + (big - 0.6) * 0.8, 0.0, 1.0) * 0.6);

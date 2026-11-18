@@ -230,7 +230,7 @@ vec3 fogApply(vec3 col, vec3 wpos){
   // air between here and there: even on a clear day the far distance loses contrast and takes on the colour of
   // the sky at the horizon, in step with how far off it is (the fog above only starts where the track's own
   // visibility ends, which left far hills as saturated as the verge)
-  col = mix(col, uAerial.rgb, uAerial.w * (1.0 - exp(-dist * 0.0011)));
+  if (uAerial.w > 0.0) col = mix(col, uAerial.rgb, uAerial.w * (1.0 - exp(-dist * 0.0011)));
   return mix(col, fc, f);
 }
 
