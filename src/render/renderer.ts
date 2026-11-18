@@ -41,8 +41,8 @@ export interface Quality {
   cap60: boolean; // the resolution scaler aims for 60 fps even on a faster screen (a 120 Hz phone)
 }
 export interface PictureFx { env: 'mid' | 'first' | 'off'; cloud: boolean; aerial: boolean; terrVar: boolean; dissolve: boolean }
-/** as released in v3.7.0 to v3.9.1 (see Renderer.pic) */
-export const FX_DEFAULT: PictureFx = { env: 'mid', cloud: true, aerial: true, terrVar: true, dissolve: true };
+/** as shipped (see Renderer.pic). v3.7.0 to v3.9.2 had env 'mid'. */
+export const FX_DEFAULT: PictureFx = { env: 'first', cloud: true, aerial: true, terrVar: true, dissolve: true };
 
 export const QUALITY: Quality[] = [
   { name: 'Ultra Low', scale: 0.75, minScale: 0.5, msaa: 0, bloom: 0, dist: 0.36, particles: 0.25, weather: 0.3, scenery: 0.5, woods: 0, lamps: 4, lite: true, shadows: 0, ssao: false, dpr: 1, lod: 40, terrLite: true, cap60: true },
@@ -118,9 +118,13 @@ export class Renderer {
   /**
    * Switches for the picture effects added in v3.7.0, for measuring what each costs (the picture cost test in
    * bench.ts sets them; everything else leaves them alone).
-   * env: where in the frame the small sky picture the cars reflect is drawn. 'mid': in the middle of the main
-   * picture, just before the cars. 'first': before the main picture is started, and the main picture is cleared
-   * again on coming back from the off-screen passes (sky picture, shadow maps). 'off': not at all.
+   * env: where in the frame the small sky picture the cars reflect is drawn. 'first': before the main picture
+   * is started, and the main picture is cleared again on coming back from the off-screen passes (sky picture,
+   * shadow maps). 'mid': in the middle of the main picture, just before the cars, as v3.7.0 to v3.9.2 did.
+   * 'off': not at all.
+   * Measured on a phone (Mali-G720, High preset with 4x MSAA, v3.9.2 picture cost test, three rounds): 'mid' cost
+   * 16.8 ms a frame on Forest and 15.0 on Mountains, 'first' 12.3 and 9.4, 'off' 14.2 and 9.8. So the sky picture
+   * itself costs nothing that can be measured; leaving the main picture half-way and coming back cost 4.5-5.6 ms.
    */
   pic: PictureFx = { ...FX_DEFAULT };
   private shadowVP = new Float32Array(16);
@@ -665,7 +669,8 @@ export class Renderer {
     // It is an off-screen picture, and so are the shadow maps below. A phone's GPU draws a picture tile by tile
     // and must write the whole main picture out to memory, and read it back, every time the frame leaves it and
     // returns; so the off-screen pictures are drawn first and the main picture is started (cleared) after them.
-    // v3.7.0 to v3.9.1 drew the sky picture in the middle of the main one, just before the cars.
+    // v3.7.0 to v3.9.2 drew the sky picture in the middle of the main one, just before the cars: 4.5-5.6 ms a
+    // frame on a phone with 4x MSAA (see Renderer.pic).
     const pic = this.pic;
     const envOn = !this.quality.lite && pic.env !== 'off';
     if (this.scenery) this.scenery.dissolve = pic.dissolve;

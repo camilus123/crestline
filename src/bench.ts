@@ -36,6 +36,10 @@ interface Case { track: number; q: Quality; label: string; fx?: Partial<PictureF
 
 // The picture cost test: what each of the picture effects added in v3.7.0 costs on this device. (v3.7.0 was
 // measured on a desktop only, 0.3-0.4 ms a frame; a phone turned out to pay about 3 ms on High.)
+// (Run on the phone with v3.9.2: the whole cost was the place in the frame where the sky picture for the cars'
+// reflections was drawn, 4.5-5.6 ms on High; fixed in v3.9.3. The other four effects were below what the test
+// can tell apart there, about 1.5 ms. The test stays as a tool, started by the automated test only: its button
+// is gone from the benchmark screen.)
 // Two tracks on High, the effects switched one at a time, and on Commodore the frame order alone; each case is a
 // short warm-up and 2 s with the GPU made to finish every frame. Frame cost on a phone varies by a millisecond
 // or more from one run to the next, as much as the differences looked for, so everything is run three times,
@@ -46,8 +50,8 @@ const PROBE_TRACKS = [0, 1];
 const PROBE_ROUNDS = 3;
 const PROBE: { preset: string; variants: { label: string; fx: Partial<PictureFx> }[] }[] = [
   { preset: 'High', variants: [
-    { label: 'as released', fx: {} },
-    { label: 'off-screen pictures first', fx: { env: 'first' } },
+    { label: 'as shipped', fx: {} },
+    { label: 'sky picture in mid-frame', fx: { env: 'mid' } },
     { label: 'no sky reflections', fx: { env: 'off' } },
     { label: 'no cloud shadows', fx: { cloud: false } },
     { label: 'no haze', fx: { aerial: false } },
@@ -56,8 +60,8 @@ const PROBE: { preset: string; variants: { label: string; fx: Partial<PictureFx>
     { label: 'all five off', fx: { env: 'off', cloud: false, aerial: false, terrVar: false, dissolve: false } },
   ] },
   { preset: 'Commodore', variants: [
-    { label: 'as released', fx: {} },
-    { label: 'off-screen pictures first', fx: { env: 'first' } },
+    { label: 'as shipped', fx: {} },
+    { label: 'main picture not cleared again', fx: { env: 'mid' } },
   ] },
 ];
 export const PROBE_SECONDS = PROBE_ROUNDS * PROBE_TRACKS.length * PROBE.reduce((a, p) => a + p.variants.length, 0) * 3.4;
@@ -342,7 +346,7 @@ export class Benchmark {
       L.push('');
       L.push(`== ${pr.preset}: frame cost in ms ==`);
       L.push('variant'.padEnd(28) + tracks.map((t) => BENCH_TRACKS[t].what.split(' (')[0].padStart(24)).join('') + tracks.map((t) => ('change, ' + BENCH_TRACKS[t].what.split(' (')[0]).padStart(20)).join(''));
-      const base = tracks.map((t) => med(this.probeRes.filter((r) => r.track === t && r.preset === pr.preset && r.variant === 'as released').map((r) => r.costMs)));
+      const base = tracks.map((t) => med(this.probeRes.filter((r) => r.track === t && r.preset === pr.preset && r.variant === 'as shipped').map((r) => r.costMs)));
       for (const v of pr.variants) {
         let row = v.label.padEnd(28), diff = '';
         tracks.forEach((t, i) => {
@@ -350,7 +354,7 @@ export class Benchmark {
           const lo = Math.min(...c), hi = Math.max(...c);
           row += `${f2(med(c))} (${f2(lo)}-${f2(hi)})`.padStart(24);
           const d = med(c) - base[i];
-          diff += (v.label === 'as released' ? '–' : (d >= 0 ? '+' : '') + f2(d)).padStart(20);
+          diff += (v.label === 'as shipped' ? '–' : (d >= 0 ? '+' : '') + f2(d)).padStart(20);
           cases.push({ track: BENCH_TRACKS[t].code, preset: pr.preset, variant: v.label, costMs: c.map((x) => Math.round(x * 100) / 100) });
         });
         L.push(row + diff);

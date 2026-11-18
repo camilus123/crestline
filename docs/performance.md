@@ -146,11 +146,31 @@ Two things to know when comparing the first and last rows:
 Commodore (new in v3.9.0) keeps sun shadows and ambient occlusion but drops anti-aliasing and renders at 80 %
 resolution, the two things this chip pays most for. It is the heaviest preset that holds 60 fps on this phone.
 
-## What got slower
+## What got slower, and why
 
 The picture improvements of v3.7.0 were close to free on the PC (0.3 to 0.4 ms a frame) but not on the phone.
 Without pacing, High went from 11.5 ms and 52.9 fps (v3.5.4) to 14.8 ms and 43.3 fps (v3.7.1), and Psycho from
-18.3 to 21.1 ms. Which of the six changes costs the phone that much has not been measured.
+18.3 to 21.1 ms.
+
+A test in v3.9.2 switched the effects one at a time on the phone (High preset, three interleaved rounds, frame
+cost in ms, median with lowest and highest):
+
+| | Forest | Mountains |
+|---|---|---|
+| As released (v3.7.0 to v3.9.2) | 16.8 (14.3-16.9) | 15.0 (12.7-16.5) |
+| Sky picture drawn before the main picture | 12.3 (11.3-13.4) | 9.4 (8.7-11.2) |
+| No sky picture at all | 14.2 (13.2-15.1) | 9.8 (9.5-10.2) |
+
+The cars reflect a small picture of the sky, and v3.7.0 drew it in the middle of the main picture. A phone's
+graphics chip draws in tiles and has to write the whole main picture out to memory and read it back when a frame
+leaves it half-way, anti-aliasing samples included. That detour, not the sky picture itself, cost 4.5 to 5.6 ms a
+frame. Since v3.9.3 the sky picture is drawn first; the image is the same pixel for pixel.
+
+The other four effects (cloud shadows, haze, terrain texture, model change-over) each came out within the spread
+between rounds, about 1.5 ms, so the test could not tell their cost from zero. Commodore, which has no sky
+picture, measured the same either way.
+
+What this does for frame rates on the phone is not measured yet: no benchmark has been run on v3.9.3.
 
 ## Other devices
 

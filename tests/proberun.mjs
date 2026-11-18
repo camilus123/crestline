@@ -26,5 +26,5 @@ await b.close();
 const json = JSON.parse(text.split('\n').pop());
 const ok = json.probe === 'picture' && json.cases.length === 10 && json.cases.every((c) => c.costMs.length === 1 && c.costMs[0] > 0)
   && text.includes('== High: frame cost in ms ==') && text.includes('== Commodore: frame cost in ms ==')
-  && after.pic.env === 'mid' && after.frames > 0 && !after.bench && !errors.length;
+  && after.pic.env === 'first' && after.frames > 0 && !after.bench && !errors.length;
 if (!ok) { console.log('FAILED'); process.exit(1); }

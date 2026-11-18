@@ -612,7 +612,43 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
-## v3.9.2 (2026-11-18) — picture cost test: what each v3.7.0 effect costs on a device (on `v3`; NOT yet measured)
+## v3.9.3 (2026-11-18) — the sky picture for reflections is drawn first: the phone's v3.7.0 cost found (on `v3`)
+**v3.9.2 picture cost test on the Xiaomi 17T, Mi Browser** (frame cost in ms; three rounds in order, median):
+
+| High | Forest | Mountains |
+|---|---|---|
+| as released | 14.25, 16.75, 16.85 (16.75) | 12.65, 14.95, 16.45 (14.95) |
+| off-screen pictures first | 11.25, 12.25, 13.35 (12.25) | 8.65, 9.35, 11.15 (9.35) |
+| no sky reflections | 13.15, 15.05, 14.15 (14.15) | 9.75, 10.15, 9.45 (9.75) |
+| no cloud shadows | 14.95, 12.95, 16.05 (14.95) | 13.05, 16.55, 16.15 (16.15) |
+| no haze | 13.75, 16.75, 16.25 (16.25) | 13.05, 17.55, 17.05 (17.05) |
+| no terrain variation | 15.05, 17.75, 17.45 (17.45) | 13.55, 16.55, 14.55 (14.55) |
+| no model blend | 12.95, 14.35, 13.55 (13.55) | 11.85, 16.25, 16.25 (16.25) |
+| all five off | 12.25, 14.05, 14.05 (14.05) | 9.85, 10.75, 11.15 (10.75) |
+
+Commodore: as released 8.95 / 7.35, off-screen pictures first 9.45 / 7.05 (spread 0.6-1.9): no difference.
+- "Off-screen pictures first" is lower than "as released" in every round on both tracks: by 3.0, 4.5 and 3.5 ms
+  on Forest, by 4.0, 5.6 and 5.3 on Mountains; the two ranges do not overlap. The suspicion of v3.9.2 holds.
+- It is also no worse than having no sky picture at all (lower in five rounds of six), so the sky picture
+  itself costs nothing measurable; the detour out of the main picture was the cost.
+- Every round's first figure is the lowest: the phone slows down as the test goes on. That is what the
+  interleaving was for.
+- Cloud shadows, haze, terrain variation: changes of both signs, inside the spread. Not resolved by this test.
+- Model blend: 3.2 ms lower on Forest (lower in each round) but 1.3 higher on Mountains, and "all five off" on
+  Forest (14.05) is no better than "no model blend" alone (13.55). Not additive, so not trusted. Open; Forest is
+  where it would show, since the blend draws both tree models over the last 25 m.
+- On Forest "all five off" (14.05) is higher than "off-screen pictures first" (12.25). Unexplained: either
+  noise of that size on Forest, or clearing the main picture a second time helps by itself.
+- **v3.9.3: `FX_DEFAULT.env` is 'first'.** Same picture pixel for pixel (`tests/picorder.mjs`: High, Admiral,
+  Commodore, and Admiral with a split screen). The test's button is off the benchmark screen; the harness stays
+  (`Benchmark` with `probe`, `tests/proberun.mjs`), its baseline now "as shipped" with "sky picture in
+  mid-frame" as a variant.
+- **Not measured:** frame rates on v3.9.3 on any device. Expected on the phone, from the cost alone: High with
+  pacing on every 2nd refresh (60 fps) instead of every 3rd on at least some tracks. On the PC nothing should
+  change. `docs/performance.md` has the test's result under "What got slower, and why"; its tables wait for a
+  benchmark.
+
+## v3.9.2 (2026-11-18) — picture cost test: what each v3.7.0 effect costs on a device (on `v3`; measured since: see v3.9.3)
 User chose to find the phone's v3.7.0 cost before SMAA.
 - Read from the code before measuring anything: since v3.7.0 the small sky picture the cars reflect has been
   drawn in the middle of the main picture (just before the cars), which means leaving the main render target and

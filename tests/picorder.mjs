@@ -8,10 +8,11 @@ import { execFileSync } from 'node:child_process'; import os from 'node:os'; imp
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'picorder-'));
 const br = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 let bad = 0;
-for (const [q, name] of [[3, 'High'], [6, 'Admiral'], [7, 'Commodore']]) {
+// (the last one with a split screen: there the main picture is not cleared again, the other half is already drawn)
+for (const [q, name, players] of [[3, 'High', 1], [6, 'Admiral', 1], [7, 'Commodore', 1], [6, 'Admiral, two players', 2]]) {
   const p = await br.newPage({ viewport: { width: 480, height: 210 } }); p.setDefaultTimeout(580000);
   const errors = []; p.on('pageerror', (e) => errors.push(String(e))); p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  await p.goto('file://' + path.join(root, 'dist/crestline.html') + `?race=MIHJHHTLI12&bot&manual&q=${q}`, { waitUntil: 'commit' });
+  await p.goto('file://' + path.join(root, 'dist/crestline.html') + `?race=MIHJHHTLI12&bot&manual&q=${q}&players=${players}`, { waitUntil: 'commit' });
   await p.waitForTimeout(2500);
   await p.evaluate(() => { const g = window.__crest; g.simulate(300); });
   const shot = async (env, f) => {
