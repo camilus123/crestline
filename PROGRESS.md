@@ -612,6 +612,17 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## Release: `main` moved to v3.9.4 (2026-11-18, user: "3.9.4 fixed the audio problem and everything seems to work, let's move it to main")
+- The crackle on the phone with camera shake on is gone in v3.9.4 (user). Which of the three sound changes did
+  it is not known, and neither is why shake mattered.
+- The released build is the one delivered and tried by the user (build 2026-11-18), not rebuilt.
+- Measured before this release: v3.9.3 on the phone (Mi Browser) and on the PC in Firefox. Not measured: v3.9.4
+  itself (it differs from v3.9.3 in the sound code and the key hints only), and the PC in Edge since v3.9.1.
+- Open: pacing together with dynamic resolution; pacing in a second browser; default preset and pacing default
+  for phones; the model change-over blend's cost on Forest; Psycho's remaining stalls on the phone; SMAA (next
+  by the plan, with the two decisions put to the user on 2026-11-18 still to be answered: its cost against
+  Admiral's 240 fps, and the MIT-licensed lookup tables).
+
 ## v3.9.4 (2026-11-18) — sturdier engine sound, key hints that say what they mean (on `v3`)
 **v3.9.3 measured** (both runs in `docs/perf/benchmarks.json`; page and charts updated).
 - Xiaomi 17T, Mi Browser, pacing on, against v3.9.1: High 46.5 fps (39.7), frame cost 10.5 ms (13.8); Psycho
