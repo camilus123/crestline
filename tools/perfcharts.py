@@ -214,6 +214,27 @@ def tables():
     T['laptop'] = ['| Version | Low fps | High fps | Psycho fps | Low cost | High cost | Psycho cost |', '|---|---|---|---|---|---|---|'] + [
         f"| {r['version']} | " + ' | '.join(cell(r, n, fps) for n in ['Low', 'High', 'Psycho']) + ' | ' + ' | '.join(cell(r, n, cost, '{:.1f} ms') for n in ['Low', 'High', 'Psycho']) + ' |'
         for r in pick('laptop', 'Firefox')]
+    # what the SMAA option costs: runs made with it as the only change to a stock preset, against that preset in
+    # the same run (frame cost and the stage's own time averaged over such runs; fps given per pacing setting)
+    TRACKS = {'MIHJHHTLI12': 'Forest', 'UTNRSVVLR17': 'Mountains', 'KIGJHGSHI15': 'Night', 'TUORSWWUS14': 'Futuristic'}
+    rs = [r for r in pick('pc', 'Firefox') if (r.get('yours') or {}).get('diff') == 'smaa false>true' and r['yours']['name'].startswith('Admiral')]
+    rows = ['| Track | Admiral | with SMAA | difference | the SMAA stage alone | fps, pacing off | fps, pacing on |', '|---|---|---|---|---|---|---|']
+    if rs:
+        def of(r, name, tr):
+            return next(c for c in preset(r, name) if c['track'] == tr)
+        tot = [0.0, 0.0, 0.0]
+        for tr, tn in TRACKS.items():
+            a = mean(of(r, 'Admiral', tr)['costMs'] for r in rs)
+            b = mean(of(r, 'Admiral (custom)', tr)['costMs'] for r in rs)
+            st = mean(of(r, 'Admiral (custom)', tr)['smaaMs'] for r in rs)
+            tot = [tot[0] + a / 4, tot[1] + b / 4, tot[2] + st / 4]
+
+            def fpsCell(pacing):
+                q = [r for r in rs if r['pacing'] == pacing]
+                return f"{mean(of(r, 'Admiral', tr)['fps'] for r in q):.1f} → {mean(of(r, 'Admiral (custom)', tr)['fps'] for r in q):.1f}" if q else '–'
+            rows.append(f'| {tn} | {a:.2f} ms | {b:.2f} ms | {b - a:+.2f} ms | {st:.2f} ms | {fpsCell(False)} | {fpsCell(True)} |')
+        rows.append(f'| **Average** | {tot[0]:.2f} ms | {tot[1]:.2f} ms | {tot[1] - tot[0]:+.2f} ms | {tot[2]:.2f} ms | | |')
+    T['smaa-pc'] = rows
     return T
 
 

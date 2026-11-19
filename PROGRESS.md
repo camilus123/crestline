@@ -612,6 +612,42 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.1 (2026-11-19) — SMAA measured on the PC; the Stiletto's louvres (on `v3`)
+User, with two benchmark reports of v3.10.0 (PC, Firefox, Admiral with SMAA on as his settings; frame pacing
+off and on): "there's some minor artefacting on the player car with smaa on but other than that the image is
+better than with aa off".
+
+**What SMAA costs on the PC** (RX 9070, 3440x1440, Firefox; in `docs/performance.md`, new section and table)
+- Frame cost, Admiral against Admiral with SMAA, mean of the two runs: Forest 5.05 to 5.28 ms, Mountains 3.95 to
+  4.20, Night 3.78 to 4.00, Futuristic 4.67 to 4.79; average +0.21 ms. The stage timed on its own: 0.32, 0.25,
+  0.21, 0.31 ms; average 0.27 ms. My estimate had been 0.4 to 0.6 ms.
+- fps without pacing: Forest 236.0 to 226.8, the other three 239.8 both ways. With pacing: Forest 239.0 to 129.0
+  (the pacer went to every 2nd refresh after 13 % late frames, and the benchmark holds the rhythm), Futuristic
+  239.2 to 236.4, the other two unchanged within 0.2.
+- Its shaders compile on Windows through Direct3D (one of the things not known yesterday): weights 103 and
+  106 ms, edges 21 and 20, blend 17.
+- Firefox has no GPU timers: all of this is with the GPU made to finish, and single figures move by 0.1 ms
+  between runs (Futuristic's cost difference was -0.11 ms in one run, +0.35 in the other).
+- Still not measured: the phone, the laptop, Edge.
+
+**The artefact on the car**
+- Drew the Stiletto at 3440x1440, Admiral, with the option off and on, two consecutive frames (software GPU).
+  One place stands out: the six louvres over the engine. Without anti-aliasing they are broken dark lines one
+  pixel high that differ from frame to frame; with SMAA the same lines are drawn out into soft streaks.
+- Cause, in the model and older than SMAA: the slats sat at fixed heights (0.99 m, then 4 mm lower each),
+  while the engine cover rises to 1.00 m at z = -1.75 and falls again. Slat tops against the cover along the
+  middle: +11.7, +3.0, -5.5, -4.0, -2.7, -1.3 mm. Four of six were sunk, and came through only towards the sides
+  where the cover curves down, as slivers of a few millimetres; a pixel is about 5 to 6 mm there.
+- Fix: each slat follows the cover and stands 14 mm proud of it (`carmodel.ts`). This changes how the car looks
+  at every setting: six even dark bars where there was one bar and some dashes.
+- After (`review/v3/louvres_before_after.png`, 3440x1440, Admiral, software GPU): from the chase camera the six
+  slats overlap into one dark slatted panel under the rear window, steady between the two modes; in the
+  showroom they read as six separate slats. The other two cars were drawn the same way, off and on: nothing
+  of the kind on them.
+- Whether this is the artefact the user meant is NOT confirmed: he did not say where on the car it was, and I
+  cannot see the game in motion. The tail lamps, their surround, the light strip, the wing and the exhausts
+  were clean in the same frames.
+
 ## v3.10.0 (2026-11-19) — SMAA anti-aliasing, as an option (on `v3`)
 User, on the two questions put to him: the MIT-licensed lookup tables are "acceptable and until we know how it
 affects performance let's keep it as an option".

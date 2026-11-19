@@ -58,7 +58,7 @@ What moved the lines:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="perf/shader-compile-dark.svg">
-  <img src="perf/shader-compile-light.svg" width="760" alt="Line chart: time to compile all shader programs from scratch on the PC. Edge falls from 5.4 s in v3.5.0 to 1.8 s from v3.5.3 on. Firefox falls from 9.1 s in v3.5.1 to 5.5 s.">
+  <img src="perf/shader-compile-light.svg" width="760" alt="Line chart: time to compile all shader programs from scratch on the PC. Edge falls from 5.4 s in v3.5.0 to 1.8 s from v3.5.3 on. Firefox falls from 9.1 s in v3.5.1 to 5.5 s, and reads 5.7 s in v3.10.0, which was measured with three more programs.">
 </picture>
 
 A first start has to wait for the graphics driver to compile every shader program. The benchmark has timed that
@@ -74,12 +74,44 @@ since v3.5.0, building each program from scratch so that no cache can answer.
 | 3.7.0 | 1.8 s | 5.5 s |
 | 3.9.1 | 1.8 s | – |
 | 3.9.3 | – | 5.5 s |
+| 3.10.0 | – | 5.7 s |
 <!-- /table -->
 
 The gain came in v3.5.1 and v3.5.2 from rewriting the terrain noise so that the compiler sees far fewer copies of
 the same code. Firefox compiles one program at a time, which is why it stays about three times slower than Edge.
 Start-up as a whole (page opened to third frame) went from 6.5 s to 2.1 s in Edge and from 10.7 s to 5.2 s in
 Firefox, but that figure also depends on what the browser has cached, so it jumps around between runs.
+
+The v3.10.0 figure was taken with the SMAA option on, which adds three programs to the 23 (0.14 s of the 5.7 s).
+
+## PC: what the SMAA option costs
+
+SMAA is a second kind of anti-aliasing, added in v3.10.0 as an option and off in every preset. Measured on the
+same PC in Firefox (v3.10.0), as the Admiral preset with SMAA on beside the stock Admiral preset in the same run,
+two runs:
+
+<!-- table:smaa-pc -->
+| Track | Admiral | with SMAA | difference | the SMAA stage alone | fps, pacing off | fps, pacing on |
+|---|---|---|---|---|---|---|
+| Forest | 5.05 ms | 5.28 ms | +0.23 ms | 0.32 ms | 236.0 → 226.8 | 239.0 → 129.0 |
+| Mountains | 3.95 ms | 4.20 ms | +0.25 ms | 0.25 ms | 239.8 → 239.8 | 239.8 → 239.8 |
+| Night | 3.78 ms | 4.00 ms | +0.22 ms | 0.21 ms | 239.8 → 239.8 | 239.8 → 239.6 |
+| Futuristic | 4.67 ms | 4.79 ms | +0.12 ms | 0.31 ms | 239.8 → 239.8 | 239.2 → 236.4 |
+| **Average** | 4.36 ms | 4.57 ms | +0.21 ms | 0.27 ms | | |
+<!-- /table -->
+
+About 0.2 to 0.3 ms a frame at 3440x1440, by either way of measuring it. Firefox has no GPU timers, so every
+time here was taken by making the graphics card finish; single figures move by a tenth of a millisecond from run
+to run (Futuristic's difference was -0.11 ms in one run and +0.35 ms in the other).
+
+What it does to the frame rate depends on how much room the preset had. Mountains and Night keep 240 fps
+either way; Futuristic keeps it without frame pacing and gave 236 with it. Forest is where Admiral was already
+at its limit, and there SMAA takes it from 236 to 227 fps; with frame pacing on, the pacer then decides that
+too many frames are late and settles on every 2nd refresh, 120 fps for most of the run (the benchmark holds
+whatever rhythm the warm-up found; in a race the pacer tries the faster rhythm again after a while).
+
+Its three shader programs took 0.14 s to compile together (0.10 s of it the weights pass), and only when the
+option is on.
 
 ## Phone: stalls, and frame pacing
 
@@ -205,7 +237,8 @@ A laptop with integrated graphics (Intel Core 5 120U, Firefox, 60 Hz):
 The PC in Firefox reached the same frame rates as in Edge from v3.5.3 on (Admiral 239.6 fps, Psycho 229.7); in
 v3.1.0 it had managed 229.2 fps on High and 162.5 on Psycho. On v3.9.3 it was measured with frame pacing on, which
 on this machine only touches Psycho: Low, High and Commodore 239.8 fps, Admiral 239.7, and Psycho 205.7, held
-at a flat 120 on Forest.
+at a flat 120 on Forest. v3.10.0 gave the same picture, without pacing and with it: Low, High and Commodore
+239.8 fps, Admiral 238.9 and 239.5, Psycho 228.2 and 206.3.
 
 Measured once each, so no history to show: the same phone in Brave, which ran at 60 Hz (v3.7.1, no pacing: Low
 63.3 fps, High 45.2, Psycho 35.4), and an old phone with a PowerVR GE8320 chip (v3.4.3: 22.3 fps on Ultra Low,
@@ -213,11 +246,11 @@ Measured once each, so no history to show: the same phone in Brave, which ran at
 
 ## Not measured
 
-- v3.9.3 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
-- The SMAA anti-aliasing option added in v3.10.0, on any real graphics card. It is off in every preset, so
-  none of the figures on this page include it. To measure it: turn it on in Graphics options and run the
-  benchmark; the report then has a row for your settings beside the stock preset, and a stage line
-  "anti-aliasing (SMAA)".
+- v3.9.3 to v3.10.0 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
+- The SMAA option on the phone, on the laptop, and on the PC in Edge (where GPU timers would time the pass
+  directly). It is off in every preset, so no other figure on this page includes it. To measure it: turn it on
+  in Graphics options and run the benchmark; the report then has a row for your settings beside the stock
+  preset, and a stage line "anti-aliasing (SMAA)".
 - Frame pacing in any browser other than Mi Browser, or on any phone other than this one.
 - Frame pacing together with dynamic resolution. The benchmark switches dynamic resolution off.
 - The laptop and the old phone on any version after v3.5.0.

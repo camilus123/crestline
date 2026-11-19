@@ -283,8 +283,20 @@ export function buildCar(id: number, lod = false): CarGeo {
       { z: 1.2, w: 0.74, y0: 0.7, y1: 0.73, n: 3, m: 2, tuck: 0.3 },
     ];
     b.loft(gh, R, (k, z, x, y) => (y > 1.08 && z > -0.9 && z < 0.2 ? MAT.PAINT : y < 0.9 && z < -0.9 ? MAT.PAINT : MAT.GLASS));
-    // rear louvres over the engine
-    for (let i = 0; i < 6; i++) b.box([0, 0.99 - i * 0.004, -1.55 - i * 0.1], [1.15, 0.025, 0.05], MAT.TRIM, [0.02, 0.02, 0.02], 0.3);
+    // rear louvres over the engine: six slats standing 14 mm proud of the deck. They follow the deck's height;
+    // at the fixed heights they had before, four of the six were sunk into it along the middle and came through
+    // only towards the sides, as slivers thinner than a pixel from the chase camera: broken lines that changed
+    // from frame to frame, and that SMAA drew out into streaks.
+    const deck = (z: number): number => {
+      for (let i = 0; i < secs.length - 1; i++) {
+        if (z >= secs[i].z && z <= secs[i + 1].z) return secs[i].y1 + ((secs[i + 1].y1 - secs[i].y1) * (z - secs[i].z)) / (secs[i + 1].z - secs[i].z);
+      }
+      return secs[0].y1;
+    };
+    for (let i = 0; i < 6; i++) {
+      const z = -1.55 - i * 0.1;
+      b.box([0, deck(z) + 0.014 - 0.0125, z], [1.15, 0.025, 0.05], MAT.TRIM, [0.02, 0.02, 0.02], 0.3);
+    }
     // rear wing
     b.box([0, 1.12, -2.02], [1.9, 0.05, 0.36], MAT.PAINT);
     b.box([0, 1.16, -2.14], [1.9, 0.03, 0.12], MAT.ACCENT);

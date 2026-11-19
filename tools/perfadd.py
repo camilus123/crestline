@@ -38,9 +38,13 @@ def parse(text):
         key, name = device(j['gpu'])
         presets = {}
         for c in j['cases']:
-            presets.setdefault(c['settings'], []).append({
+            case = {
                 'track': c['track'], 'fps': round(c['fps'], 2), 'low1': round(c['low1'], 2), 'costMs': c['costMs'], 'cpuMs': c['cpuMs'],
-                'p99': c['p99'], 'worst': c['worst'], 'hitches': c['hitches'], 'rhythm': c.get('rhythm')})
+                'p99': c['p99'], 'worst': c['worst'], 'hitches': c['hitches'], 'rhythm': c.get('rhythm')}
+            smaa = (c.get('stages') or {}).get('anti-aliasing (SMAA)')
+            if smaa is not None:
+                case['smaaMs'] = smaa  # (the stage's own time, where the option was on)
+            presets.setdefault(c['settings'], []).append(case)
         cm = j.get('compileMs')
         yield {'version': j['v'], 'when': j.get('when'), 'device': key, 'deviceName': name, 'browser': browser(ua), 'refreshHz': j.get('hz'),
                'output': j.get('out'), 'pacing': bool(j.get('pace')), 'startupS': float(st[-1]) if st else None,
