@@ -612,6 +612,35 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## Release: `main` moved to v3.10.2 (2026-11-19, user: "smaa in commodore and v3.10.1 on main, go")
+- He named v3.10.1; what went to `main` is v3.10.2, which is v3.10.1 with one value changed (below), because a
+  build that differs gets its own number. Said to him.
+- Since v3.9.4 on `main`: the SMAA option (v3.10.0), the Stiletto's louvres (v3.10.1), SMAA in Commodore
+  (v3.10.2).
+- Measured before the release: v3.10.0 on the PC in Firefox with and without SMAA; v3.10.1 on the phone with and
+  without it. NOT measured: v3.10.2 itself on any device; the PC in Edge since v3.9.1; the laptop since v3.9.x.
+- Tag and GitHub release are the user's to make (tag pushes are refused from this session).
+- Open: pacing together with dynamic resolution; pacing in a second browser; default preset and pacing default
+  for phones; the model change-over blend's cost on Forest; the stalls left on the phone; whether Admiral's
+  Forest (236 fps without SMAA) deserves a look.
+
+## v3.10.2 (2026-11-19) — SMAA on in the Commodore preset
+User: "smaa in commodore".
+- `QUALITY`: Commodore `smaa: true`. The other seven presets stay without it (`tests/smaaopt.mjs` checks both).
+- This is exactly the setting he measured on the phone as "Yours: Commodore (custom) [smaa false>true]" in
+  v3.10.1: 59.0 fps against 59.2 without, 8.24 against 7.31 ms, two 33 ms frames against none, one run.
+- Consequences:
+  - His phone's stored settings (Commodore with SMAA on by hand) now equal the stock preset, so the name loses
+    its "(custom)" and the benchmark no longer runs a separate "Yours" case for it.
+  - Commodore on the PC gets SMAA too. Not measured; from the Admiral figures (0.2 to 0.3 ms at 3440x1440, less
+    at Commodore's 80 %) it should stay inside 240 fps: its frame cost was 3.08 ms of 4.16.
+  - From here on, Commodore rows in the benchmark and on the performance page include SMAA. The page says so
+    where the older rows stand.
+  - Anyone who wants the old Commodore: Graphics options, Anti-aliasing (SMAA), Off.
+- With SMAA switched off, Commodore's frame is pixel for pixel the v3.10.1 frame, and so are High's and
+  Admiral's (same test, against the v3.10.1 build). Against v3.9.4 a few hundred pixels differ on all three:
+  the louvres. My first run of the test still compared with v3.9.4 and failed on exactly that.
+
 ## v3.10.1 on the phone (2026-11-19; no new build)
 User, with a benchmark report of v3.10.1 from the phone (Mi Browser, Commodore with SMAA on as his settings,
 pacing on): "Seems fine now as far as those artefacts are concerned". So the louvres were the artefact, or at

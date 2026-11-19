@@ -86,8 +86,9 @@ The v3.10.0 figure was taken with the SMAA option on, which adds three programs 
 
 ## What the SMAA option costs
 
-SMAA is a second kind of anti-aliasing, added in v3.10.0 as an option and off in every preset. Measured on the
-PC in Firefox (v3.10.0), as the Admiral preset with SMAA on beside the stock Admiral preset in the same run,
+SMAA is a second kind of anti-aliasing, added in v3.10.0 as an option. It was off in every preset until v3.10.2,
+which turns it on in Commodore; the measurements below were made before that, with it switched on by hand.
+Measured on the PC in Firefox (v3.10.0), as the Admiral preset with SMAA on beside the stock Admiral preset in the same run,
 two runs:
 
 <!-- table:smaa-pc -->
@@ -210,9 +211,13 @@ Three things to know when reading the table:
 | Psycho | 33.2 | 11.4 | 18.8 ms | 1 | 142 ms |
 <!-- /table -->
 
-Commodore (new in v3.9.0) keeps sun shadows and ambient occlusion but drops anti-aliasing and renders at 80 %
+Commodore (new in v3.9.0) keeps sun shadows and ambient occlusion but drops MSAA and renders at 80 %
 resolution, the two things this chip pays most for. It is the heaviest preset that holds 60 fps on this phone on
 all four tracks; High does on Mountains only, Admiral on Night only.
+
+From v3.10.2 Commodore has SMAA anti-aliasing. The row above is the v3.10.1 run, without it. The same run also
+measured Commodore with SMAA switched on by hand, which is what the preset is now: 59.0 fps, 8.2 ms, two stalls
+(see "What the SMAA option costs").
 
 ## What got slower, and why
 
@@ -277,8 +282,8 @@ Measured once each, so no history to show: the same phone in Brave, which ran at
 
 - v3.9.3 to v3.10.1 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
 - The SMAA option on the laptop, on the PC in Edge (where GPU timers would time the pass directly), and on the
-  phone with any preset but Commodore or more than once. It is off in every preset, so no other figure on this
-  page includes it. To measure it: turn it on in Graphics options and run the benchmark; the report then has a
+  phone with any preset but Commodore or more than once. Outside its own section no figure on this page
+  includes it: every Commodore row here was measured before v3.10.2 put SMAA into that preset. To measure it: turn it on in Graphics options and run the benchmark; the report then has a
   row for your settings beside the stock preset, and a stage line "anti-aliasing (SMAA)".
 - Frame pacing in any browser other than Mi Browser, or on any phone other than this one.
 - Frame pacing together with dynamic resolution. The benchmark switches dynamic resolution off.

@@ -1,5 +1,7 @@
 // The SMAA option in the game:
-//  1. off (every preset's setting), the picture is what v3.9.4 drew (OLD=path to that build; skipped without it)
+//  1. off, the picture is what an earlier build drew (OLD=path to that build; skipped without it). Against
+//     v3.9.4 that held for v3.10.0; v3.10.1 changed the Stiletto's louvres, so from there on compare with
+//     v3.10.1. It is on in the Commodore preset and in no other.
 //  2. on, in every arrangement: alone, on top of MSAA, below 100 % render resolution, no bloom, two players, the
 //     showroom: no GL error, no page error, the picture changes, and changes only a little (it smooths edges)
 //  3. the render resolution going down and up again leaves nothing behind in the working textures
@@ -30,19 +32,27 @@ const grab = (p, set) => p.evaluate((set) => {
 }, set);
 const diff = (a, b) => { let n = 0, big = 0, sum = 0; for (let i = 0; i < a.px.length; i += 4) { const d = Math.abs(a.px[i] - b.px[i]) + Math.abs(a.px[i + 1] - b.px[i + 1]) + Math.abs(a.px[i + 2] - b.px[i + 2]); sum += d; if (d > 6) n++; if (d > 180) big++; } const of = a.px.length / 4; return { n, big, mean: sum / of / 3, of }; };
 
-// (ONLY=row: just part 4)
-const rowOnly = process.env.ONLY === 'row';
-// ---- 1. off: as v3.9.4
+// (ONLY=row: just part 4; ONLY=old: just part 1)
+const rowOnly = process.env.ONLY === 'row', oldOnly = process.env.ONLY === 'old';
+// ---- 1. off: as the old build
 if (rowOnly) { /* skipped */ } else if (OLD && fs.existsSync(OLD)) {
   for (const [q, name] of [[3, 'High'], [6, 'Admiral'], [7, 'Commodore']]) {
     const query = `?race=MIHJHHTLI12&bot&manual&q=${q}`;
     const shots = [];
-    for (const f of [OLD, NEW, NEW]) { const p = await open(f, query); await p.evaluate(() => window.__crest.simulate(300)); shots.push(await grab(p)); if (p.errors.length) fail(`${name}: page errors ${p.errors[0]}`); await p.close(); }
+    for (const f of [OLD, NEW, NEW]) { const p = await open(f, query); await p.evaluate(() => window.__crest.simulate(300)); shots.push(await grab(p, f === NEW ? { q: { smaa: false } } : undefined)); if (p.errors.length) fail(`${name}: page errors ${p.errors[0]}`); await p.close(); }
     const d = diff(shots[0], shots[1]), noise = diff(shots[1], shots[2]);
-    console.log(`${name}, SMAA off: ${d.n} of ${d.of} pixels differ from v3.9.4 (two loads of this build differ in ${noise.n})`);
-    if (d.n > Math.max(noise.n * 2, d.of * 0.002)) fail(`${name}: the picture with SMAA off is not the v3.9.4 picture`);
+    console.log(`${name}, SMAA off: ${d.n} of ${d.of} pixels differ from ${path.basename(OLD)} (two loads of this build differ in ${noise.n})`);
+    if (d.n > Math.max(noise.n * 2, d.of * 0.002)) fail(`${name}: the picture with SMAA off is not the old build's picture`);
   }
-} else console.log('(no OLD build given: the comparison with v3.9.4 is skipped)');
+} else console.log('(no OLD build given: the comparison with an earlier build is skipped)');
+if (!rowOnly && !oldOnly) {
+  const p = await open(NEW, '?screen=settings');
+  const stock = await p.evaluate(() => { const g = window.__crest, out = {}; for (let i = 0; i < 8; i++) { g.settings.quality = i; g.settings.qo = {}; g.applyQuality(); out[g.renderer.quality.name] = g.renderer.quality.smaa; } return out; });
+  const on = Object.keys(stock).filter((k) => stock[k]);
+  console.log('presets with SMAA on: ' + on.join(', ') + ' (of ' + Object.keys(stock).length + ')');
+  if (on.join() !== 'Commodore' || Object.keys(stock).length !== 8) fail('SMAA must be on in Commodore and in no other preset');
+  await p.close();
+}
 
 // ---- 2. on, in every arrangement
 const CASES = [
@@ -52,7 +62,7 @@ const CASES = [
   ['Ultra Low (no bloom, 75 %) + SMAA', '?race=UTNRSVVLR17&bot&manual&q=0', {}],
   ['Admiral + SMAA, two players', '?race=MIHJHHTLI12&bot&manual&q=6&players=2', {}],
 ];
-for (const [name, query] of rowOnly ? [] : CASES) {
+for (const [name, query] of rowOnly || oldOnly ? [] : CASES) {
   const p = await open(NEW, query);
   await p.evaluate(() => window.__crest.simulate(300));
   const off = await grab(p, { q: { smaa: false } }), on = await grab(p, { q: { smaa: true } }), off2 = await grab(p, { q: { smaa: false } });
@@ -72,7 +82,7 @@ for (const [name, query] of rowOnly ? [] : CASES) {
   }
   await p.close();
 }
-if (!rowOnly) {
+if (!rowOnly && !oldOnly) {
   const p = await open(NEW, '?screen=cars&q=6');
   // (the showroom turns with the clock: drawn here at one fixed moment, straight through the renderer)
   const room = (smaa) => p.evaluate((smaa) => {
@@ -92,7 +102,7 @@ if (!rowOnly) {
 }
 
 // ---- 4. the option row
-{
+if (!oldOnly) {
   const p = await open(NEW, '?screen=settings', { width: 900, height: 620 });
   await p.evaluate(() => { const g = window.__crest; g.settings.quality = 6; g.settings.qo = {}; g.applyQuality(); g.saveSettings(); g.show('graphics'); });
   await p.waitForTimeout(600);
