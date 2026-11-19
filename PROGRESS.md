@@ -612,6 +612,28 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.1 on the phone (2026-11-19; no new build)
+User, with a benchmark report of v3.10.1 from the phone (Mi Browser, Commodore with SMAA on as his settings,
+pacing on): "Seems fine now as far as those artefacts are concerned". So the louvres were the artefact, or at
+least nothing else on the car bothers him now.
+
+- Commodore against Commodore with SMAA: 59.2 against 59.0 fps, every 2nd refresh on all four tracks both ways.
+  Frame cost 7.31 against 8.24 ms (+0.93; per track +0.82, +1.34, +2.12, -0.58). Stalls 0 against 2 (one 33 ms
+  frame each on Forest and Futuristic).
+- How far to trust the +0.93 ms: not far. Stock Commodore read 8.71 ms in v3.9.3 and 7.31 ms now, High 10.48
+  and 12.37, with nothing changed in how those presets draw (SMAA off is pixel for pixel v3.9.4). The phone
+  moves by a millisecond or two between runs. One run supports "about a millisecond, and 60 fps holds".
+- The stage line is useless on this phone: without GPU timers almost every stage reads 0.00 (SMAA 0.09, 0.08,
+  0.00, 0.01), as in every earlier phone report.
+- Its shaders compile on the phone's Mali driver (the last of yesterday's unknowns): weights 37 ms, blend 8,
+  edges 3.
+- The rest of the run, against v3.9.3: Low 119.9 (119.6), High 44.5 (46.5), Admiral 44.1 (44.8), Psycho 33.2
+  (35.0); stalls High 2, Admiral 3, Psycho 1 (was 0, 1, 2).
+- `docs/performance.md`: the SMAA section has a phone table; the phone charts, tables, their descriptions and
+  the wording around them now show v3.10.1 (the "presets today" section follows the latest run by design).
+- Not decided: whether SMAA goes into any preset. Not measured: SMAA on the phone more than once, or with any
+  other preset; Edge; the laptop.
+
 ## v3.10.1 (2026-11-19) — SMAA measured on the PC; the Stiletto's louvres (on `v3`)
 User, with two benchmark reports of v3.10.0 (PC, Firefox, Admiral with SMAA on as his settings; frame pacing
 off and on): "there's some minor artefacting on the player car with smaa on but other than that the image is

@@ -5,7 +5,7 @@
 <rect x="20" y="61" width="12" height="10" rx="2" fill="#52514e"/>
 <text x="37.0" y="70.0" font-size="11" fill="#c3c2b7" text-anchor="start" font-weight="400">v3.7.1, no pacing</text>
 <rect x="160.4" y="61" width="12" height="10" rx="2" fill="#3987e5"/>
-<text x="177.4" y="70.0" font-size="11" fill="#c3c2b7" text-anchor="start" font-weight="400">v3.9.3, pacing on</text>
+<text x="177.4" y="70.0" font-size="11" fill="#c3c2b7" text-anchor="start" font-weight="400">v3.10.1, pacing on</text>
 <text x="86.0" y="96.0" font-size="12" fill="#f0efec" text-anchor="start" font-weight="600">Stalls in 20 s of racing</text>
 <line x1="86.0" y1="112.0" x2="86.0" y2="292.0" stroke="#383835" stroke-width="1"/>
 <text x="86.0" y="308.0" font-size="10" fill="#898781" text-anchor="middle" font-weight="400">0</text>
@@ -25,18 +25,18 @@
 <text x="76.0" y="183.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">High</text>
 <path d="M86.0 166.5h230.4a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-230.4z" fill="#52514e"/>
 <text x="326.4" y="176.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">150</text>
-<path d="M86.0 180.5h0.0a1.5 1.5 0 0 1 1.5 1.5v9.0a1.5 1.5 0 0 1 -1.5 1.5h-0.0z" fill="#3987e5"/>
-<text x="92.0" y="190.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">0</text>
+<path d="M86.0 180.5h0.0a3.125 3.125 0 0 1 3.125 3.125v5.8a3.125 3.125 0 0 1 -3.125 3.125h-0.0z" fill="#3987e5"/>
+<text x="95.1" y="190.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">2</text>
 <text x="76.0" y="228.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">Admiral</text>
 <path d="M86.0 211.5h242.9a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-242.9z" fill="#52514e"/>
 <text x="338.9" y="221.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">158</text>
-<path d="M86.0 225.5h0.0a1.5625 1.5625 0 0 1 1.5625 1.5625v8.9a1.5625 1.5625 0 0 1 -1.5625 1.5625h-0.0z" fill="#3987e5"/>
-<text x="93.6" y="235.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">1</text>
+<path d="M86.0 225.5h0.7a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-0.7z" fill="#3987e5"/>
+<text x="96.7" y="235.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">3</text>
 <text x="76.0" y="273.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">Psycho</text>
 <path d="M86.0 256.5h108.5a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-108.5z" fill="#52514e"/>
 <text x="204.5" y="266.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">72</text>
-<path d="M86.0 270.5h0.0a3.125 3.125 0 0 1 3.125 3.125v5.8a3.125 3.125 0 0 1 -3.125 3.125h-0.0z" fill="#3987e5"/>
-<text x="95.1" y="280.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">2</text>
+<path d="M86.0 270.5h0.0a1.5625 1.5625 0 0 1 1.5625 1.5625v8.9a1.5625 1.5625 0 0 1 -1.5625 1.5625h-0.0z" fill="#3987e5"/>
+<text x="93.6" y="280.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">1</text>
 <text x="458.0" y="96.0" font-size="12" fill="#f0efec" text-anchor="start" font-weight="600">Longest frame, ms</text>
 <line x1="458.0" y1="112.0" x2="458.0" y2="292.0" stroke="#383835" stroke-width="1"/>
 <text x="458.0" y="308.0" font-size="10" fill="#898781" text-anchor="middle" font-weight="400">0</text>
@@ -51,21 +51,21 @@
 <text x="448.0" y="138.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">Low</text>
 <path d="M458.0 121.5h99.9a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-99.9z" fill="#52514e"/>
 <text x="567.9" y="131.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">66</text>
-<path d="M458.0 135.5h22.1a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-22.1z" fill="#3987e5"/>
-<text x="490.1" y="145.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">17</text>
+<path d="M458.0 135.5h34.9a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-34.9z" fill="#3987e5"/>
+<text x="502.9" y="145.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">25</text>
 <text x="448.0" y="183.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">High</text>
 <path d="M458.0 166.5h152.2a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-152.2z" fill="#52514e"/>
 <text x="620.2" y="176.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">100</text>
-<path d="M458.0 180.5h74.1a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-74.1z" fill="#3987e5"/>
-<text x="542.1" y="190.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">50</text>
+<path d="M458.0 180.5h74.0a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-74.0z" fill="#3987e5"/>
+<text x="542.0" y="190.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">50</text>
 <text x="448.0" y="228.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">Admiral</text>
 <path d="M458.0 211.5h165.2a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-165.2z" fill="#52514e"/>
 <text x="633.2" y="221.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">108</text>
-<path d="M458.0 225.5h61.0a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-61.0z" fill="#3987e5"/>
-<text x="529.0" y="235.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">42</text>
+<path d="M458.0 225.5h87.1a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-87.1z" fill="#3987e5"/>
+<text x="555.1" y="235.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">58</text>
 <text x="448.0" y="273.5" font-size="11" fill="#c3c2b7" text-anchor="end" font-weight="400">Psycho</text>
 <path d="M458.0 256.5h243.2a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-243.2z" fill="#52514e"/>
 <text x="711.2" y="266.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">158</text>
-<path d="M458.0 270.5h204.1a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-204.1z" fill="#3987e5"/>
-<text x="672.1" y="280.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">133</text>
+<path d="M458.0 270.5h217.2a4 4 0 0 1 4 4v4.0a4 4 0 0 1 -4 4h-217.2z" fill="#3987e5"/>
+<text x="685.2" y="280.5" font-size="11" fill="#f0efec" text-anchor="start" font-weight="400">142</text>
 </svg>

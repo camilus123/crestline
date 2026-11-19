@@ -84,10 +84,10 @@ Firefox, but that figure also depends on what the browser has cached, so it jump
 
 The v3.10.0 figure was taken with the SMAA option on, which adds three programs to the 23 (0.14 s of the 5.7 s).
 
-## PC: what the SMAA option costs
+## What the SMAA option costs
 
 SMAA is a second kind of anti-aliasing, added in v3.10.0 as an option and off in every preset. Measured on the
-same PC in Firefox (v3.10.0), as the Admiral preset with SMAA on beside the stock Admiral preset in the same run,
+PC in Firefox (v3.10.0), as the Admiral preset with SMAA on beside the stock Admiral preset in the same run,
 two runs:
 
 <!-- table:smaa-pc -->
@@ -113,6 +113,31 @@ whatever rhythm the warm-up found; in a race the pacer tries the faster rhythm a
 Its three shader programs took 0.14 s to compile together (0.10 s of it the weights pass), and only when the
 option is on.
 
+### On the phone
+
+The same comparison on the phone (Xiaomi 17T, Mi Browser, v3.10.1, frame pacing on), with the Commodore preset,
+one run:
+
+<!-- table:smaa-phone -->
+| Track | Commodore | with SMAA | difference | fps | 1 % low | stalls in 5 s |
+|---|---|---|---|---|---|---|
+| Forest | 8.80 ms | 9.62 ms | +0.82 ms | 58.2 → 57.5 | 32.7 → 30.0 | 0 → 1 |
+| Mountains | 6.49 ms | 7.83 ms | +1.34 ms | 59.8 → 59.9 | 40.0 → 45.0 | 0 → 0 |
+| Night | 5.07 ms | 7.19 ms | +2.12 ms | 59.9 → 60.0 | 44.9 → 51.3 | 0 → 0 |
+| Futuristic | 8.90 ms | 8.32 ms | -0.58 ms | 59.0 → 58.6 | 32.8 → 30.0 | 0 → 1 |
+| **Average** | 7.31 ms | 8.24 ms | +0.93 ms | 59.2 → 59.0 | | |
+<!-- /table -->
+
+With SMAA on, Commodore still drew on every 2nd refresh on all four tracks: 59.0 fps against 59.2. Two frames
+took 33 ms in its 20 seconds, none without it.
+
+The frame cost read 0.9 ms higher on average, but that figure is weak. On this phone the same preset moves by a
+millisecond or more between runs (stock Commodore read 8.7 ms in v3.9.3 and 7.3 ms here, with nothing changed in
+how it draws), and the per-track differences run from -0.6 to +2.1 ms. One run says "about a millisecond, and
+60 fps holds"; it does not say more.
+
+Its three shader programs compiled in 0.05 s on the phone.
+
 ## Phone: stalls, and frame pacing
 
 Xiaomi 17T (Mali-G720 MC8), Mi Browser, 120 Hz screen.
@@ -123,7 +148,7 @@ most frames quick, then one of 75 to 150 ms. Frame pacing (v3.8.0 to v3.9.1, an 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="perf/phone-pacing-dark.svg">
-  <img src="perf/phone-pacing-light.svg" width="760" alt="Two bar charts for the phone, before (v3.7.1, no pacing) and after (v3.9.3, pacing on). Stalls in 20 seconds: Low 3 to 0, High 150 to 0, Admiral 158 to 1, Psycho 72 to 2. Longest frame in ms: Low 66 to 17, High 100 to 50, Admiral 108 to 42, Psycho 158 to 133.">
+  <img src="perf/phone-pacing-light.svg" width="760" alt="Two bar charts for the phone, before (v3.7.1, no pacing) and after (v3.10.1, pacing on). Stalls in 20 seconds: Low 3 to 0, High 150 to 2, Admiral 158 to 3, Psycho 72 to 1. Longest frame in ms: Low 66 to 25, High 100 to 50, Admiral 108 to 58, Psycho 158 to 142.">
 </picture>
 
 It took six versions to get right, and the reports show each attempt, failures included:
@@ -142,6 +167,7 @@ It took six versions to get right, and the reports show each attempt, failures i
 | 3.9.0 | on | 119.5 | 38.3 | – | 24.6 | 4 | – | 3 |
 | 3.9.1 | on | 119.5 | 39.7 | 44.4 | 31.2 | 1 | 2 | 0 |
 | 3.9.3 | on | 119.6 | 46.5 | 44.8 | 35.0 | 0 | 1 | 2 |
+| 3.10.1 | on | 119.9 | 44.5 | 44.1 | 33.2 | 2 | 3 | 1 |
 <!-- /table -->
 
 Stalls are totals over the four tracks, 20 seconds in all.
@@ -153,13 +179,16 @@ Stalls are totals over the four tracks, 20 seconds in all.
   drove Admiral to the slowest rhythm it has.
 - **From v3.8.4** each frame is judged against the rhythm it is meant to keep.
 - **v3.9.3** is not a pacing change: it is the frame-order fix described under "What got slower, and why".
+- **v3.10.1** draws a frame exactly as v3.9.3 does unless the SMAA option is on. Its row differs from the one
+  above only by what this phone does from one run to the next: a stall or two, 1 or 2 fps.
 
 Three things to know when reading the table:
 
 - Pacing trades frames for evenness. Between v3.7.1 without it and v3.9.1 with it, High gave up 4 fps of average
   (43.3 to 39.7), Admiral 3, Psycho 2. With the v3.9.3 fix on top, High and Psycho are faster than they were
   before pacing (46.5 and 35.0 fps) and Admiral is 3 fps slower (44.8).
-- Not every stall is gone: Psycho still had two in the v3.9.3 run, one of them 133 ms long.
+- Not every stall is gone: the v3.9.3 run had three (Admiral one, Psycho two, the longest 133 ms) and the
+  v3.10.1 run six (High two, Admiral three, Psycho one of 142 ms).
 - Since v3.9.1 the benchmark, with pacing on, starts measuring once the rhythm has settled. The second or two of
   searching at the start of a race is therefore not in the rows from v3.9.1 on; v3.8.2 and v3.8.4, measured the
   old way, show what it adds.
@@ -168,22 +197,22 @@ Three things to know when reading the table:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="perf/phone-presets-dark.svg">
-  <img src="perf/phone-presets-light.svg" width="760" alt="Bar chart: frame rate of each preset on the phone in v3.9.3 with frame pacing on. Low 119.6 fps, drawn on every refresh. Commodore 59.8, every 2nd refresh. High 46.5, every 2nd to 3rd. Admiral 44.8, every 2nd to 3rd. Psycho 35.0, every 3rd to 4th.">
+  <img src="perf/phone-presets-light.svg" width="760" alt="Bar chart: frame rate of each preset on the phone in v3.10.1 with frame pacing on. Low 119.9 fps, drawn on every refresh. Commodore 59.2, every 2nd refresh. High 44.5, every 2nd to 3rd. Admiral 44.1, every 2nd to 3rd. Psycho 33.2, every 3rd to 5th.">
 </picture>
 
 <!-- table:phone-presets -->
 | Preset | fps | Lowest 1 % low | Frame cost | Stalls in 20 s | Longest frame |
 |---|---|---|---|---|---|
-| Low | 119.6 | 71.7 | 5.7 ms | 0 | 17 ms |
-| Commodore | 59.8 | 40.0 | 8.7 ms | 0 | 25 ms |
-| High | 46.5 | 22.5 | 10.5 ms | 0 | 50 ms |
-| Admiral | 44.8 | 30.0 | 12.2 ms | 1 | 42 ms |
-| Psycho | 35.0 | 12.0 | 17.0 ms | 2 | 133 ms |
+| Low | 119.9 | 89.7 | 5.0 ms | 0 | 25 ms |
+| Commodore | 59.2 | 32.7 | 7.3 ms | 0 | 33 ms |
+| High | 44.5 | 20.0 | 12.4 ms | 2 | 50 ms |
+| Admiral | 44.1 | 17.1 | 12.6 ms | 3 | 58 ms |
+| Psycho | 33.2 | 11.4 | 18.8 ms | 1 | 142 ms |
 <!-- /table -->
 
 Commodore (new in v3.9.0) keeps sun shadows and ambient occlusion but drops anti-aliasing and renders at 80 %
 resolution, the two things this chip pays most for. It is the heaviest preset that holds 60 fps on this phone on
-all four tracks; High does on Mountains only.
+all four tracks; High does on Mountains only, Admiral on Night only.
 
 ## What got slower, and why
 
@@ -246,11 +275,11 @@ Measured once each, so no history to show: the same phone in Brave, which ran at
 
 ## Not measured
 
-- v3.9.3 to v3.10.0 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
-- The SMAA option on the phone, on the laptop, and on the PC in Edge (where GPU timers would time the pass
-  directly). It is off in every preset, so no other figure on this page includes it. To measure it: turn it on
-  in Graphics options and run the benchmark; the report then has a row for your settings beside the stock
-  preset, and a stage line "anti-aliasing (SMAA)".
+- v3.9.3 to v3.10.1 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
+- The SMAA option on the laptop, on the PC in Edge (where GPU timers would time the pass directly), and on the
+  phone with any preset but Commodore or more than once. It is off in every preset, so no other figure on this
+  page includes it. To measure it: turn it on in Graphics options and run the benchmark; the report then has a
+  row for your settings beside the stock preset, and a stage line "anti-aliasing (SMAA)".
 - Frame pacing in any browser other than Mi Browser, or on any phone other than this one.
 - Frame pacing together with dynamic resolution. The benchmark switches dynamic resolution off.
 - The laptop and the old phone on any version after v3.5.0.

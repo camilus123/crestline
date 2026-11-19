@@ -215,13 +215,18 @@ def tables():
         f"| {r['version']} | " + ' | '.join(cell(r, n, fps) for n in ['Low', 'High', 'Psycho']) + ' | ' + ' | '.join(cell(r, n, cost, '{:.1f} ms') for n in ['Low', 'High', 'Psycho']) + ' |'
         for r in pick('laptop', 'Firefox')]
     # what the SMAA option costs: runs made with it as the only change to a stock preset, against that preset in
-    # the same run (frame cost and the stage's own time averaged over such runs; fps given per pacing setting)
+    # the same run
     TRACKS = {'MIHJHHTLI12': 'Forest', 'UTNRSVVLR17': 'Mountains', 'KIGJHGSHI15': 'Night', 'TUORSWWUS14': 'Futuristic'}
-    rs = [r for r in pick('pc', 'Firefox') if (r.get('yours') or {}).get('diff') == 'smaa false>true' and r['yours']['name'].startswith('Admiral')]
+
+    def smaa_runs(device, browser, name):
+        return [r for r in pick(device, browser) if (r.get('yours') or {}).get('diff') == 'smaa false>true' and r['yours']['name'] == name + ' (custom)']
+
+    def of(r, name, tr):
+        return next(c for c in preset(r, name) if c['track'] == tr)
+    # the PC: frame cost and the stage's own time averaged over the runs; fps per pacing setting
+    rs = smaa_runs('pc', 'Firefox', 'Admiral')
     rows = ['| Track | Admiral | with SMAA | difference | the SMAA stage alone | fps, pacing off | fps, pacing on |', '|---|---|---|---|---|---|---|']
     if rs:
-        def of(r, name, tr):
-            return next(c for c in preset(r, name) if c['track'] == tr)
         tot = [0.0, 0.0, 0.0]
         for tr, tn in TRACKS.items():
             a = mean(of(r, 'Admiral', tr)['costMs'] for r in rs)
@@ -235,6 +240,18 @@ def tables():
             rows.append(f'| {tn} | {a:.2f} ms | {b:.2f} ms | {b - a:+.2f} ms | {st:.2f} ms | {fpsCell(False)} | {fpsCell(True)} |')
         rows.append(f'| **Average** | {tot[0]:.2f} ms | {tot[1]:.2f} ms | {tot[1] - tot[0]:+.2f} ms | {tot[2]:.2f} ms | | |')
     T['smaa-pc'] = rows
+    # the phone: the latest such run (no stage column: without GPU timers its stage times are mostly zero)
+    rs = smaa_runs('phone', 'Mi Browser', 'Commodore')
+    rows = ['| Track | Commodore | with SMAA | difference | fps | 1 % low | stalls in 5 s |', '|---|---|---|---|---|---|---|']
+    if rs:
+        r = rs[-1]
+        tot = [0.0, 0.0]
+        for tr, tn in TRACKS.items():
+            a, b = of(r, 'Commodore', tr), of(r, 'Commodore (custom)', tr)
+            tot = [tot[0] + a['costMs'] / 4, tot[1] + b['costMs'] / 4]
+            rows.append(f"| {tn} | {a['costMs']:.2f} ms | {b['costMs']:.2f} ms | {b['costMs'] - a['costMs']:+.2f} ms | {a['fps']:.1f} → {b['fps']:.1f} | {a['low1']:.1f} → {b['low1']:.1f} | {a['hitches']} → {b['hitches']} |")
+        rows.append(f'| **Average** | {tot[0]:.2f} ms | {tot[1]:.2f} ms | {tot[1] - tot[0]:+.2f} ms | {fps(preset(r, "Commodore")):.1f} → {fps(preset(r, "Commodore (custom)")):.1f} | | |')
+    T['smaa-phone'] = rows
     return T
 
 
