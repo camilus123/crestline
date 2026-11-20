@@ -268,6 +268,22 @@ A laptop with integrated graphics (Intel Core 5 120U, Firefox, 60 Hz):
 | 3.5.0 | 60.0 | 53.0 | 20.4 | 13.3 ms | 19.2 ms | 54.3 ms |
 <!-- /table -->
 
+Two weak phones that are not the game's own test devices, both on v3.10.2:
+
+| Phone | Preset | fps | Frame cost | of which JavaScript |
+|---|---|---|---|---|
+| Xiaomi 23129RN51X (PowerVR GPU, 2 GB, 1650x720, 90 Hz), Edge, pacing on | Ultra Low | 19.7 | 33.2 ms | 11.6 ms |
+| | Low | 13.1 | 56.0 ms | 19.0 ms |
+| | Commodore | 4.6 | 633 ms | 18.5 ms |
+| | High | 2.7 | 1219 ms | 20.5 ms |
+| A phone that was not identified (4 threads, 4 GB, 2400x1080), Chrome | Low, Forest only | 26.6 | 28.7 ms | 9.3 ms |
+
+Both come with a caveat. On the Xiaomi the roadside objects (trees, buildings) were not drawn at all, a fault
+that is being looked into; with them every figure would be worse. On the other phone the graphics context was
+lost when the benchmark went from Low to High, so only its first case was measured. Ultra Low, the preset a
+phone starts on, drew 593x270 pixels on the Xiaomi and still took 27 to 41 ms a frame: too slow for a steady
+30 fps on a 90 Hz screen.
+
 The PC in Firefox reached the same frame rates as in Edge from v3.5.3 on (Admiral 239.6 fps, Psycho 229.7); in
 v3.1.0 it had managed 229.2 fps on High and 162.5 on Psycho. On v3.9.3 it was measured with frame pacing on, which
 on this machine only touches Psycho: Low, High and Commodore 239.8 fps, Admiral 239.7, and Psycho 205.7, held

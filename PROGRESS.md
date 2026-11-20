@@ -612,6 +612,41 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.3 (2026-11-20) — a diagnostic build: the scenery test (on `v3`, not for release)
+User, with a benchmark report of v3.10.2 from his Xiaomi 23129RN51X (settings Ultra Low, pacing on): "I also
+noticed a bug on that xiaomi where the trees and buildings aren't shown".
+
+**The report** (GPU "PowerVR SGX Doma", 2 GB, 1650x720 at pixel ratio 2, about 90 Hz, Edge)
+- Ultra Low, drawn at 593x270: Forest 20.3 fps (33.1 ms, CPU 12.4), Mountains 22.4 (27.3, 9.9), Night 19.6
+  (31.6, 11.4), Futuristic 16.6 (40.9, 12.6); average 19.7 fps, 33.2 ms, CPU 11.6 ms. The pacer sat on every
+  4th refresh. Low: 13.1 fps, 56.0 ms. Commodore 4.6 fps, High 2.7, Admiral 3.0, Psycho 2.1 (MSAA resolve 270
+  to 480 ms, ambient occlusion 140 to 350 ms a frame there).
+- A steady 30 fps on a 90 Hz screen needs a frame well under 33 ms: Ultra Low does not reach it on any of the
+  four tracks, and these figures are WITHOUT the roadside objects, which this phone did not draw.
+- In `docs/performance.md` under "Other devices", by hand, with both caveats; not in `benchmarks.json`.
+
+**The missing trees and buildings**
+- Not reproduced: Ultra Low and Low at that screen size on the software GPU show them.
+- What the code says: trees, buildings and the rest of the roadside are one shader program ('objects'), drawn
+  as instances. It is the only thing in the frame that draws a RANGE of instances starting part-way into an
+  instance buffer, done by pointing the instance attributes further into the buffer before each draw
+  (`Mesh.drawInstances`). Traffic, cones and the backdrop mountains use the same program from instance 0.
+- My suspicion, NOT confirmed: that phone's driver does not honour the moved pointers. Other candidates: the
+  change-over blend's discard, something in the fragment shader, something in the vertex shader.
+- Rather than guess, v3.10.3 has a test the phone can run: Settings, Benchmark, "Scenery test" (`src/diag.ts`).
+  1. Eight instanced squares drawn as ranges, by moved pointers and by copying the range to a buffer of its
+     own, away from the game's shaders: which instance lands where.
+  2. One frozen moment of Forest and Futuristic on Ultra Low and Low, drawn seven ways (as shipped; no
+     change-over blend; plain-colour fragment shader; every instance from the first; ranges copied; two
+     combinations): the share of the picture the roadside objects change against the same frame without
+     them, with a 48x12 character map of where, the draw calls, the instance count and any GL error.
+  - Reference, software GPU at 825x360: as shipped 29.3 % (Forest, Ultra Low), 42.0 % (Forest, Low), 41.7 %
+    (Futuristic, Ultra Low), 42.5 % (Futuristic, Low); all seven ways within 0.4 points of each other; all
+    seven instance cases right.
+- For it: `Mesh.rangeMode` ('offset' as before, or 'copy': a second vertex array and a small buffer per mesh),
+  `Scenery.debug` (flat, all), `Renderer.skipScenery`. All off unless the test turns them on, and it turns them
+  off again (`tests/diag.mjs`).
+
 ## A report from someone else's phone: the graphics context was lost (2026-11-20; no change to the game)
 User: a benchmark report of v3.10.2 from "an old a53 (I think?)", whose owner said only the first track of the
 benchmark worked and the others showed a black or a white screen; and his own run on a Xiaomi 23129RN51X had a

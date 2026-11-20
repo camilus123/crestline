@@ -11,6 +11,7 @@ import { decodeCode, normalizeCode, DEFAULT_CODE } from './track/codes';
 import { COURSES, CourseKey } from './track/courses';
 import { generateTrack, TrackData } from './track/generator';
 import { hashString } from './core/rng';
+import { sceneryTest } from './diag';
 import { QUALITY, Q_DEFAULT, Renderer, View, type Quality } from './render/renderer';
 import { LOOKS } from './render/looks';
 import { Hud, ord } from './ui/hud';
@@ -794,6 +795,35 @@ export class Game {
       this.startAttract();
       done(rep);
     }, probe);
+  }
+  /**
+   * Diagnostics: the scenery test (diag.ts). Like the benchmark it takes over the game for its length: one
+   * player, the same car, and no frames but the ones it asks for.
+   */
+  async sceneryTest(): Promise<string> {
+    const st = this.settings;
+    this.benchSaved = { players: st.players, cars: st.cars.slice(), colors: st.colors.slice(), manual: st.manual.slice(), song: st.song };
+    st.players = 1; st.cars[0] = 0; st.colors[0] = 0; st.manual[0] = false; st.song = -1;
+    const wasManual = this.manual;
+    this.manual = true; // (the frame loop stops: the test draws its own frames, at a standstill)
+    this.benchEl?.remove();
+    this.benchEl = h('div', { class: 'benchbar' });
+    document.body.appendChild(this.benchEl);
+    try {
+      return await sceneryTest(this, (s) => { if (this.benchEl) this.benchEl.textContent = s; });
+    } finally {
+      this.benchEl?.remove();
+      this.benchEl = null;
+      this.manual = wasManual;
+      this.benchRestore();
+      this.audio.stopEngines();
+      this.hud?.destroy();
+      this.hud = null;
+      this.race = null;
+      this.session = null;
+      this.startAttract();
+      if (!wasManual) requestAnimationFrame((t) => this.frame(t));
+    }
   }
   /** benchmark: start one case (a track at a set of quality options) */
   benchRace(code: string, q: Quality): void {

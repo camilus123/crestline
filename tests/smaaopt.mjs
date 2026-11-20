@@ -39,7 +39,8 @@ if (rowOnly) { /* skipped */ } else if (OLD && fs.existsSync(OLD)) {
   for (const [q, name] of [[3, 'High'], [6, 'Admiral'], [7, 'Commodore']]) {
     const query = `?race=MIHJHHTLI12&bot&manual&q=${q}`;
     const shots = [];
-    for (const f of [OLD, NEW, NEW]) { const p = await open(f, query); await p.evaluate(() => window.__crest.simulate(300)); shots.push(await grab(p, f === NEW ? { q: { smaa: false } } : undefined)); if (p.errors.length) fail(`${name}: page errors ${p.errors[0]}`); await p.close(); }
+    // (SMAA off in both builds: from v3.10.2 on it is on in Commodore; builds before v3.10.0 ignore the key)
+    for (const f of [OLD, NEW, NEW]) { const p = await open(f, query); await p.evaluate(() => window.__crest.simulate(300)); shots.push(await grab(p, { q: { smaa: false } })); if (p.errors.length) fail(`${name}: page errors ${p.errors[0]}`); await p.close(); }
     const d = diff(shots[0], shots[1]), noise = diff(shots[1], shots[2]);
     console.log(`${name}, SMAA off: ${d.n} of ${d.of} pixels differ from ${path.basename(OLD)} (two loads of this build differ in ${noise.n})`);
     if (d.n > Math.max(noise.n * 2, d.of * 0.002)) fail(`${name}: the picture with SMAA off is not the old build's picture`);

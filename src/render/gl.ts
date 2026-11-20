@@ -204,7 +204,24 @@ export class Mesh {
   inst: WebGLBuffer | null = null;
   instSpec: AttribSpec[] = [];
   instStride = 0;
+  /**
+   * How drawInstances reaches a range of instances that does not start at the first one (WebGL2 has no
+   * 'base instance'):
+   *  'offset'  the instance attributes are pointed further into the instance buffer before the draw;
+   *  'copy'    the range is copied into a small buffer of this mesh's own and drawn from its start, through a
+   *            second vertex array whose pointers are set once and never touched again.
+   */
+  static rangeMode: 'offset' | 'copy' = 'offset';
+  /** the instance data as last given (kept by reference, for 'copy'); a mesh that shares another's reads the owner's */
+  private instData: ArrayBufferView | null = null;
+  private instOwner: Mesh | null = null;
+  private vao2: WebGLVertexArrayObject | null = null;
+  private inst2: WebGLBuffer | null = null;
+  private vSpec: AttribSpec[];
+  private vStride: number;
   constructor(private gl: GL, data: ArrayBuffer | ArrayBufferView, stride: number, attribs: AttribSpec[], count: number, indices?: Uint16Array | Uint32Array) {
+    this.vSpec = attribs;
+    this.vStride = stride;
     this.vao = gl.createVertexArray()!;
     gl.bindVertexArray(this.vao);
     this.vbo = gl.createBuffer()!;
@@ -238,6 +255,8 @@ export class Mesh {
     }
     this.instSpec = spec;
     this.instStride = stride;
+    this.instData = data;
+    this.instOwner = null;
     gl.bindVertexArray(null);
   }
   /** use another mesh's per-instance buffer (a stand-in model for the same objects; follows its updates) */
@@ -253,10 +272,12 @@ export class Mesh {
     }
     this.instSpec = from.instSpec;
     this.instStride = from.instStride;
+    this.instOwner = from;
     gl.bindVertexArray(null);
   }
   updateInstances(data: ArrayBufferView, byteLen?: number): void {
     const gl = this.gl;
+    this.instData = data;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.inst);
     if (byteLen !== undefined) gl.bufferSubData(gl.ARRAY_BUFFER, 0, data as ArrayBufferView, 0, byteLen / ((data as Float32Array).BYTES_PER_ELEMENT || 1));
     else gl.bufferSubData(gl.ARRAY_BUFFER, 0, data as BufferSource);
@@ -276,6 +297,34 @@ export class Mesh {
     glStats.calls++;
     glStats.instances += n;
     glStats.verts += this.count * n;
+    const src = (this.instOwner ?? this).instData;
+    if (Mesh.rangeMode === 'copy' && src) {
+      if (!this.vao2) {
+        // the same vertices and indices, the instance attributes from the small buffer's start
+        this.vao2 = gl.createVertexArray()!;
+        this.inst2 = gl.createBuffer()!;
+        gl.bindVertexArray(this.vao2);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
+        for (const a of this.vSpec) {
+          gl.enableVertexAttribArray(a.loc);
+          if (a.integer) gl.vertexAttribIPointer(a.loc, a.size, a.type, this.vStride, a.offset);
+          else gl.vertexAttribPointer(a.loc, a.size, a.type, !!a.normalized, this.vStride, a.offset);
+        }
+        if (this.ibo) gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.ibo);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.inst2);
+        for (const a of this.instSpec) {
+          gl.enableVertexAttribArray(a.loc);
+          gl.vertexAttribPointer(a.loc, a.size, a.type, !!a.normalized, this.instStride, a.offset);
+          gl.vertexAttribDivisor(a.loc, 1);
+        }
+      }
+      gl.bindVertexArray(this.vao2);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.inst2);
+      gl.bufferData(gl.ARRAY_BUFFER, new Uint8Array(src.buffer, src.byteOffset + first * this.instStride, n * this.instStride), gl.STREAM_DRAW);
+      if (this.ibo) gl.drawElementsInstanced(mode, this.count, this.indexType, 0, n);
+      else gl.drawArraysInstanced(mode, 0, this.count, n);
+      return;
+    }
     gl.bindVertexArray(this.vao);
     if (first !== 0 || (this as any)._lastFirst !== 0) {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.inst);
