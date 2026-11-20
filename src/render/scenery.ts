@@ -167,7 +167,7 @@ void main(){
 }`;
 
 /** diagnostics: the objects in plain colour, nothing of the usual fragment shader but its 'leave out' */
-const OBJ_FLAT_FS = `#version 300 es
+export const OBJ_FLAT_FS = `#version 300 es
 precision highp float;
 in float vHide; in vec4 vCol;
 out vec4 o;
@@ -585,18 +585,17 @@ export class Scenery {
   }
 
   /**
-   * Diagnostics (the scenery test, diag.ts): `flat` draws with a one-line fragment shader; `all` draws every
-   * instance of every type from the first one on, full models only, with no ranges and no distance models.
+   * Diagnostics (the scenery test, diag.ts): `prog` is drawn with in place of the objects program; `onRange` is
+   * called for every range of ordinary objects and landmarks about to be drawn, with that program in use and
+   * its uniforms set.
    */
-  static debug = { flat: false, all: false };
-  private flatProg: Program | null = null;
+  static debug: { prog: Program | null; onRange: ((mesh: Mesh, set: { type: number; data: Float32Array; landmark: boolean; bend: boolean; adj: boolean }, first: number, n: number) => void) | null } = { prog: null, onRange: null };
 
   draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath, landmarksOnly = false, part = 0): void {
     const gl = this.gl;
     if (this.depthOnly && !this.depthProg) this.depthProg = new Program(gl, OBJ_VS, OBJ_DEPTH_FS, 'objects-depth');
     const dbg = Scenery.debug;
-    if (dbg.flat && !this.depthOnly && !this.flatProg) this.flatProg = new Program(gl, OBJ_VS, OBJ_FLAT_FS, 'objects-flat');
-    const p = (this.depthOnly ? this.depthProg! : dbg.flat ? this.flatProg! : this.prog).use();
+    const p = (this.depthOnly ? this.depthProg! : dbg.prog ?? this.prog).use();
     prep(p);
     // The sway's speed rises with the wind. Its phase must therefore be added up frame by frame: as time x speed
     // (how it used to be worked out) every change of speed is multiplied by the whole race time so far, and a
@@ -633,10 +632,10 @@ export class Scenery {
       this.ranges(set, sCar, 60, split, loop, r);
       if (set.adj && !set.far) this.placeLandmarks(set, path, sCar, loop, r);
       const near = this.depthOnly && set.caster ? set.caster : set.mesh;
-      if (dbg.all) { near.drawInstances(0, set.count); continue; }
       // the last stretch before the split is drawn with both models, dissolving from one to the other
       const band = set.far && ahead > split && !this.depthOnly && this.dissolve ? Math.min(25, split * 0.2) : 0;
       if (band > 0) p.v3('uLodFade', split - band, band, 1);
+      if (dbg.onRange && !set.span && !this.depthOnly) for (let k = 0; k < r.length; k += 2) dbg.onRange(near, set, r[k], r[k + 1]);
       for (let k = 0; k < r.length; k += 2) near.drawInstances(r[k], r[k + 1]);
       if (set.far && ahead > split) {
         const split2 = set.far2 ? Math.min(split * 2.2, ahead) : ahead;

@@ -612,6 +612,48 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.4 (2026-11-20) — scenery test, round 2 (on `v3`, not for release)
+User sent the scenery test report of v3.10.3 from the Xiaomi (Chrome 146; this browser names the GPU
+"PowerVR Rogue GE8320", where Edge's benchmark report said "PowerVR SGX Doma").
+
+**What round 1 showed**
+- My suspicion was WRONG. All seven instance-range cases came out right on the phone: the driver honours the
+  moved pointers. The 'copy' path (`Mesh.rangeMode`) is removed again.
+- All seven ways of drawing gave the same picture: Forest 1.4 % of the picture changed by roadside objects
+  (software GPU: 29.3 % on Ultra Low, 42.0 % on Low), Futuristic 0.3 % and 0.5 % (41.7 %, 42.5 %). No GL error,
+  context not lost. So it is not the change-over blend, not the fragment shader, not the ranges.
+- What the phone does draw: drawing the parts one at a time on the software GPU (`tests/out/whichpart.mjs`,
+  scratch) gives the phone's maps for "blob shadows only" (Forest, 1.4 %) and for the span sets (the things
+  that cross the road, Futuristic). Those two draw; ordinary objects and landmarks do not.
+- What tells them apart: blob shadows have their own vertex shader with two instance attributes; span sets use
+  the objects shader but skip base height, scale, turn, sway and bending. So the fault is in the part of the
+  objects VERTEX shader that only ordinary objects run, or in the third instance attribute (`iAdj`: ground
+  height, placement) that only they need. Which step: NOT known.
+
+**Round 2** (`src/diag.ts`, header "scenery test 2"; Forest and Futuristic on Ultra Low)
+1. The picture with the vertex shader changed one step at a time, 13 variants: as shipped; ground height 0;
+   height without the two tapers; height limited to ±500 m; third instance attribute not read; no sway/rotor;
+   no bending; no turn; no scale; no cloud shade; never left out; not left out for being beyond the fold; all
+   the simplifications together. Share of the picture changed, with the map when it is above 5 %. A variant
+   that does not compile says so in the report.
+2. The vertex shader's own numbers, read back by transform feedback for the first vertex of up to four
+   objects of up to three kinds: the three instance attributes as the shader sees them beside what the game
+   put in the buffer, then distance, hide, ground height, edge, extent, road height, the two tapers, bend
+   angle, base height, world position and clip position. This part runs second, so that a driver taking it
+   badly cannot cost the pictures.
+- Reference (software GPU, 825x360): `review/v3/scenery_test_reference.txt`. As shipped 29.3 % (Forest) and
+  41.6 % (Futuristic); every variant within 0.3 points except "no scale" (27.2 %, 37.9 %: objects are smaller);
+  every "shader" row equal to its "given" row.
+- For it: `Program` takes a list of transform-feedback outputs; `Mesh.drawInstancePoints`; `Scenery.debug`
+  is now `{ prog, onRange }` (a replacement program for objects, a call per near range). Off unless the test
+  turns them on; the shaders it makes are kept out of the game's compile-time list.
+- Checked: `tests/diag.mjs` (26 variant pictures all show scenery, 17 shader rows equal the given rows, no
+  errors, the game carries on afterwards); `tests/smaaopt.mjs` against v3.10.2: Low, High, Admiral, Commodore
+  0 pixels differ; `tests/flow.mjs` passes; `test:gen` passes; `test:sim` has its one known failure
+  (Roadworks d1 bot, see "Known issues").
+- Not checked: whether transform feedback works on that phone. If it does not, the report says so and part 1
+  still stands.
+
 ## v3.10.3 (2026-11-20) — a diagnostic build: the scenery test (on `v3`, not for release)
 User, with a benchmark report of v3.10.2 from his Xiaomi 23129RN51X (settings Ultra Low, pacing on): "I also
 noticed a bug on that xiaomi where the trees and buildings aren't shown".
