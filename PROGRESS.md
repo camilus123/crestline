@@ -612,6 +612,28 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## A report from someone else's phone: the graphics context was lost (2026-11-20; no change to the game)
+User: a benchmark report of v3.10.2 from "an old a53 (I think?)", whose owner said only the first track of the
+benchmark worked and the others showed a black or a white screen; and his own run on a Xiaomi 23129RN51X had a
+picture throughout but was slow (no report of that one sent). His question: is it worth making the game run
+well on such phones? Answered with an opinion; nothing built, waiting for his decision.
+
+What the report shows:
+- The WebGL context was lost during the run. GPU, WebGL version and max MSAA are all "null" (a lost context
+  answers every query with null); from the second case on the frame cost is 1 to 3 ms with every GPU stage at
+  0.00, and all 25 shader programs "compiled" in 0.00 s. Forest/High warmed up for 6.6 s where every other case
+  took 1.5 s: that is where it went, as the benchmark stepped from Low to High.
+- One row is real: Forest on Low, 832x330, 26.6 fps, frame cost 28.7 ms, CPU 9.3 ms, four stalls up to 150 ms.
+  The other 19 rows (60 fps each) are a dead canvas being timed. Not added to `docs/perf/benchmarks.json`.
+- The phone's settings were Commodore, chosen by hand (a touch device starts on Ultra Low).
+- 4 threads, 4 GB, 1080x2400 at pixel ratio 2.625. The model cannot be told from the report.
+
+Found in the game (not fixed):
+- Nothing listens for `webglcontextlost`: the game carries on with a dead canvas, and the benchmark prints
+  frame rates for it without a word. A fault in the benchmark's honesty, whatever is decided about slow phones.
+- The fixed suite walks every device through Psycho, and does not include Ultra Low, the preset meant for such
+  phones.
+
 ## Release: `main` moved to v3.10.2 (2026-11-19, user: "smaa in commodore and v3.10.1 on main, go")
 - He named v3.10.1; what went to `main` is v3.10.2, which is v3.10.1 with one value changed (below), because a
   build that differs gets its own number. Said to him.
