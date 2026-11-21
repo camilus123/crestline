@@ -7,7 +7,7 @@ generated in code.
 
 | | |
 |---|---|
-| **Play** | https://camilus123.github.io/crestline/ (v3.10.2) |
+| **Play** | https://camilus123.github.io/crestline/ (v3.10.8) |
 | **Branches** | `main` is the released version; `v3` is where development continues |
 
 ## What's in it
@@ -73,7 +73,7 @@ node tests/smaaref.mjs           # the SMAA passes against the upstream shader (
 
 ## Branches
 
-- `main`: the released version (v3.10.2), served by the play link above.
+- `main`: the released version (v3.10.8), served by the play link above.
 - `v3`: where development continues. v2.0.2, the previous release, is in the history of `main`.
 
 `PROGRESS.md` is the full change history, including what was measured and what was not.

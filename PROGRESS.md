@@ -612,6 +612,29 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.8 released to `main` (2026-11-21)
+User sent the old Xiaomi's benchmark of v3.10.8: "do you notice any issues? if not let's move this to main".
+The build is the one he ran (15:05 UTC); only documents changed after it.
+
+**The report**: giving up works. Ultra Low on all four tracks (18.7, 22.2, 18.6, 12.8 fps; average 18.1), Low on
+Forest 9.9 fps, then given up: 5 cases in place of 24, and the "GIVEN UP" block lists what was not run.
+
+**What I noticed, none of it a reason to hold the release**
+1. The 10 fps limit sits exactly on this phone's Low: 9.9 fps now, 10.3 in v3.10.5. So whether its Low gets
+   measured on the other tracks is a coin toss from run to run. Any limit is somebody's edge; not changed.
+2. A cosmetic fault in the pacing section: "Forest / Ultra Low: … -0.1s 4 (remembered)". The first case's
+   remembered rhythm is logged before the case's clock starts. NOT fixed (the release is the build he ran).
+3. "all 20 programs" in the shader compile section, 25 in v3.10.5: the depth and SMAA programs are only made
+   when a preset that needs them runs, and those were given up. Compile totals of runs that gave up are
+   therefore not comparable with full runs. Not a fault in the game; to be remembered when reading them.
+4. Frame cost reads higher than the frame time on Forest (61.4 ms cost, 53 ms a frame at 18.7 fps). The
+   report's own note covers it ("if cost disagrees with fps, trust fps"); cost on this phone is rough.
+- Simulation 4.5 ms a frame on Forest here, 9.4 ms in the v3.10.5 run: that run was slow for outside reasons.
+
+**Released**: `v3` pushed to `main` (README says v3.10.8). Tag and release are the user's to make.
+Since v3.10.2: the scenery fix for PowerVR Rogue (v3.10.5), preset by measuring and lost-context handling
+(v3.10.7), benchmark with Ultra Low and giving up (v3.10.8).
+
 ## v3.10.8 (2026-11-21) — the benchmark includes Ultra Low and gives up on hopeless presets (on `v3`)
 User, on v3.10.7: "this one seems to work and pick the phone mode correctly, the slow one gets ultra low and
 the 17t get commodore". So the measurement is confirmed on both phones (how he ran it, first start or the

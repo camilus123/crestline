@@ -280,6 +280,7 @@ phone's first start times a few frames and picks Commodore, Low or Ultra Low):
 | 3.4.3 | Chrome | off | not checked | 22.3 | 14.5 | 33.8 ms | 58.1 ms | 14.8 ms | 20.9 ms |
 | 3.10.2 | Edge | on | missing | 19.7 | 13.1 | 33.2 ms | 56.0 ms | 11.6 ms | 19.0 ms |
 | 3.10.5 | Chrome | on | drawn | 18.6 | 11.5 | 46.2 ms | 80.1 ms | 17.1 ms | 23.7 ms |
+| 3.10.8 | Chrome | on | drawn | 18.1 | – | 51.5 ms | – | 12.2 ms | – |
 <!-- /table -->
 
 What these three rows do and do not say:
@@ -295,6 +296,11 @@ What these three rows do and do not say:
   simulation code. Draw calls and instances are the same in both (71 and about 465 a frame on Ultra Low: the
   objects were always sent to the GPU, they just never reached the screen). Why that run was slower is not
   known. So the rise in frame cost is partly the objects now being drawn and partly something else.
+- **v3.10.8 has no Low figure** because the benchmark, from that version on, gives up on a preset that comes in
+  under 10 fps: Low reached 9.9 fps on Forest (10.3 in v3.10.5), so it and the heavier presets were not run
+  again. This phone's Low sits right on that limit; another run may keep it. The simulation read 4.5 ms a
+  frame on Forest in this run, against 9.4 ms in v3.10.5: that earlier run was slow for a reason outside the
+  game.
 - Ultra Low per track in v3.10.5: Forest 19.5 fps, Mountains 22.3, Night 19.4, Futuristic 13.4. Frame pacing put
   a frame on every fourth refresh of the 91 Hz screen, which allows 22.8 fps at best.
 - The other presets in v3.10.5: Commodore 3.3 fps, Admiral 2.3, High 1.7, Psycho 1.3. One stage swallows the
