@@ -11,7 +11,6 @@ import { decodeCode, normalizeCode, DEFAULT_CODE } from './track/codes';
 import { COURSES, CourseKey } from './track/courses';
 import { generateTrack, TrackData } from './track/generator';
 import { hashString } from './core/rng';
-import { sceneryTest } from './diag';
 import { QUALITY, Q_DEFAULT, Renderer, View, type Quality } from './render/renderer';
 import { LOOKS } from './render/looks';
 import { Hud, ord } from './ui/hud';
@@ -21,6 +20,13 @@ import { h, installStyle, store, toast } from './ui/dom';
 import * as Screens from './ui/screens';
 
 export type CourseSel = CourseKey | 'custom' | 'sequence';
+
+/** what measuring the device found (see Game.measureDevice); `pending`: a measurement was started and has not ended */
+export interface AutoPreset { pending?: boolean; preset?: string; lowMs?: number; commodoreMs?: number; limitMs?: number; note?: string; version?: string }
+/** a preset is taken if its frame (drawn, and the GPU made to finish) stays under this: 30 fps with a third to spare */
+const AUTO_LIMIT_MS = 22;
+const AUTO_TRACK = 'MIHJHHTLI12'; // the benchmark's Forest: dense scenery
+const AUTO_WARM = 3, AUTO_FRAMES = 8, AUTO_MAX_MS = 1500;
 
 export interface Settings {
   players: number;
@@ -86,6 +92,11 @@ export class Game {
   private sleepIn = 0;
   asleep = false;
   manual = false;
+  /** the graphics context is gone (see onContextLost): nothing more is drawn until the page is started again */
+  contextLost = false;
+  /** first start on a touch-first device: the preset is still to be picked by measuring */
+  private firstTouchStart = false;
+  private measuring = false;
   frameTimes: number[] = [];
   f3: HTMLDivElement;
   /** race running in the background of menus */
@@ -130,7 +141,10 @@ export class Game {
     this.bestScores = store.get('bestScores', {});
     this.bestTimes = store.get('bestTimes', {});
     // touch-first devices (phones, tablets) start on a lighter preset if nothing was saved yet
-    if (!store.get('settings', null) && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) this.settings.quality = 0; // Ultra Low
+    // (Ultra Low until start() has measured what the device can draw)
+    this.firstTouchStart = !store.get('settings', null) && typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
+    if (this.firstTouchStart) this.settings.quality = 0;
+    canvas.addEventListener('webglcontextlost', () => this.onContextLost());
     this.touch = new TouchControls(this.input, () => this.setPaused(true));
     this.f3 = h('div', { class: 'f3', style: 'display:none' });
     document.body.appendChild(this.f3);
@@ -233,10 +247,144 @@ export class Game {
       this.startAttract();
       this.show(q.get('screen')!);
     } else {
+      // a phone or tablet starting for the first time: pick its preset by measuring. `?measure` forces it
+      // (tests; `?measure=40` with another limit in ms)
+      const ap = store.get<AutoPreset | null>('autoPreset', null);
+      if (ap?.pending) this.measureAbandoned();
+      else if ((this.firstTouchStart && !ap) || q.has('measure')) await this.measureDevice(+(q.get('measure') ?? 0) || AUTO_LIMIT_MS);
+      if (this.contextLost) return;
       this.startAttract();
       this.show('title');
     }
     if (!this.manual) requestAnimationFrame((t) => this.frame(t));
+  }
+
+  // ---------------------------------------------------------------- picking the preset by measuring
+  /**
+   * Picks the quality preset from what the device can draw: Commodore if a Commodore frame stays under the limit,
+   * else Low if a Low frame does, else Ultra Low. Low is timed first: a weak phone then never has to try
+   * Commodore, which is where it would take seconds a frame or lose its graphics context.
+   * Each timing is the median of a few frames of the benchmark's Forest, drawn as the title screen's background
+   * race, with the GPU made to finish; frames at the start are left out (first use of shaders and textures).
+   * What it cannot see: a phone that is fast while cold and slow once warm is judged on its cold self.
+   * Runs by itself on the first start of a touch-first device, and from Settings on request. Before it starts
+   * it leaves a note in storage, so that a page that dies in the middle starts on Ultra Low next time
+   * and does not try again.
+   */
+  async measureDevice(limitMs = AUTO_LIMIT_MS, restartLoop = false): Promise<AutoPreset> {
+    const R = this.renderer, gl = R.gl;
+    const idx = (name: string) => QUALITY.findIndex((x) => x.name === name);
+    const wasManual = this.manual;
+    this.manual = true; // (the frame loop stops: frames are drawn here, one by one)
+    this.measuring = true;
+    store.set('autoPreset', { pending: true });
+    const note = h('div', { class: 'benchbar' }, 'Measuring this device… a few seconds');
+    document.body.appendChild(note);
+    const pause = () => new Promise<void>((r) => setTimeout(r, 0));
+    const time = async (name: string): Promise<number> => {
+      R.setQuality(QUALITY[idx(name)]);
+      this.startAttract(AUTO_TRACK);
+      const ms: number[] = [];
+      const t0 = performance.now();
+      for (let i = 0; i < AUTO_WARM + AUTO_FRAMES; i++) {
+        const a = performance.now();
+        this.frame(a, 1 / 60);
+        R.prof.sync();
+        if (this.contextLost || gl.isContextLost()) return Infinity;
+        if (i >= AUTO_WARM) ms.push(performance.now() - a);
+        await pause(); // (the note gets painted, and a lost context gets reported)
+        if (this.contextLost) return Infinity;
+        if (ms.length >= 3 && performance.now() - t0 > AUTO_MAX_MS) break;
+      }
+      ms.sort((x, y) => x - y);
+      return ms[ms.length >> 1];
+    };
+    const res: AutoPreset = { preset: 'Ultra Low', lowMs: -1, commodoreMs: -1, limitMs, version: __VERSION__ };
+    try {
+      await pause();
+      res.lowMs = await time('Low');
+      if (res.lowMs <= limitMs) {
+        res.preset = 'Low';
+        res.commodoreMs = await time('Commodore');
+        if (res.commodoreMs <= limitMs) res.preset = 'Commodore';
+      }
+      if (this.contextLost) res.note = `the graphics context was lost while ${res.preset === 'Low' ? 'Commodore' : 'Low'} was being measured`;
+    } catch (e) {
+      res.preset = 'Ultra Low';
+      res.note = 'the measurement failed: ' + String(e).slice(0, 200);
+    }
+    const r2 = (x: number) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : -1);
+    res.lowMs = r2(res.lowMs!);
+    res.commodoreMs = r2(res.commodoreMs!);
+    note.remove();
+    this.measuring = false;
+    this.settings.quality = idx(res.preset!);
+    this.settings.qo = {};
+    this.saveSettings();
+    store.set('autoPreset', res);
+    this.firstTouchStart = false;
+    this.manual = wasManual;
+    this.last = 0;
+    if (this.contextLost) return res; // (onContextLost has put its notice up; the preset above is what the restart uses)
+    this.applyQuality();
+    toast(`Graphics preset for this device: ${res.preset}. Settings changes it.`, 5000);
+    if (restartLoop && !this.manual) requestAnimationFrame((t) => this.frame(t));
+    return res;
+  }
+  /** a measurement was started on an earlier visit and never ended (the page died or was closed): the safe choice */
+  private measureAbandoned(): void {
+    this.settings.quality = 0;
+    this.settings.qo = {};
+    this.saveSettings();
+    store.set('autoPreset', { preset: 'Ultra Low', lowMs: -1, commodoreMs: -1, limitMs: AUTO_LIMIT_MS, version: __VERSION__, note: 'an earlier measurement did not finish' } as AutoPreset);
+    this.firstTouchStart = false;
+    this.applyQuality();
+  }
+
+  // ---------------------------------------------------------------- a lost graphics context
+  /**
+   * The browser has taken the WebGL context away (typically: out of graphics memory; also a driver restart).
+   * Everything the renderer made is gone with it, so the game does not try to carry on: it stops drawing, says
+   * so, and offers to start the page again, as it is or on a lighter preset. Settings and best times are in
+   * storage and survive. A benchmark in progress ends with a report that says where it stopped.
+   */
+  private onContextLost(): void {
+    if (this.contextLost) return;
+    this.contextLost = true;
+    let extra = '';
+    if (this.bench) {
+      try { store.set('lastBenchmark3', this.bench.lostReport()); extra = ' The benchmark stopped; its report, up to that point, is on the benchmark screen after the restart.'; } catch { /* no report then */ }
+      if (this.benchSaved) Object.assign(this.settings, this.benchSaved);
+      this.benchSaved = null;
+      this.bench = null;
+      this.benchEl?.remove();
+      this.benchEl = null;
+      this.saveSettings();
+    }
+    try { this.audio.stopEngines(); this.audio.pause(true); } catch { /* sound is not what matters now */ }
+    const cur = (QUALITY[this.settings.quality] ?? QUALITY[Q_DEFAULT]).name;
+    // (while the device is being measured the measurement itself stores the preset it found safe: no second choice)
+    const lighter = this.measuring || cur === 'Ultra Low' ? null : cur === 'Low' ? 'Ultra Low' : 'Low';
+    if (this.measuring) extra = ' It happened while the device was being measured: the next start uses a preset that was safe.';
+    const again = h('div', { class: 'btn' }, h('span', {}, 'Restart'));
+    again.addEventListener('click', () => location.reload());
+    const btns = h('div', { class: 'benchbtns' }, again);
+    if (lighter) {
+      const b = h('div', { class: 'btn' }, h('span', {}, `Restart on ${lighter}`));
+      b.addEventListener('click', () => {
+        this.settings.quality = QUALITY.findIndex((x) => x.name === lighter);
+        this.settings.qo = {};
+        this.saveSettings();
+        location.reload();
+      });
+      btns.append(b);
+    }
+    const panel = h('div', { class: 'panel', style: 'width:min(40rem,92vw)' }, h('h3', {}, 'THE PICTURE STOPPED'),
+      h('div', { class: 'info' }, `The browser took the game's graphics away ("WebGL context lost"). That usually means the device ran out of graphics memory${this.measuring ? '' : ` at these settings (${cur})`}. The game has to be started again; settings and best times are kept.${extra}`),
+      btns);
+    const el = h('div', { class: 'scr bg on', id: 'ctxlost', style: 'align-items:center;justify-content:center;z-index:200;pointer-events:auto;background:rgba(6,3,20,.93)' }, panel);
+    this.ui.appendChild(el);
+    window.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') location.reload(); });
   }
 
   track(code: string): TrackData {
@@ -514,6 +662,7 @@ export class Game {
   /** One frame. If anything in it throws, the error is still reported but the next frame is scheduled all the same:
    *  one bad frame must not leave a frozen picture with dead controls on top of it. */
   frame(now: number, forceDt?: number): void {
+    if (this.contextLost) return;
     if (forceDt === undefined && !this.manual && this.skipFrame(now)) { requestAnimationFrame((t) => this.frame(t)); return; }
     let done = false;
     try { this.frameBody(now, forceDt); done = true; }
@@ -795,35 +944,6 @@ export class Game {
       this.startAttract();
       done(rep);
     }, probe);
-  }
-  /**
-   * Diagnostics: the scenery test (diag.ts). Like the benchmark it takes over the game for its length: one
-   * player, the same car, and no frames but the ones it asks for.
-   */
-  async sceneryTest(): Promise<string> {
-    const st = this.settings;
-    this.benchSaved = { players: st.players, cars: st.cars.slice(), colors: st.colors.slice(), manual: st.manual.slice(), song: st.song };
-    st.players = 1; st.cars[0] = 0; st.colors[0] = 0; st.manual[0] = false; st.song = -1;
-    const wasManual = this.manual;
-    this.manual = true; // (the frame loop stops: the test draws its own frames, at a standstill)
-    this.benchEl?.remove();
-    this.benchEl = h('div', { class: 'benchbar' });
-    document.body.appendChild(this.benchEl);
-    try {
-      return await sceneryTest(this, (s) => { if (this.benchEl) this.benchEl.textContent = s; });
-    } finally {
-      this.benchEl?.remove();
-      this.benchEl = null;
-      this.manual = wasManual;
-      this.benchRestore();
-      this.audio.stopEngines();
-      this.hud?.destroy();
-      this.hud = null;
-      this.race = null;
-      this.session = null;
-      this.startAttract();
-      if (!wasManual) requestAnimationFrame((t) => this.frame(t));
-    }
   }
   /** benchmark: start one case (a track at a set of quality options) */
   benchRace(code: string, q: Quality): void {

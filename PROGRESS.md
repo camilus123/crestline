@@ -612,6 +612,64 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.7 (2026-11-21) — the preset picked by measuring; a lost graphics context; scenery test removed (on `v3`)
+User: "is it possible to detect what kind of phone is it running on and default to ultra low if it's slow and
+commodore if it's not?" then "go + remove the scenery test for now".
+
+**Scenery test removed** (`src/diag.ts`, `tests/diag.mjs`, the button, `Game.sceneryTest`, `Scenery.debug`,
+`Renderer.skipScenery`, the transform-feedback option of `Program`, `Mesh.drawInstancePoints`). The shader fix
+stays. To bring the test back: commit bf69a2a (v3.10.6) has all of it.
+
+**The preset picked by measuring** (`Game.measureDevice`, game.ts)
+- Not by recognising the phone: a page is not told the model, the GPU name is hidden or differs by browser
+  (this Xiaomi: "PowerVR SGX Doma" in Edge, "Rogue GE8320" in Chrome), and both of the user's phones report 8
+  threads.
+- On the first start of a touch-first device (nothing saved yet, no test parameters in the address): Low is
+  timed, and only if it passes, Commodore. Commodore if its frame stays under 22 ms (30 fps with a third to
+  spare), else Low if Low's does, else Ultra Low. Low first, so a weak phone never has to try Commodore.
+- A timing: the benchmark's Forest as the title's background race, 3 frames left out, then the median of up
+  to 8 frames (at least 3, and no more once 1.5 s have gone), each with the GPU made to finish.
+- Stored as `autoPreset` (preset, the two timings, limit, version). A note is stored BEFORE measuring: a page
+  that dies in the middle starts on Ultra Low next time and does not try again.
+- Never again by itself, so a preset picked by hand stays. Settings has "Pick the preset by measuring" (not
+  from the pause menu). `?measure` forces it, `?measure=40` with another limit (tests).
+- A desktop is not measured: High, as before.
+- NOT measured on any real phone. Expected from the benchmarks: the Xiaomi 17T passes (Commodore about 8 ms a
+  frame), the old Xiaomi fails Low (about 80 ms) and gets Ultra Low. The 22 ms limit is a guess for the
+  phones in between; nothing in between has been measured.
+- Known weaknesses: a phone that is fast cold and slow warm is judged cold. The timing does not take off what
+  making the GPU finish costs (3.8 ms a call on the old Xiaomi), which errs towards the lighter preset. If
+  the page is closed during a measurement started from Settings, the next start is on Ultra Low.
+
+**A lost graphics context** (`Game.onContextLost`)
+- Before: no handling at all. The game went on "drawing" into a dead canvas and the benchmark reported 60 fps
+  for cases that showed a black or white screen (the A53-class phone's report of v3.10.2).
+- Now: drawing stops, a notice says what happened, with "Restart" and, unless already on Ultra Low, "Restart
+  on Low" (on Ultra Low from Low). Enter or space restarts too. No attempt to rebuild the renderer in place:
+  everything it made is gone, a restart is the reliable way, and settings and best times are in storage.
+- The benchmark ends with a report headed "STOPPED: THE GRAPHICS CONTEXT WAS LOST": the case it happened in,
+  the device (noted at the start of the run, a lost context cannot be asked), the cases completed before.
+  The player's own settings are put back. The report is on the benchmark screen after the restart.
+- During a measurement: the measurement stores the preset that was safe; the notice has "Restart" only.
+- NOT tested with a context really lost for lack of memory, only with the browser's own switch for it
+  (WEBGL_lose_context) on the software GPU.
+
+**Also**: toasts sit outside `#ui` and so had the browser's serif font and, once their animation ended, were
+no longer centred (the keyframes ended on `transform:none`). They name their font now and have their own
+animation. Seen because this version's toast is longer and stays 5 s.
+
+**Checked** (software GPU)
+- `tests/autopreset.mjs` (new), 15 checks: first start on an emulated phone measures and gives Ultra Low; not
+  measured again; a hand-picked preset stays; generous limit gives Commodore; a limit between the two timings
+  gives Low; an unfinished measurement gives Ultra Low without measuring; a desktop is not measured; lost
+  context in the menus (notice, 4 frames before, 0 after, restart on the lighter preset works); lost context
+  in the benchmark (report, settings back); the Settings row.
+- `flow`, `gfxopts`, `benchrun`, `cartouch`, `smaastage` pass; `smaaopt` and `picscan` against v3.10.6: 0 pixels.
+- Looked at: the notice, the Settings row and the toast at 825x360.
+
+**Not done** (offered earlier, not asked for): the benchmark including Ultra Low and stopping once a preset
+falls below about 20 fps.
+
 ## v3.10.6 (2026-11-21) — the fix confirmed on the phone; performance tables updated (on `v3`)
 User: "the trees, buildings, cones and incoming traffic are now there", with the round 3 scenery test and a
 benchmark from the Xiaomi, and a benchmark from the PC (Firefox), all on v3.10.5. No code change in the game

@@ -23,6 +23,10 @@ generated in code.
   ambient occlusion at a phone's price: 80 % resolution, SMAA anti-aliasing, simple sky), and every option a preset
   sets can be changed on its own. SMAA is a second kind of anti-aliasing (on in Commodore, an option everywhere
   else): it smooths edges after the picture is drawn, including those of leaves and road markings. The game pauses, and stops drawing, while its window is not in focus.
+  A phone or tablet picks its preset on its first start by timing a few frames: Commodore if it draws that at
+  30 fps with room to spare, else Low, else Ultra Low (Settings can measure again; a preset you pick is never
+  changed). If the browser takes the graphics context away, the game says so and offers a restart on a lighter
+  preset.
 - **Benchmark:** a fixed suite (four tracks at five presets, plus your own settings if they differ) that reports frame rate,
   frame cost, the cost of each render stage and how long each shader program takes to compile, as text you
   can copy.

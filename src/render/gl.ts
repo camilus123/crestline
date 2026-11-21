@@ -16,14 +16,13 @@ export class Program {
    * every shader goes through the Direct3D compiler) made the game take a long time to start. Created like this,
    * the browser compiles all of them at once on its worker threads.
    */
-  /** tf: vertex shader outputs to record by transform feedback (diagnostics: see diag.ts) */
-  constructor(private gl: GL, vs: string, fs: string, private name: string, tf?: string[]) {
+  constructor(private gl: GL, vs: string, fs: string, private name: string) {
     // One program per source, however often it is asked for. The scenery and the hazards make their programs
     // anew for every race; without this each race compiled them again (a pause on browsers that keep no shader
     // cache) and the old ones were never freed.
     let made = Program.made.get(gl);
     if (!made) Program.made.set(gl, (made = new Map()));
-    const key = vs + '\u0000' + fs + (tf ? '\u0000' + tf.join() : '');
+    const key = vs + '\u0000' + fs;
     const hit = made.get(key);
     if (hit) return hit;
     made.set(key, this);
@@ -34,11 +33,10 @@ export class Program {
       this.sh.push({ s: sh, type, src });
       return sh;
     };
-    if (!tf) Program.sources.push({ name, vs, fs });
+    Program.sources.push({ name, vs, fs });
     const p = gl.createProgram()!;
     gl.attachShader(p, mk(gl.VERTEX_SHADER, vs));
     gl.attachShader(p, mk(gl.FRAGMENT_SHADER, fs));
-    if (tf) gl.transformFeedbackVaryings(p, tf, gl.INTERLEAVED_ATTRIBS);
     gl.linkProgram(p);
     this.p = p;
   }
@@ -286,18 +284,6 @@ export class Mesh {
     }
     if (this.ibo) gl.drawElementsInstanced(mode, this.count, this.indexType, 0, n);
     else gl.drawArraysInstanced(mode, 0, this.count, n);
-  }
-  /**
-   * Diagnostics: the first `verts` vertices of instances [first, first+n) as points, never through the index
-   * buffer (OpenGL ES 3.0 refuses indexed draws while transform feedback is recording).
-   */
-  drawInstancePoints(first: number, n: number, verts = 1): void {
-    const gl = this.gl;
-    gl.bindVertexArray(this.vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, this.inst);
-    for (const a of this.instSpec) gl.vertexAttribPointer(a.loc, a.size, a.type, !!a.normalized, this.instStride, a.offset + first * this.instStride);
-    (this as any)._lastFirst = first;
-    gl.drawArraysInstanced(gl.POINTS, 0, verts, n);
   }
 }
 

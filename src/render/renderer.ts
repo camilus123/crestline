@@ -105,8 +105,6 @@ export class Renderer {
   ms: MSTarget;
   plain: Target; // non-MSAA scene target (also MSAA resolve target)
   smaa: Smaa | null = null; // exists while the option is on
-  /** diagnostics (diag.ts): leave the roadside objects and their blob shadows out of the frame */
-  skipScenery = false;
   /** tests only: mix the smoothed edges in plain linear light, as the upstream shader does */
   smaaPlainMix = false;
   pathTex: WebGLTexture;
@@ -847,7 +845,7 @@ export class Renderer {
 
     // ---------- scenery ----------
     pf.begin('scenery');
-    if (this.scenery && !this.skipScenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path, false, 1);
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path, false, 1);
     pf.end();
 
     // ---------- terrain ----------
@@ -892,7 +890,7 @@ export class Renderer {
     const sunOff = [-sunB[0] / Math.max(0.25, sunB[1]) * 0.35, -sunB[2] / Math.max(0.25, sunB[1]) * 0.35];
     const shadowK = Math.min(0.5, (look.sunColor[0] + look.sunColor[1]) * 0.12) * (1 - night);
     // blob shadows (all presets but Psycho, where the sun shadow map replaces them)
-    if (this.scenery && shadowK > 0.05 && !this.shadowLive && !this.skipScenery) this.scenery.drawShadows(prep, sCar, loop, sunOff, shadowK);
+    if (this.scenery && shadowK > 0.05 && !this.shadowLive) this.scenery.drawShadows(prep, sCar, loop, sunOff, shadowK);
     this.cars.drawShadows(prep, draws, this.shadowLive ? 0.25 : Math.max(0.35, shadowK + 0.3));
     gl.disable(gl.POLYGON_OFFSET_FILL);
     gl.depthMask(true);
@@ -921,7 +919,7 @@ export class Renderer {
 
     // the far backdrop (mountain peaks, skylines) after the ground and everything on it: most of it is hidden
     pf.begin('backdrop');
-    if (this.scenery && !this.skipScenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path, false, 2);
+    if (this.scenery) this.scenery.draw(prep, sCar, maxD, loop, F.time, wind, emisK, path, false, 2);
     pf.end();
 
     // ---------- sky ----------

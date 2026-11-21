@@ -508,6 +508,12 @@ function settings(g: Game, back: string): Screen {
   const presetRow = choiceRow('Quality preset', QUALITY.map((q) => q.name), () => st.quality, (i) => { st.quality = i; st.qo = {}; g.applyQuality(); g.saveSettings(); });
   add(presetRow);
   add(h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Graphics options'), h('span', { class: 'val' }, (g.effectiveQuality().name.endsWith('(custom)') ? 'CUSTOM ' : '') + '▶')), { activate: () => g.show('graphics', { back }) });
+  // (not from the pause menu: it borrows the picture for a few seconds, like the benchmark)
+  if (back !== 'pause') {
+    const mRow = h('div', { class: 'row' }, h('span', { class: 'lab' }, 'Pick the preset by measuring'), h('span', { class: 'val' }, 'RUN ▶'));
+    mRow.title = 'Times a few frames on Low and on Commodore and picks Commodore, Low or Ultra Low: the best of them that this device draws at 30 fps with room to spare. Phones do this by themselves on their first start.';
+    add(mRow, { activate: () => { void g.measureDevice(undefined, true).then(() => { if (!g.contextLost) { g.startAttract(); g.show('settings', { back }); } }); } });
+  }
   add(choiceRow('Dynamic resolution', ['Off', 'On'], () => (st.dynRes ? 1 : 0), (i) => { st.dynRes = i === 1; g.saveSettings(); }));
   const paceRow = choiceRow('Frame pacing', ['Off', 'On'], () => (g.pacing ? 1 : 0), (i) => { st.pace = i === 1; g.saveSettings(); });
   paceRow.title = 'When the device cannot keep up with the screen, draw at a steady slower rhythm (every 2nd or 3rd refresh) so that frames do not pile up and stall. Does nothing while the device keeps up. For phones; still being tested.';
@@ -746,8 +752,6 @@ function controls(g: Game, back: string): Screen {
 }
 
 // ---------------------------------------------------------------- benchmark
-/** the report of a scenery test just run, to show when the benchmark screen comes back (not kept after that) */
-let diagReport: BenchReport | null = null;
 function bench(g: Game): Screen {
   const panel = h('div', { class: 'panel', style: 'width:min(64rem,94vw)' }, h('h3', {}, 'BENCHMARK'),
     h('div', { class: 'info' }, `About ${Math.round((BENCH_TRACKS.length * (BENCH_PRESETS.length + 1) * 9.5) / 60 * 2) / 2} minutes. The same suite every run, so results can be compared: a bot drives ${BENCH_TRACKS.length} fixed tracks at ${BENCH_PRESETS.join(', ')} and at your own settings, with the resolution fixed. Leave the controls alone, then use Copy report or Save report.`));
@@ -758,9 +762,7 @@ function bench(g: Game): Screen {
   const copyB = h('div', { class: 'btn', style: 'display:none' }, h('span', {}, 'Copy report'));
   const saveB = h('div', { class: 'btn', style: 'display:none' }, h('span', {}, 'Save report'));
   const backB = h('div', { class: 'btn' }, h('span', {}, 'Back'));
-  // (a diagnostic, about a quarter of a minute: for a device that does not show trees or buildings)
-  const diagB = h('div', { class: 'btn' }, h('span', {}, 'Scenery test'));
-  panel.append(chart, out, h('div', { class: 'benchbtns' }, startB, copyB, saveB, diagB, backB));
+  panel.append(chart, out, h('div', { class: 'benchbtns' }, startB, copyB, saveB, backB));
   let rep: BenchReport | null = null;
   const draw = (r: BenchReport) => {
     const c = chart.getContext('2d');
@@ -811,8 +813,7 @@ function bench(g: Game): Screen {
       g.show('bench');
     }, probe);
   };
-  const last = diagReport ?? store.get<BenchReport | null>('lastBenchmark3', null);
-  diagReport = null;
+  const last = store.get<BenchReport | null>('lastBenchmark3', null);
   if (last && last.text) showRep(last);
   bind(menu, startB, 0, 0, { activate: () => run() });
   bind(menu, copyB, 0, 1, { activate: () => { if (rep) void navigator.clipboard?.writeText(rep.text).then(() => toast('Report copied'), () => toast('Copy failed – select the text manually')); } });
@@ -826,13 +827,7 @@ function bench(g: Game): Screen {
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
     toast('Report saved to your downloads');
   } });
-  bind(menu, diagB, 0, 3, { activate: () => {
-    void g.sceneryTest().then((text) => {
-      diagReport = { text, timeline: [], scaleLine: [], refresh: 60 };
-      g.show('bench');
-    });
-  } });
-  bind(menu, backB, 0, 4, { activate: () => g.show('settings') });
+  bind(menu, backB, 0, 3, { activate: () => g.show('settings') });
   menu.setFocus(startB);
   menu.onBack = () => g.show('settings');
   // the report is long: the body grows with it (never squeezed to the window) and the screen scrolls

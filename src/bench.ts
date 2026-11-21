@@ -152,6 +152,7 @@ export class Benchmark {
     const t0 = performance.now();
     for (let i = 0; i < 12; i++) pf.sync();
     this.syncMs = (performance.now() - t0) / 12;
+    this.deviceLines(this.deviceAtStart); // (kept: after a lost context the device can no longer be asked)
     this.startCase();
   }
 
@@ -292,6 +293,32 @@ export class Benchmark {
     R.prof.mode = 'off';
     R.prof.whole = false;
     this.g.benchRestore();
+  }
+
+  private deviceAtStart: string[] = [];
+  /**
+   * The graphics context was lost during the run (the game calls this, then stops): a report of what had been
+   * measured until then, saying plainly that it stopped. Before v3.10.7 the benchmark carried on and reported
+   * frame rates from a canvas that drew nothing.
+   */
+  lostReport(): BenchReport {
+    this.finishing = true;
+    const c = this.cases[Math.min(this.ci, this.cases.length - 1)];
+    const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const L: string[] = [];
+    L.push(`CRESTLINE v${__VERSION__} (build ${__BUILD_TIME__.slice(0, 16).replace('T', ' ')} UTC) — ${this.probe ? 'picture cost test' : 'benchmark'}, ${stamp} UTC — STOPPED: THE GRAPHICS CONTEXT WAS LOST`);
+    L.push(`The browser took the graphics context away during case ${Math.min(this.ci + 1, this.cases.length)} of ${this.cases.length}: ${BENCH_TRACKS[c.track].what.split(' (')[0]}, ${c.label}.`);
+    L.push('Nothing from that case on was measured. A lost context usually means the device ran out of graphics memory at those settings.');
+    L.push('');
+    L.push(...this.deviceAtStart);
+    L.push('');
+    L.push('== Measured before it stopped ==');
+    if (!this.results.length) L.push('No case had been completed.');
+    else {
+      L.push('track       settings            render         fps  1% low  cost ms  CPU ms');
+      for (const r of this.results) L.push(`${r.what.split(' (')[0].padEnd(12)}${r.settings.padEnd(20)}${r.res.padEnd(10)}${f1(r.fps).padStart(8)}${f1(r.low1).padStart(8)}${f2(r.costMs).padStart(9)}${f2(r.cpuMs).padStart(8)}`);
+    }
+    return { text: L.join('\n'), timeline: this.timeline, scaleLine: this.scaleLine, refresh: this.g.refreshRate };
   }
 
   private finishing = false;

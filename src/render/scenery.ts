@@ -49,7 +49,7 @@ void main(){
   // "if (uLandmark == 0 && abs(u) > ext + 1.0 && uSpan == 0) hide = 1.0;" a PowerVR Rogue GE8320 driver set hide
   // for every object and landmark although the condition was false, and the phone showed no scenery at all.
   // Read back from that driver: each test alone is right, the three as a "?:" choice or a bool are right, as
-  // that "if" they are wrong. This spelling is confirmed on the phone (v3.10.5). See src/diag.ts.
+  // that "if" they are wrong. This spelling is confirmed on the phone (v3.10.5); PROGRESS.md, v3.10.3 to v3.10.6, has the story.
   float ordinary = (uLandmark == 0 ? 1.0 : 0.0) * (uSpan == 0 ? 1.0 : 0.0);
   hide = max(hide, ordinary * (abs(u) > ext + 1.0 ? 1.0 : 0.0));
   if (uLandmark == 1 && uBend == 0 && uSpan == 0) {
@@ -171,13 +171,6 @@ void main(){
   vec3 fogged = fogApply(col, vW);
   o = vec4(uRocky > 0.5 ? mix(col, fogged, 0.62) : fogged, blurW(vW));
 }`;
-
-/** diagnostics: the objects in plain colour, nothing of the usual fragment shader but its 'leave out' */
-export const OBJ_FLAT_FS = `#version 300 es
-precision highp float;
-in float vHide; in vec4 vCol;
-out vec4 o;
-void main(){ if (vHide > 0.5) discard; o = vec4(vCol.rgb * 0.8 + 0.1, 1.0); }`;
 
 const OBJ_DEPTH_FS = `#version 300 es
 precision highp float;
@@ -590,18 +583,10 @@ export class Scenery {
     set.mesh.updateInstances(D);
   }
 
-  /**
-   * Diagnostics (the scenery test, diag.ts): `prog` is drawn with in place of the objects program; `onRange` is
-   * called for every range of ordinary objects and landmarks about to be drawn, with that program in use and
-   * its uniforms set.
-   */
-  static debug: { prog: Program | null; onRange: ((mesh: Mesh, set: { type: number; data: Float32Array; landmark: boolean; bend: boolean; adj: boolean }, first: number, n: number) => void) | null } = { prog: null, onRange: null };
-
   draw(prep: (p: Program) => void, sCar: number, maxD: number, loop: number, time: number, wind: number[], emis: number, path: BentPath, landmarksOnly = false, part = 0): void {
     const gl = this.gl;
     if (this.depthOnly && !this.depthProg) this.depthProg = new Program(gl, OBJ_VS, OBJ_DEPTH_FS, 'objects-depth');
-    const dbg = Scenery.debug;
-    const p = (this.depthOnly ? this.depthProg! : dbg.prog ?? this.prog).use();
+    const p = (this.depthOnly ? this.depthProg! : this.prog).use();
     prep(p);
     // The sway's speed rises with the wind. Its phase must therefore be added up frame by frame: as time x speed
     // (how it used to be worked out) every change of speed is multiplied by the whole race time so far, and a
@@ -641,7 +626,6 @@ export class Scenery {
       // the last stretch before the split is drawn with both models, dissolving from one to the other
       const band = set.far && ahead > split && !this.depthOnly && this.dissolve ? Math.min(25, split * 0.2) : 0;
       if (band > 0) p.v3('uLodFade', split - band, band, 1);
-      if (dbg.onRange && !set.span && !this.depthOnly) for (let k = 0; k < r.length; k += 2) dbg.onRange(near, set, r[k], r[k + 1]);
       for (let k = 0; k < r.length; k += 2) near.drawInstances(r[k], r[k + 1]);
       if (set.far && ahead > split) {
         const split2 = set.far2 ? Math.min(split * 2.2, ahead) : ahead;

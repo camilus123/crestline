@@ -271,7 +271,8 @@ A laptop with integrated graphics (Intel Core 5 120U, Firefox, 60 Hz):
 <!-- /table -->
 
 An old phone that is not one of the game's own test devices (Xiaomi 23129RN51X: PowerVR Rogue GE8320, 2 GB,
-1650x720, a 90 Hz screen). Ultra Low is the preset a phone starts on:
+1650x720, a 90 Hz screen). Ultra Low is the preset every phone started on up to v3.10.6 (from v3.10.7 a
+phone's first start times a few frames and picks Commodore, Low or Ultra Low):
 
 <!-- table:oldphone -->
 | Version | Browser | Pacing | Roadside objects | Ultra Low fps | Low fps | Ultra Low cost | Low cost | Ultra Low JavaScript | Low JavaScript |
