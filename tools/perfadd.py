@@ -51,7 +51,8 @@ def parse(text):
         cm = j.get('compileMs')
         yield {'version': j['v'], 'when': j.get('when'), 'device': key, 'deviceName': name, 'browser': br, 'refreshHz': j.get('hz'),
                'output': j.get('out'), 'pacing': bool(j.get('pace')), 'startupS': float(st[-1]) if st else None,
-               'compileAllMs': cm.get('together') if isinstance(cm, dict) else None, 'yours': j.get('yours'), 'presets': presets}
+               'compileAllMs': cm.get('together') if isinstance(cm, dict) else None, 'yours': j.get('yours'), 'presets': presets,
+               **({'gaveUp': j['gaveUp'], 'skipped': j['skipped']} if j.get('gaveUp') else {})}
 
 
 def vkey(v):

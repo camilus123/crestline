@@ -4,7 +4,7 @@ import type { Game } from '../game';
 import { MenuKey, ACTIONS, ACTION_LABELS, DEFAULT_BINDINGS } from '../input';
 import { CARS } from '../sim/specs';
 import { fuelPlan } from '../sim/race';
-import { BENCH_PRESETS, BENCH_TRACKS, type BenchReport } from '../bench';
+import { BENCH_GIVE_UP_FPS, BENCH_PRESETS, BENCH_TRACKS, type BenchReport } from '../bench';
 import { LIVERIES } from '../sim/roster';
 import { decodeCode, normalizeCode } from '../track/codes';
 import { SCENARIO_NAMES } from '../track/defs';
@@ -754,7 +754,7 @@ function controls(g: Game, back: string): Screen {
 // ---------------------------------------------------------------- benchmark
 function bench(g: Game): Screen {
   const panel = h('div', { class: 'panel', style: 'width:min(64rem,94vw)' }, h('h3', {}, 'BENCHMARK'),
-    h('div', { class: 'info' }, `About ${Math.round((BENCH_TRACKS.length * (BENCH_PRESETS.length + 1) * 9.5) / 60 * 2) / 2} minutes. The same suite every run, so results can be compared: a bot drives ${BENCH_TRACKS.length} fixed tracks at ${BENCH_PRESETS.join(', ')} and at your own settings, with the resolution fixed. Leave the controls alone, then use Copy report or Save report.`));
+    h('div', { class: 'info' }, `About ${Math.round((BENCH_TRACKS.length * (BENCH_PRESETS.length + 1) * 9.5) / 60 * 2) / 2} minutes. The same suite every run, so results can be compared: a bot drives ${BENCH_TRACKS.length} fixed tracks at ${BENCH_PRESETS.join(', ')} and at your own settings, with the resolution fixed. A preset that falls under ${BENCH_GIVE_UP_FPS} fps is given up, with the heavier ones. Leave the controls alone, then use Copy report or Save report.`));
   const chart = h('canvas', { class: 'benchchart', width: 960, height: 150, style: 'display:none' }) as HTMLCanvasElement;
   const out = h('pre', { class: 'lcd benchout', style: 'display:none' });
   const menu = new Menu(g.sfx);

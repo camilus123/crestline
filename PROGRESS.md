@@ -612,6 +612,38 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.8 (2026-11-21) — the benchmark includes Ultra Low and gives up on hopeless presets (on `v3`)
+User, on v3.10.7: "this one seems to work and pick the phone mode correctly, the slow one gets ultra low and
+the 17t get commodore". So the measurement is confirmed on both phones (how he ran it, first start or the
+Settings row, he did not say; the timings it found were not sent). Then: "let's have the benchmark include
+ultra low and give up on hopeless presets".
+
+- Suite: Ultra Low, Low, High, Psycho, Admiral, Commodore (six, was five) on the four tracks, plus the player's
+  own settings if they are not exactly one of those. "Yours: Ultra Low" rows of stock Ultra Low are gone.
+- Run order on each track is now lightest first: Ultra Low, Low, Commodore, High, Admiral, Psycho
+  (`BENCH_LADDER`), then the player's own. The tables keep their usual order.
+- Giving up (`BENCH_GIVE_UP_FPS` = 10): a stock preset that measures under 10 fps on a track is hopeless on
+  that device. It and everything heavier on the ladder are not run from there on, on that track and the later
+  ones. Ultra Low is always run on all tracks, and so are the player's own settings.
+- 10, not the "about 20" I first said: at 20 the old Xiaomi would lose Low (8 to 16 fps) and nearly Ultra Low,
+  which are the two presets one wants its numbers for. Under 10 nobody plays.
+- "Heavier" is the fixed ladder, from the two phones measured (old Xiaomi: Commodore 3.3 fps, Admiral 2.3,
+  High 1.7, Psycho 1.3). It is NOT measured per device: a device on which, say, Commodore is hopeless and High
+  is not would lose its High figures. None such is known.
+- The report: a "GIVEN UP" block under the header (the limit, which preset reached what on which track, what
+  was not run); averages over fewer tracks are marked "(n of 4 tracks)"; the data line has `giveUpFps`,
+  `gaveUp`, `skipped`. The per-second fps line says in which order the cases ran.
+- Expected on the old Xiaomi from its v3.10.5 figures: Forest runs Ultra Low, Low (10.3 fps: stays, just),
+  Commodore (2.8: given up); then Ultra Low and Low on the other tracks, where Low at 8.4 fps on Futuristic
+  comes last and changes nothing. About 9 cases in place of 24. NOT run there yet.
+- Tools: `perfadd.py` keeps `gaveUp` and `skipped`; `perfcharts.py` treats a preset measured on fewer tracks
+  than the rest as not measured (its average would not compare). Charts and tables unchanged by this.
+- Checked: `tests/benchrun.mjs` plain, and with `GIVEUP` (`EXPECT=ultra`: Ultra Low short, stays in, Low gone
+  from both tracks; `EXPECT=low`: Low short on the first track, gone from the second, average marked);
+  `autopreset`, `flow`, `gfxopts` pass.
+- Not checked: the full six-preset suite in one run (a software GPU needs minutes per Psycho frame; the test
+  suite is Ultra Low and Low on two tracks). The table order with all six therefore rests on reading the code.
+
 ## v3.10.7 (2026-11-21) — the preset picked by measuring; a lost graphics context; scenery test removed (on `v3`)
 User: "is it possible to detect what kind of phone is it running on and default to ultra low if it's slow and
 commodore if it's not?" then "go + remove the scenery test for now".

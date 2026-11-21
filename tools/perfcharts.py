@@ -43,9 +43,12 @@ def pick(device, browser, version=None, pacing=None):
 
 def preset(run, name):
     """the four cases of a preset; `name` also matches the player's own settings when they were that preset"""
+    full = max(len(c) for c in run['presets'].values())
     for k, cases in run['presets'].items():
         if k == name or k == 'Yours: ' + name:
-            return cases
+            # (from v3.10.8 the benchmark gives up on a preset that is hopeless on the device: one measured on
+            #  fewer tracks than the rest has no average to compare, and counts as not measured here)
+            return cases if len(cases) == full else None
     if name == 'Admiral':  # before it was a preset it was the player's own settings: the same four values
         y = run.get('yours') or {}
         if y.get('diff') == 'msaa 8>0, dist 1.45>1.2, particles 1.5>1.25, weather 1.4>1.2':

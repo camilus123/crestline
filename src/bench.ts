@@ -24,7 +24,17 @@ export const BENCH_TRACKS: { code: string; what: string }[] = [
   { code: 'KIGJHGSHI15', what: 'Night (street lights)' },
   { code: 'TUORSWWUS14', what: 'Futuristic (buildings, neon)' },
 ];
-export const BENCH_PRESETS = ['Low', 'High', 'Psycho', 'Admiral', 'Commodore'];
+export const BENCH_PRESETS = ['Ultra Low', 'Low', 'High', 'Psycho', 'Admiral', 'Commodore']; // (the order of the tables)
+/**
+ * The same presets, lightest first: the order they are run in on each track. A preset that comes in under
+ * BENCH_GIVE_UP_FPS is hopeless on this device: from there on it and the heavier ones are left out, on that
+ * track and the later ones (the report says which and why). Without this an old phone spent four minutes
+ * drawing High, Psycho, Admiral and Commodore at 1 to 4 fps, and a weaker one lost its graphics context on
+ * the way. Ultra Low is always run (it is what such a device plays on), and so are the player's own settings.
+ * "Heavier" is this fixed order, taken from the phones measured; it is not measured per device.
+ */
+export const BENCH_LADDER = ['Ultra Low', 'Low', 'Commodore', 'High', 'Admiral', 'Psycho'];
+export const BENCH_GIVE_UP_FPS = 10;
 
 interface Phase { id: 'warm' | 'play' | 'cost' | 'stages'; dur: number }
 // (automated tests on a software GPU shorten the phases: window.__benchQuick)
@@ -94,6 +104,10 @@ export function qualityDiff(q: Quality): string {
 
 export class Benchmark {
   private cases: Case[] = [];
+  private giveUpFps = BENCH_GIVE_UP_FPS;
+  /** presets given up on (see BENCH_LADDER): which one fell short, where, and the cases left out for it */
+  private gaveUp: { settings: string; track: number; fps: number }[] = [];
+  private skipped: { track: number; settings: string }[] = [];
   private ci = 0;
   private k = 0;
   private t = 0;
@@ -139,7 +153,8 @@ export class Benchmark {
     }
     // (the automated test runs a cut-down suite: a software GPU needs minutes per Psycho frame)
     const quick = !!(globalThis as any).__benchQuick;
-    const presets = quick ? ['Ultra Low', 'Low'] : BENCH_PRESETS;
+    const presets = quick ? ['Ultra Low', 'Low'] : BENCH_LADDER;
+    this.giveUpFps = (globalThis as any).__benchGiveUp ?? (quick ? 0 : BENCH_GIVE_UP_FPS); // (the test sets its own: a software GPU is under 10 fps everywhere)
     for (let t = 0; !probe && t < (quick ? 2 : BENCH_TRACKS.length); t++) {
       for (const n of presets) this.cases.push({ track: t, q: QUALITY.find((x) => x.name === n)!, label: n });
       // the player's own settings too, unless they are exactly one of the presets above
@@ -280,9 +295,24 @@ export class Benchmark {
       this.leave();
       this.k++;
       if (!last) this.enter();
-      else if (++this.ci < this.cases.length) this.startCase();
+      else if (this.giveUp(), ++this.ci < this.cases.length) this.startCase();
       else this.finish();
     }
+  }
+
+  /** after a case: if it was a stock preset and hopeless here, take it and the heavier ones out of what is still to run */
+  private giveUp(): void {
+    const c = this.cases[this.ci], r = this.results[this.results.length - 1];
+    const at = BENCH_LADDER.indexOf(c.label);
+    const only = (globalThis as any).__benchGiveUpOnly as string | undefined; // (tests: which preset the limit applies to; frame rates on a software GPU are too erratic to aim between two)
+    if (this.probe || at < 0 || !r || r.settings !== c.label || !(r.fps < this.giveUpFps) || (only && only !== c.label)) return;
+    const from = Math.max(at, 1); // (Ultra Low itself stays in)
+    const out = (x: Case) => { const i = BENCH_LADDER.indexOf(x.label); return i >= from; };
+    const rest = this.cases.slice(this.ci + 1);
+    if (!rest.some(out)) return;
+    this.gaveUp.push({ settings: c.label, track: c.track, fps: r.fps });
+    for (const x of rest) if (out(x)) this.skipped.push({ track: x.track, settings: x.label });
+    this.cases = [...this.cases.slice(0, this.ci + 1), ...rest.filter((x) => !out(x))];
   }
 
   /** abandon (e.g. leaving the race): restore settings */
@@ -407,7 +437,16 @@ export class Benchmark {
     const line = (k: string, v: string) => L.push(k.padEnd(22) + v);
     const stamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
     L.push(`CRESTLINE v${__VERSION__} (build ${__BUILD_TIME__.slice(0, 16).replace('T', ' ')} UTC) — benchmark, ${stamp} UTC`);
-    L.push(`Fixed suite: ${BENCH_TRACKS.length} tracks x ${BENCH_PRESETS.join(' / ')}` + (this.cases.length > BENCH_TRACKS.length * BENCH_PRESETS.length ? ' + your settings' : '') + '; 1 player, bot driving, resolution fixed at each preset\'s scale.');
+    L.push(`Fixed suite: ${BENCH_TRACKS.length} tracks x ${BENCH_PRESETS.join(' / ')}` + (this.results.some((r) => r.settings.startsWith('Yours')) ? ' + your settings' : '') + '; 1 player, bot driving, resolution fixed at each preset\'s scale.');
+    // the tables go by track, presets in their usual order (they were run lightest first), the player's own last
+    const tOrder = BENCH_TRACKS.map((t) => t.code), pOrder = (x: string) => { const i = BENCH_PRESETS.indexOf(x); return i < 0 ? 99 : i; };
+    this.results = this.results.map((r, i) => ({ r, i })).sort((a, b) => tOrder.indexOf(a.r.track) - tOrder.indexOf(b.r.track) || pOrder(a.r.settings) - pOrder(b.r.settings) || a.i - b.i).map((x) => x.r);
+    const tName = (t: number) => BENCH_TRACKS[t].what.split(' (')[0];
+    if (this.gaveUp.length) {
+      L.push(`GIVEN UP: under ${this.giveUpFps} fps a preset counts as hopeless on this device; it and the heavier ones (order: ${BENCH_LADDER.join(' < ')}) are not run from there on.`);
+      for (const u of this.gaveUp) L.push(`  ${u.settings} reached ${f1(u.fps)} fps on ${tName(u.track)}.`);
+      L.push('  Not run: ' + BENCH_TRACKS.map((_, t) => ({ t, s: this.skipped.filter((x) => x.track === t).map((x) => x.settings) })).filter((x) => x.s.length).map((x) => `${tName(x.t)}: ${x.s.join(', ')}`).join(' · '));
+    }
     L.push('');
     this.deviceLines(L);
     L.push('');
@@ -427,11 +466,12 @@ export class Benchmark {
     L.push('');
     // averages per settings across the tracks
     L.push('== Average over the tracks ==');
-    const labels = [...new Set(this.results.map((r) => r.settings))];
+    const labels = [...new Set(this.results.map((r) => r.settings))].sort((a, b) => pOrder(a) - pOrder(b));
+    const nTracks = new Set(this.results.map((r) => r.track)).size;
     for (const lab of labels) {
       const rs = this.results.filter((r) => r.settings === lab);
       const cost = mean(rs.map((r) => r.costMs));
-      L.push(lab.padEnd(22) + `${f1(mean(rs.map((r) => r.fps)))} fps measured   frame cost ${f2(cost)} ms (max ~${f1(1000 / Math.max(0.01, cost))} fps)   CPU ${f2(mean(rs.map((r) => r.cpuMs)))} ms   ` +
+      L.push(lab.padEnd(22) + (rs.length < nTracks ? `(${rs.length} of ${nTracks} tracks) ` : '') + `${f1(mean(rs.map((r) => r.fps)))} fps measured   frame cost ${f2(cost)} ms (max ~${f1(1000 / Math.max(0.01, cost))} fps)   CPU ${f2(mean(rs.map((r) => r.cpuMs)))} ms   ` +
         (cost <= 1000 / refresh ? `fits the ${refresh.toFixed(0)} Hz budget of ${f2(1000 / refresh)} ms` : `over the ${refresh.toFixed(0)} Hz budget of ${f2(1000 / refresh)} ms by ${f2(cost - 1000 / refresh)} ms`));
     }
     L.push('');
@@ -482,7 +522,7 @@ export class Benchmark {
         `terrain ${q.terrLite ? 'light' : 'full'} · particles x${q.particles} · weather x${q.weather} · lamp lights ${q.lamps} · effects ${q.lite ? 'simple' : 'full'} · sun shadows ${q.shadows || 'off'} · AO ${q.ssao ? 'on' : 'off'}`);
     }
     L.push('');
-    L.push('fps per second of the measured runs, in order: ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
+    L.push('fps per second of the measured runs, in the order run (per track: ' + BENCH_LADDER.join(', ') + ', then yours): ' + this.timeline.map((x) => x.toFixed(0)).join(' '));
     if (g.pacing) {
       L.push('');
       L.push('== Frame pacing (a frame on every Nth refresh; times from the start of the case. The rhythm is found during the warm-up, which lasts until it has stood for 2.5 s or 8 s are up; no faster one is tried in the 5 measured seconds) ==');
@@ -494,6 +534,7 @@ export class Benchmark {
     L.push(JSON.stringify({
       v: __VERSION__, build: __BUILD_TIME__, when: stamp, gpu: gpuName, out: [R.canvas.width, R.canvas.height], dpr: devicePixelRatio, hz: Math.round(refresh), pace: g.pacing, syncMs: Math.round(this.syncMs * 1000) / 1000, stageSource: this.results[0]?.src ?? '',
       threads: nav.hardwareConcurrency ?? null, startupMs: Math.round(g.startupMs), compileMs: this.compiles ? { together: Math.round(this.compiles.together), each: Object.fromEntries(this.compiles.each.map((x) => [x.name, Math.round(x.ms)])), probes: Object.fromEntries(this.compiles.probes.map((x) => [x.name, x.ok ? Math.round(x.ms) : -1])) } : null, yours: { name: mine.name, diff: qualityDiff(mine) },
+      giveUpFps: this.giveUpFps, gaveUp: this.gaveUp.map((u) => ({ track: BENCH_TRACKS[u.track].code, settings: u.settings, fps: Math.round(u.fps * 100) / 100 })), skipped: this.skipped.map((x) => ({ track: BENCH_TRACKS[x.track].code, settings: x.settings })),
       cases: this.results.map((r) => ({
         track: r.track, settings: r.settings, res: r.res, fps: round(r.fps), low1: round(r.low1), p50: round(r.p50), p95: round(r.p95), p99: round(r.p99), worst: round(r.worst), hitches: r.hitches, rhythm: Math.round(r.rhythm * 100) / 100, paceLog: r.paceLog,
         warmS: round(r.warm), wholeGpu: round(r.wholeGpu), cpuMs: round(r.cpuMs), cpuP99: round(r.cpuP99), costMs: round(r.costMs), calls: Math.round(r.calls), instances: Math.round(r.instances), verts: Math.round(r.verts),
