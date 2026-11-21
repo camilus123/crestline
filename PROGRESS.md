@@ -612,6 +612,60 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.5 (2026-11-21) — the missing trees and buildings: the cause found, a fix to be confirmed on the phone (on `v3`)
+User sent the round 2 report from the Xiaomi (PowerVR Rogue GE8320, Chrome 146).
+
+**What round 2 showed**
+- Transform feedback works on that phone. Everything the vertex shader works out is right (the three instance
+  attributes equal what the game gave it; distance, ground height, tapers, world position all as on the
+  software GPU) except ONE number: `hide` is 1 for every object and landmark recorded (17 of 17), so every one
+  is sent to clip position (2, 2, 2, 1), off the screen.
+- Of the 13 variants only two drew the scenery, both with exactly the software GPU's figures: "never left out"
+  (Forest 29.3 %, Futuristic 41.9 %) and "not left out for being beyond the fold" (29.3 %, 41.7 %).
+- So the fault is one line of the objects vertex shader:
+  `if (uLandmark == 0 && abs(u) > ext + 1.0 && uSpan == 0) hide = 1.0;`
+  With abs(u) about 34 and ext 700 the middle test is false, and for landmarks the first is false too; that
+  driver sets hide anyway. Span sets (uSpan 1) escape, which is why they were drawn. WHY the driver does this
+  (which construct it gets wrong) is NOT known yet.
+
+**The fix** (`src/render/scenery.ts`, OBJ_VS)
+- The rule without "if" and without "&&", built only from constructs that demonstrably work on that phone
+  elsewhere in the same shader (a choice on one comparison, arithmetic):
+  `float ordinary = (uLandmark == 0 ? 1.0 : 0.0) * (uSpan == 0 ? 1.0 : 0.0);`
+  `hide = max(hide, ordinary * (abs(u) > ext + 1.0 ? 1.0 : 0.0));`
+- NOT confirmed on the phone. It is a best guess at what the driver will take; round 3 says whether it did.
+- Same pictures as before on the software GPU, including where the rule fires: `tests/picscan.mjs` (new),
+  v3.10.2 against v3.10.5, 0 pixels differ at every 250th frame of Mountains on Low (22 moments), Forest on Low
+  (26) and every 500th of Forest on High (12). The rule is known to fire in that span: a copy of the build with
+  the rule disabled differs at Forest 2500 to 3000 and 6000 to 6250, Mountains 4000 to 5250.
+- A trap found on the way: two pages of the same build differ at some moments (sparks, spray: Math.random), and
+  my first scans read that noise as differences between builds. `picscan.mjs` gives both pages the same random
+  numbers; the same build twice is then 0 everywhere.
+- On Ultra Low the rule hardly ever fires (no moment found in 6000 frames of Forest or Mountains); it matters
+  from Low up.
+
+**Round 3 of the scenery test** (`src/diag.ts`, header "scenery test 3")
+1. Pictures with the rule written ten ways (as shipped; as it was; nested; distance test first; distance test
+   last; as a choice; the two numbers worked out beforehand; only the distance test; placed after the landmark
+   rules; left out), at three frozen moments: Forest and Futuristic on Ultra Low as before, and Forest on Low
+   after 2750 steps, where objects ARE beyond the fold. Each line also says in how many pixels it differs from
+   the shipped rule. Software GPU: all ten the same at the first two moments; at the third only "left out"
+   differs (777 px), which is how the report shows that the shipped rule still hides what it should.
+2. Read back from the driver for three objects of up to three kinds, with the shipped rule, the old rule, and
+   the old rule with `hide` noted before it, after it and after the landmark rules: the three tests alone, in
+   pairs, all three as a choice, as an "if" and as a bool, and the two landmark conditions. A line whose
+   combined tests are not what their parts give is marked "bad". Software GPU: none.
+- Reference: `review/v3/scenery_test_reference.txt`. Checked by `tests/diag.mjs`; `tests/smaaopt.mjs` against
+  v3.10.2 0 pixels on four presets; `tests/flow.mjs` passes.
+
+**Still open**
+- Whether the fix works on the phone; which construct that driver gets wrong, and whether other shaders use it
+  (other "&&" chains exist: `glsl.ts` shadows, `ground.ts`, `sky.ts`, `smaa.ts`, three more in OBJ_VS).
+- Traffic and cones use the same shader: they were presumably missing on that phone too. Not asked, not known.
+- The Xiaomi's benchmark figures in `docs/performance.md` were measured WITHOUT roadside objects; with them the
+  phone will be slower. To be re-measured once the scenery shows.
+- The "Scenery test" button is still on the benchmark screen: decide before a release whether it stays.
+
 ## v3.10.4 (2026-11-20) — scenery test, round 2 (on `v3`, not for release)
 User sent the scenery test report of v3.10.3 from the Xiaomi (Chrome 146; this browser names the GPU
 "PowerVR Rogue GE8320", where Edge's benchmark report said "PowerVR SGX Doma").

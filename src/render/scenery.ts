@@ -45,7 +45,11 @@ void main(){
   float side = u < 0.0 ? -1.0 : 1.0;
   float edge = side < 0.0 ? p.hwL : p.hwR;
   float ext = side < 0.0 ? p.extL : p.extR;
-  if (uLandmark == 0 && abs(u) > ext + 1.0 && uSpan == 0) hide = 1.0;
+  // ordinary objects beyond the fold are left out. Written without "if" and "&&" on purpose: as
+  // "if (uLandmark == 0 && abs(u) > ext + 1.0 && uSpan == 0) hide = 1.0;" a PowerVR Rogue GE8320 driver left out
+  // every object and landmark (measured on the phone, v3.10.4; see src/diag.ts)
+  float ordinary = (uLandmark == 0 ? 1.0 : 0.0) * (uSpan == 0 ? 1.0 : 0.0);
+  hide = max(hide, ordinary * (abs(u) > ext + 1.0 ? 1.0 : 0.0));
   if (uLandmark == 1 && uBend == 0 && uSpan == 0) {
     // pushed clear of every stretch of road in view (see landmarks.ts)
     u = iAdj.x;
