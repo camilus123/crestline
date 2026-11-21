@@ -19,6 +19,16 @@
 //  2. what the driver makes of each part of the old line, read back by transform feedback: the three tests
 //     alone, in pairs and together, as a choice, as an "if" and as a bool, and "hide" before and after the line.
 //     That says which construct to look for in the other shaders.
+// Round 3 on the phone: the shipped rule draws the scenery (29.3 %, 41.6 %, 32.6 %, the software GPU's figures)
+// and still hides what it should (leaving it out changes 753 pixels there, 777 on the software GPU). Of the old
+// spellings only two fail, the line as it was and the same line placed after the landmark rules. Nested, with
+// the distance test first or last, as a choice, with abs(u) and ext + 1.0 worked out beforehand, or with the
+// distance test alone, it works. Read back: each test alone is right; all three as a choice or a bool are
+// right; as an "if" they come out true. So what that driver gets wrong is narrow: an "if" whose condition has a
+// comparison of two worked-out float values BETWEEN two whole-number tests. No other shader of the game has
+// that shape; the nearest is the rumble-strip condition of the road's fragment shader (ground.ts), which
+// compares a ready value with a constant, the form that worked here. It is left as it is. (In the report every line of part 2 is marked "bad", the shipped rule's too: the mark is about
+// the probe, which contains the faulty "if" itself, not about the rule in use. "left out" is the rule in use.)
 // The report is text, to be copied and sent.
 
 import type { Game } from './game';

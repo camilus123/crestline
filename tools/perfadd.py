@@ -19,12 +19,12 @@ def device(gpu):
     if 'Intel' in gpu:
         return 'laptop', 'Laptop (Intel Core 5 120U, integrated graphics, 60 Hz)'
     if 'GE8320' in gpu or 'PowerVR' in gpu:
-        return 'oldphone', 'Old phone (PowerVR Rogue GE8320)'
+        return 'oldphone', 'Old phone (Xiaomi 23129RN51X, PowerVR Rogue GE8320, 2 GB)'  # (Edge names the GPU "PowerVR SGX Doma")
     return 'other', gpu
 
 
 def browser(ua):
-    return 'Mi Browser' if 'MiuiBrowser' in ua else 'Edge' if 'Edg/' in ua else 'Firefox' if 'Firefox' in ua else 'Brave' if 'Android' in ua else 'Chrome' if 'Chrome' in ua else '?'
+    return 'Mi Browser' if 'MiuiBrowser' in ua else 'Edge' if 'Edg/' in ua or 'EdgA/' in ua else 'Firefox' if 'Firefox' in ua else 'Brave' if 'Android' in ua else 'Chrome' if 'Chrome' in ua else '?'
 
 
 def parse(text):
@@ -36,6 +36,9 @@ def parse(text):
         ua = (re.findall(r'^browser\s+(.*)$', pre, re.M) or ['?'])[-1]
         st = re.findall(r'^start-up\s+([\d.]+) s', pre, re.M)
         key, name = device(j['gpu'])
+        br = browser(ua)
+        if key == 'oldphone' and br == 'Brave':
+            br = 'Chrome'  # (its user agent is plain Chrome's; Brave would look the same)
         presets = {}
         for c in j['cases']:
             case = {
@@ -46,7 +49,7 @@ def parse(text):
                 case['smaaMs'] = smaa  # (the stage's own time, where the option was on)
             presets.setdefault(c['settings'], []).append(case)
         cm = j.get('compileMs')
-        yield {'version': j['v'], 'when': j.get('when'), 'device': key, 'deviceName': name, 'browser': browser(ua), 'refreshHz': j.get('hz'),
+        yield {'version': j['v'], 'when': j.get('when'), 'device': key, 'deviceName': name, 'browser': br, 'refreshHz': j.get('hz'),
                'output': j.get('out'), 'pacing': bool(j.get('pace')), 'startupS': float(st[-1]) if st else None,
                'compileAllMs': cm.get('together') if isinstance(cm, dict) else None, 'yours': j.get('yours'), 'presets': presets}
 

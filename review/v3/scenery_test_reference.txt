@@ -1,4 +1,4 @@
-CRESTLINE v3.10.5 (build 2026-11-21 10:49 UTC) — scenery test 3, 2026-11-21 10:50:15 UTC
+CRESTLINE v3.10.6 (build 2026-11-21 12:20 UTC) — scenery test 3, 2026-11-21 12:22:07 UTC
 The rule that leaves out objects beyond the fold, written several ways: what each puts in the picture, and what the driver makes of its parts.
 
 == Device ==
@@ -10,28 +10,28 @@ GL error before the test: 0
 == Forest, Ultra Low: picture 825x360, drawn at 618x270 ==
 
 1. Share of the picture the roadside objects change, against the same frame without them.
-   as shipped: no "if", no "&&"                     pixels  29.2 %   instances   822
+   as shipped: no "if", no "&&"                     pixels  29.3 %   instances   822
       |           :#######:            ..##############|
       |          ##########.        .##################|
-      |          :##########       :##########::#:..:##|
-      |           .#########:.   ..########### :#. .::#|
-      |::......    :##########..:#:########:#: :#    .:|
-      |########.   ..::#::.:::....:::::::::.:. ##      |
-      |#########:.::. .::::..                  .....   |
+      |         .:##########       :##########::#::.:##|
+      |           .#########:.   .:########### :#  .::#|
+      |::......    :##########..:#:#######::#: :#    .:|
+      |########.   ..::#::::::.....::::::::.:. ##      |
+      |#########:.::. .::::.                   .....   |
       |########::                                      |
       |###:..                                          |
       |#:.                                             |
       |                                                |
       |                                                |
-   as it was up to v3.10.4                          pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, the three tests nested                      pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, the distance test first                     pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, the distance test last                      pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, as a choice in place of the "if"            pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, the two numbers worked out beforehand       pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, only the distance test                      pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   old, placed after the landmark rules             pixels  29.2 %   instances   822   differs from as shipped in      0 px
-   the rule left out                                pixels  29.2 %   instances   822   differs from as shipped in      0 px
+   as it was up to v3.10.4                          pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, the three tests nested                      pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, the distance test first                     pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, the distance test last                      pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, as a choice in place of the "if"            pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, the two numbers worked out beforehand       pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, only the distance test                      pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   old, placed after the landmark rules             pixels  29.3 %   instances   822   differs from as shipped in      0 px
+   the rule left out                                pixels  29.3 %   instances   822   differs from as shipped in      0 px
 
 2. The rule's parts as the driver works them out, for the first vertex of a few objects. 1 = true, 0 = false.
    far: beyond the fold (the distance test)   L0: not a landmark   S0: not a span   "bad" marks a line whose combined tests are not what their parts give
@@ -70,28 +70,28 @@ GL error before the test: 0
 == Futuristic, Ultra Low: picture 825x360, drawn at 618x270 ==
 
 1. Share of the picture the roadside objects change, against the same frame without them.
-   as shipped: no "if", no "&&"                     pixels  41.5 %   instances   540
-      |######################:   :##############.   :##|
+   as shipped: no "if", no "&&"                     pixels  41.6 %   instances   540
+      |######################:   :##############    :##|
       |#######################  .###############    :##|
       |####################### .################    ###|
-      |#######################::################    ###|
+      |#######################.:################    ###|
       |#########################################    ###|
-      |###################::::...::::::::::#:::.   .###|
+      |###################::::..:::::::::::#:::.   .###|
       |::.....    ##                      ..        ...|
       |           ##                                   |
       |           ..                                   |
       |                                                |
       |                                                |
       |                                                |
-   as it was up to v3.10.4                          pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, the three tests nested                      pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, the distance test first                     pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, the distance test last                      pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, as a choice in place of the "if"            pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, the two numbers worked out beforehand       pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, only the distance test                      pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   old, placed after the landmark rules             pixels  41.5 %   instances   540   differs from as shipped in      0 px
-   the rule left out                                pixels  41.5 %   instances   540   differs from as shipped in      0 px
+   as it was up to v3.10.4                          pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, the three tests nested                      pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, the distance test first                     pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, the distance test last                      pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, as a choice in place of the "if"            pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, the two numbers worked out beforehand       pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, only the distance test                      pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   old, placed after the landmark rules             pixels  41.6 %   instances   540   differs from as shipped in      0 px
+   the rule left out                                pixels  41.6 %   instances   540   differs from as shipped in      0 px
 
 2. The rule's parts as the driver works them out, for the first vertex of a few objects. 1 = true, 0 = false.
    far: beyond the fold (the distance test)   L0: not a landmark   S0: not a span   "bad" marks a line whose combined tests are not what their parts give
@@ -132,12 +132,12 @@ GL error before the test: 0
 1. Share of the picture the roadside objects change, against the same frame without them.
    as shipped: no "if", no "&&"                     pixels  32.7 %   instances  2328
       | .:#########.                         .. .######|
-      |:############:::.. .        ..:...   .##:.######|
-      |##################.#.     ..###:##::############|
+      |:############:::.. .        ......   .##:.######|
+      |##################.:.     ..###:##::############|
       |#####################...:::#####################|
-      |##########################################:#####|
-      |..::#:#:#::::::#:::::.......:.:::##:::.... ::.::|
-      |.::......                        .    ..:..:::::|
+      |################################################|
+      |..::#:#:#::::::##::::.......::::###:::.... ::.::|
+      |.::......                        .    .....:::::|
       |:##:.                                       ..  |
       |                                                |
       |                                                |
@@ -151,6 +151,6 @@ GL error before the test: 0
    old, the two numbers worked out beforehand       pixels  32.7 %   instances  2328   differs from as shipped in      0 px
    old, only the distance test                      pixels  32.7 %   instances  2328   differs from as shipped in      0 px
    old, placed after the landmark rules             pixels  32.7 %   instances  2328   differs from as shipped in      0 px
-   the rule left out                                pixels  32.7 %   instances  2328   differs from as shipped in    777 px
+   the rule left out                                pixels  32.8 %   instances  2328   differs from as shipped in    766 px
 
 GL error after the test: 0   context lost: no

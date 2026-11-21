@@ -1,6 +1,6 @@
 # Performance history
 
-How Crestline's speed changed from v3.1.0 to v3.9.1, from the benchmark reports sent in during development.
+How Crestline's speed changed from v3.1.0 on, from the benchmark reports sent in during development.
 
 - **What is measured.** The built-in benchmark runs the same four tracks (Forest, Mountains, Night, Futuristic)
   at fixed quality presets with a bot driving, 5 seconds each. The figures here are averages over the four tracks.
@@ -58,7 +58,7 @@ What moved the lines:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="perf/shader-compile-dark.svg">
-  <img src="perf/shader-compile-light.svg" width="760" alt="Line chart: time to compile all shader programs from scratch on the PC. Edge falls from 5.4 s in v3.5.0 to 1.8 s from v3.5.3 on. Firefox falls from 9.1 s in v3.5.1 to 5.5 s, and reads 5.7 s in v3.10.0, which was measured with three more programs.">
+  <img src="perf/shader-compile-light.svg" width="760" alt="Line chart: time to compile all shader programs from scratch on the PC. Edge falls from 5.4 s in v3.5.0 to 1.8 s from v3.5.3 on. Firefox falls from 9.1 s in v3.5.1 to 5.5 s, then reads 5.7 s in v3.10.0 and 5.5 s in v3.10.5, both measured with the three SMAA programs as well.">
 </picture>
 
 A first start has to wait for the graphics driver to compile every shader program. The benchmark has timed that
@@ -75,6 +75,7 @@ since v3.5.0, building each program from scratch so that no cache can answer.
 | 3.9.1 | 1.8 s | – |
 | 3.9.3 | – | 5.5 s |
 | 3.10.0 | – | 5.7 s |
+| 3.10.5 | – | 5.5 s |
 <!-- /table -->
 
 The gain came in v3.5.1 and v3.5.2 from rewriting the terrain noise so that the compiler sees far fewer copies of
@@ -82,7 +83,8 @@ the same code. Firefox compiles one program at a time, which is why it stays abo
 Start-up as a whole (page opened to third frame) went from 6.5 s to 2.1 s in Edge and from 10.7 s to 5.2 s in
 Firefox, but that figure also depends on what the browser has cached, so it jumps around between runs.
 
-The v3.10.0 figure was taken with the SMAA option on, which adds three programs to the 23 (0.14 s of the 5.7 s).
+The v3.10.0 and v3.10.5 figures include the three SMAA programs (26 and 25 programs in all, against 22 in
+v3.9.3); those three take about 0.14 s.
 
 ## What the SMAA option costs
 
@@ -268,39 +270,61 @@ A laptop with integrated graphics (Intel Core 5 120U, Firefox, 60 Hz):
 | 3.5.0 | 60.0 | 53.0 | 20.4 | 13.3 ms | 19.2 ms | 54.3 ms |
 <!-- /table -->
 
-Two weak phones that are not the game's own test devices, both on v3.10.2:
+An old phone that is not one of the game's own test devices (Xiaomi 23129RN51X: PowerVR Rogue GE8320, 2 GB,
+1650x720, a 90 Hz screen). Ultra Low is the preset a phone starts on:
 
-| Phone | Preset | fps | Frame cost | of which JavaScript |
-|---|---|---|---|---|
-| Xiaomi 23129RN51X (PowerVR GPU, 2 GB, 1650x720, 90 Hz), Edge, pacing on | Ultra Low | 19.7 | 33.2 ms | 11.6 ms |
-| | Low | 13.1 | 56.0 ms | 19.0 ms |
-| | Commodore | 4.6 | 633 ms | 18.5 ms |
-| | High | 2.7 | 1219 ms | 20.5 ms |
-| A phone that was not identified (4 threads, 4 GB, 2400x1080), Chrome | Low, Forest only | 26.6 | 28.7 ms | 9.3 ms |
+<!-- table:oldphone -->
+| Version | Browser | Pacing | Roadside objects | Ultra Low fps | Low fps | Ultra Low cost | Low cost | Ultra Low JavaScript | Low JavaScript |
+|---|---|---|---|---|---|---|---|---|---|
+| 3.4.3 | Chrome | off | not checked | 22.3 | 14.5 | 33.8 ms | 58.1 ms | 14.8 ms | 20.9 ms |
+| 3.10.2 | Edge | on | missing | 19.7 | 13.1 | 33.2 ms | 56.0 ms | 11.6 ms | 19.0 ms |
+| 3.10.5 | Chrome | on | drawn | 18.6 | 11.5 | 46.2 ms | 80.1 ms | 17.1 ms | 23.7 ms |
+<!-- /table -->
 
-Both come with a caveat. On the Xiaomi the roadside objects (trees, buildings) were not drawn at all, a fault
-that is being looked into; with them every figure would be worse. On the other phone the graphics context was
-lost when the benchmark went from Low to High, so only its first case was measured. Ultra Low, the preset a
-phone starts on, drew 593x270 pixels on the Xiaomi and still took 27 to 41 ms a frame: too slow for a steady
-30 fps on a 90 Hz screen.
+What these three rows do and do not say:
+
+- **Up to v3.10.4 this phone drew no roadside objects at all**: no trees, buildings, cones or oncoming traffic.
+  Its graphics driver gets one condition in the objects vertex shader wrong, and every object was moved off
+  the screen. Found with the scenery test of v3.10.3 and v3.10.4 and fixed in v3.10.5 by writing the condition
+  another way; the phone then showed them, and the test counted the same share of the picture as on the
+  development machine (29.3 % on Forest, 41.6 % on Futuristic). Whether v3.4.3 showed them was not checked. The
+  faulty line is as old as the scenery, so probably not.
+- **v3.10.2 and v3.10.5 are not a clean before and after.** The browsers differ, and the JavaScript side was
+  slower in the second run: the simulation took 9.9 ms a frame on Ultra Low against 3.7 ms, with the same
+  simulation code. Draw calls and instances are the same in both (71 and about 465 a frame on Ultra Low: the
+  objects were always sent to the GPU, they just never reached the screen). Why that run was slower is not
+  known. So the rise in frame cost is partly the objects now being drawn and partly something else.
+- Ultra Low per track in v3.10.5: Forest 19.5 fps, Mountains 22.3, Night 19.4, Futuristic 13.4. Frame pacing put
+  a frame on every fourth refresh of the 91 Hz screen, which allows 22.8 fps at best.
+- The other presets in v3.10.5: Commodore 3.3 fps, Admiral 2.3, High 1.7, Psycho 1.3. One stage swallows the
+  frame in each: the MSAA resolve on High and Psycho (330 to 910 ms a frame), ambient occlusion on Admiral and
+  Commodore (170 to 440 ms). SMAA took 16 to 24 ms.
+
+A second weak phone, not identified (4 threads, 4 GB, 2400x1080, Chrome, v3.10.2), lost its graphics context
+when the benchmark went from Low to High, so only its first case was measured: Low on Forest, 26.6 fps, frame
+cost 28.7 ms, 9.3 ms of it JavaScript.
 
 The PC in Firefox reached the same frame rates as in Edge from v3.5.3 on (Admiral 239.6 fps, Psycho 229.7); in
 v3.1.0 it had managed 229.2 fps on High and 162.5 on Psycho. On v3.9.3 it was measured with frame pacing on, which
 on this machine only touches Psycho: Low, High and Commodore 239.8 fps, Admiral 239.7, and Psycho 205.7, held
 at a flat 120 on Forest. v3.10.0 gave the same picture, without pacing and with it: Low, High and Commodore
-239.8 fps, Admiral 238.9 and 239.5, Psycho 228.2 and 206.3.
+239.8 fps, Admiral 238.9 and 239.5, Psycho 228.2 and 206.3. v3.10.5, with pacing: Low, High, Admiral and
+Commodore 239.8 fps, Psycho 198.4 (pacing went to every second refresh part of the way through Forest and
+Futuristic). That is the first PC run in which Commodore includes SMAA: frame cost 3.09 ms, of which the SMAA
+stage 0.08 to 0.22 ms.
 
-Measured once each, so no history to show: the same phone in Brave, which ran at 60 Hz (v3.7.1, no pacing: Low
-63.3 fps, High 45.2, Psycho 35.4), and an old phone with a PowerVR GE8320 chip (v3.4.3: 22.3 fps on Ultra Low,
-14.5 on Low).
+Measured once, so no history to show: the main phone in Brave, which ran at 60 Hz (v3.7.1, no pacing: Low
+63.3 fps, High 45.2, Psycho 35.4).
 
 ## Not measured
 
-- v3.9.3 to v3.10.1 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
+- v3.9.3 to v3.10.5 on the PC in Edge (the chart at the top ends at v3.9.1; Firefox was measured, see above).
+- v3.10.2 to v3.10.5 on the main phone: its last run is v3.10.1.
 - The SMAA option on the laptop, on the PC in Edge (where GPU timers would time the pass directly), and on the
-  phone with any preset but Commodore or more than once. Outside its own section no figure on this page
-  includes it: every Commodore row here was measured before v3.10.2 put SMAA into that preset. To measure it: turn it on in Graphics options and run the benchmark; the report then has a
+  phone with any preset but Commodore or more than once. Outside its own section the only figures on this
+  page that include it are the v3.10.5 Commodore ones (the PC in Firefox, the old phone): every other Commodore
+  row was measured before v3.10.2 put SMAA into that preset. To measure it: turn it on in Graphics options and run the benchmark; the report then has a
   row for your settings beside the stock preset, and a stage line "anti-aliasing (SMAA)".
-- Frame pacing in any browser other than Mi Browser, or on any phone other than this one.
+- Frame pacing on the main phone in any browser other than Mi Browser.
 - Frame pacing together with dynamic resolution. The benchmark switches dynamic resolution off.
-- The laptop and the old phone on any version after v3.5.0.
+- The laptop on any version after v3.5.0.

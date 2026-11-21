@@ -214,6 +214,13 @@ def tables():
     T['laptop'] = ['| Version | Low fps | High fps | Psycho fps | Low cost | High cost | Psycho cost |', '|---|---|---|---|---|---|---|'] + [
         f"| {r['version']} | " + ' | '.join(cell(r, n, fps) for n in ['Low', 'High', 'Psycho']) + ' | ' + ' | '.join(cell(r, n, cost, '{:.1f} ms') for n in ['Low', 'High', 'Psycho']) + ' |'
         for r in pick('laptop', 'Firefox')]
+    # the old phone: every run there is. Whether it drew the roadside objects is not in the reports: it is known from
+    # the scenery test (docs/performance.md says how), so it is written down here by version.
+    OBJECTS = lambda v: 'not checked' if vkey(v) < (3, 10, 2) else 'missing' if vkey(v) < (3, 10, 5) else 'drawn'
+    T['oldphone'] = ['| Version | Browser | Pacing | Roadside objects | Ultra Low fps | Low fps | Ultra Low cost | Low cost | Ultra Low JavaScript | Low JavaScript |', '|---|---|---|---|---|---|---|---|---|---|'] + [
+        f"| {r['version']} | {r['browser']} | {'on' if r['pacing'] else 'off'} | {OBJECTS(r['version'])} | " + ' | '.join(cell(r, n, fps) for n in ['Ultra Low', 'Low']) + ' | '
+        + ' | '.join(cell(r, n, cost, '{:.1f} ms') for n in ['Ultra Low', 'Low']) + ' | ' + ' | '.join(cell(r, n, lambda cs: mean(c['cpuMs'] for c in cs), '{:.1f} ms') for n in ['Ultra Low', 'Low']) + ' |'
+        for r in sorted([r for r in RUNS if r['device'] == 'oldphone'], key=lambda r: vkey(r['version']))]
     # what the SMAA option costs: runs made with it as the only change to a stock preset, against that preset in
     # the same run
     TRACKS = {'MIHJHHTLI12': 'Forest', 'UTNRSVVLR17': 'Mountains', 'KIGJHGSHI15': 'Night', 'TUORSWWUS14': 'Futuristic'}

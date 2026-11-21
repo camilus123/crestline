@@ -612,6 +612,53 @@ over it, nothing responding. My focus theory for v3.5.5 was wrong.
   the page's prose and the charts' descriptions for figures that have moved, and commit. Picture cost tests are
   not benchmark runs and do not go into the data file.
 
+## v3.10.6 (2026-11-21) — the fix confirmed on the phone; performance tables updated (on `v3`)
+User: "the trees, buildings, cones and incoming traffic are now there", with the round 3 scenery test and a
+benchmark from the Xiaomi, and a benchmark from the PC (Firefox), all on v3.10.5. No code change in the game
+since v3.10.5: comments, documents, tools.
+
+**Round 3 on the phone**
+- The shipped rule draws the scenery: 29.3 % (Forest), 41.6 % (Futuristic), 32.6 % (Forest on Low), the software
+  GPU's figures. It still hides what it should: leaving it out changes 753 pixels at the third moment (777 on
+  the software GPU).
+- Which spellings of the old rule fail: only the line as it was, and the same line placed after the landmark
+  rules. Nested, distance test first, distance test last, as a "?:" choice, with abs(u) and ext + 1.0 worked
+  out beforehand, distance test alone: all draw the scenery.
+- Read back from the driver: each of the three tests alone is right, the pairs are right, all three as a choice
+  and as a bool are right (0); as an "if" they come out 1. `hide` is 0 before the old line and 1 after it.
+- So the driver's fault is narrow: an "if" whose condition has a comparison of two worked-out float values
+  between two whole-number tests. WHY it does that is not known and will not be found from here.
+- Every line of part 2 is marked "bad", the shipped rule's too. That is my probe, not the shipped rule: the
+  probe contains the faulty "if" to measure it. "left out 0" is the rule in use. A badly chosen mark.
+- Other shaders: no other condition has that shape. Nearest: the rumble-strip condition in the road's fragment
+  shader (`ground.ts`: bool, ready float against a constant, bool), the form that worked in this test; and two
+  all-whole-number chains of three in OBJ_VS. All left as they are: nothing says they misbehave, and the
+  pictures on the phone match the software GPU to 0.1 point.
+
+**Benchmarks** (`python3 -I tools/perfadd.py`, `tools/perfcharts.py`, prose reread)
+- Xiaomi, v3.10.5, Chrome, pacing on, now with roadside objects: Ultra Low 18.6 fps (Forest 19.5, Mountains
+  22.3, Night 19.4, Futuristic 13.4), Low 11.5, Commodore 3.3, Admiral 2.3, High 1.7, Psycho 1.3.
+- Against v3.10.2 (Edge, objects missing): Ultra Low 19.7 → 18.6 fps, frame cost 33.2 → 46.2 ms. NOT a clean
+  comparison: other browser, and "simulation (CPU)" read 9.9 ms a frame against 3.7 ms with unchanged simulation
+  code. Draw calls and instances identical (the objects were always sent, they never reached the screen).
+- The v3.4.3 "old phone" in the data is this same phone (same GPU, output and thread count). The v3.10.2 report
+  was not in `benchmarks.json`; added. `perfadd.py` now knows "EdgA/" as Edge and labels this phone's plain
+  Chrome user agent "Chrome" (Brave would look the same).
+- `docs/performance.md`: a generated table `oldphone` replaces the hand-written one, with a column saying
+  whether roadside objects were drawn (from the scenery tests, by version). Prose on what the rows do and do
+  not say. The PC's Firefox paragraph, the shader compile table and chart text, and "Not measured" updated.
+- PC, v3.10.5, Firefox, pacing on: Low, High, Admiral, Commodore 239.8 fps, Psycho 198.4. First PC run with
+  SMAA inside Commodore: frame cost 3.09 ms, SMAA stage 0.08 to 0.22 ms. Shader compile 5.5 s for 25 programs.
+- Seen in the Xiaomi report, not acted on: the simulation is the largest JavaScript item there (8 to 13 ms a
+  frame on Ultra Low, 17 to 25 ms on the presets that run at a few fps: a slow frame has more simulation
+  steps to catch up on).
+
+**Still open**
+- The "Scenery test" button is still on the benchmark screen. It has done its job; whether it stays is the
+  user's call.
+- Offered, awaiting "go": lost graphics context handling; benchmark including Ultra Low and stopping when a
+  preset falls below about 20 fps; starting preset from a short measurement.
+
 ## v3.10.5 (2026-11-21) — the missing trees and buildings: the cause found, a fix to be confirmed on the phone (on `v3`)
 User sent the round 2 report from the Xiaomi (PowerVR Rogue GE8320, Chrome 146).
 
